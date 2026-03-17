@@ -1,0 +1,434 @@
+{
+  "info": {
+    "_postman_id": "3d5d8c9f-6e49-4aa5-b31d-3c24d59dbb15",
+    "name": "Thesis API",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Auth",
+      "item": [
+        {
+          "name": "Register Student",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{student_email}}\",\n  \"first_name\": \"Student\",\n  \"last_name\": \"User\",\n  \"password\": \"{{student_password}}\",\n  \"avatar_url\": null\n}"
+            },
+            "url": "{{base_url}}/auth/register"
+          }
+        },
+        {
+          "name": "Login Student",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const data = pm.response.json();",
+                  "pm.environment.set('student_access_token', data.access_token);",
+                  "pm.environment.set('student_refresh_token', data.refresh_token);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{student_email}}\",\n  \"password\": \"{{student_password}}\"\n}"
+            },
+            "url": "{{base_url}}/auth/login"
+          }
+        },
+        {
+          "name": "Login Admin",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const data = pm.response.json();",
+                  "pm.environment.set('admin_access_token', data.access_token);",
+                  "pm.environment.set('admin_refresh_token', data.refresh_token);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{admin_email}}\",\n  \"password\": \"{{admin_password}}\"\n}"
+            },
+            "url": "{{base_url}}/auth/login"
+          }
+        },
+        {
+          "name": "Refresh Student Tokens",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"refresh_token\": \"{{student_refresh_token}}\"\n}"
+            },
+            "url": "{{base_url}}/auth/refresh"
+          }
+        },
+        {
+          "name": "Get Current User",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{student_access_token}}"
+              }
+            ],
+            "url": "{{base_url}}/auth/me"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Public Catalog",
+      "item": [
+        {
+          "name": "List Topics",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/topics"
+          }
+        },
+        {
+          "name": "List Subtopics",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/subtopics?topic_id={{topic_id}}"
+          }
+        },
+        {
+          "name": "List Skills",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/skills"
+          }
+        },
+        {
+          "name": "List Subskills",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/subskills?skill_id={{skill_id}}"
+          }
+        },
+        {
+          "name": "List Difficulties",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/difficulties"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Public Problems",
+      "item": [
+        {
+          "name": "List Problems",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/problems?topic_id={{topic_id}}&subtopic_id={{subtopic_id}}&difficulty_id={{difficulty_id}}&subskill_id={{subskill_id_1}}"
+          }
+        },
+        {
+          "name": "Get Problem",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/problems/{{problem_id}}"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Student",
+      "item": [
+        {
+          "name": "Get Progress",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{student_access_token}}"
+              }
+            ],
+            "url": "{{base_url}}/student/progress"
+          }
+        },
+        {
+          "name": "Submit Problem",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{student_access_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"answer_option_id\": \"{{answer_option_id}}\"\n}"
+            },
+            "url": "{{base_url}}/student/problems/{{problem_id}}/submit"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Admin Catalog",
+      "item": [
+        {
+          "name": "Create Topic",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_access_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Analytic geometry draft\"\n}"
+            },
+            "url": "{{base_url}}/admin/topics"
+          }
+        },
+        {
+          "name": "List Admin Topics",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_access_token}}"
+              }
+            ],
+            "url": "{{base_url}}/admin/topics"
+          }
+        },
+        {
+          "name": "Create Subtopic",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_access_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"topic_id\": \"{{topic_id}}\",\n  \"name\": \"draft subtopic\"\n}"
+            },
+            "url": "{{base_url}}/admin/subtopics"
+          }
+        },
+        {
+          "name": "Create Skill",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_access_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Draft skill\"\n}"
+            },
+            "url": "{{base_url}}/admin/skills"
+          }
+        },
+        {
+          "name": "Create Subskill",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_access_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"skill_id\": \"{{skill_id}}\",\n  \"name\": \"draft subskill\"\n}"
+            },
+            "url": "{{base_url}}/admin/subskills"
+          }
+        },
+        {
+          "name": "Create Difficulty",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_access_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"demo difficulty\",\n  \"coefficient\": 1.8\n}"
+            },
+            "url": "{{base_url}}/admin/difficulties"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Admin Problems",
+      "item": [
+        {
+          "name": "Create Problem",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_access_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"subtopic_id\": \"{{subtopic_id}}\",\n  \"difficulty_id\": \"{{difficulty_id}}\",\n  \"condition\": \"If x^2 = 16 and x > 0, find x.\",\n  \"solution\": \"Because x > 0, from x^2 = 16 we get x = 4.\",\n  \"condition_images\": [],\n  \"solution_images\": [],\n  \"answer_options\": [\n    {\n      \"text\": \"-4\",\n      \"is_correct\": false\n    },\n    {\n      \"text\": \"4\",\n      \"is_correct\": true\n    },\n    {\n      \"text\": \"8\",\n      \"is_correct\": false\n    }\n  ],\n  \"subskills\": [\n    {\n      \"subskill_id\": \"{{subskill_id_1}}\",\n      \"weight\": 0.6\n    },\n    {\n      \"subskill_id\": \"{{subskill_id_2}}\",\n      \"weight\": 0.4\n    }\n  ]\n}"
+            },
+            "url": "{{base_url}}/admin/problems"
+          }
+        },
+        {
+          "name": "List Admin Problems",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_access_token}}"
+              }
+            ],
+            "url": "{{base_url}}/admin/problems?topic_id={{topic_id}}&subtopic_id={{subtopic_id}}&difficulty_id={{difficulty_id}}&subskill_id={{subskill_id_1}}"
+          }
+        },
+        {
+          "name": "Get Admin Problem",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_access_token}}"
+              }
+            ],
+            "url": "{{base_url}}/admin/problems/{{problem_id}}"
+          }
+        },
+        {
+          "name": "Update Problem",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_access_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"condition\": \"If x^2 = 25 and x > 0, find x.\",\n  \"solution\": \"Because x > 0, from x^2 = 25 we get x = 5.\"\n}"
+            },
+            "url": "{{base_url}}/admin/problems/{{problem_id}}"
+          }
+        },
+        {
+          "name": "Delete Problem",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_access_token}}"
+              }
+            ],
+            "url": "{{base_url}}/admin/problems/{{problem_id}}"
+          }
+        }
+      ]
+    }
+  ],
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://127.0.0.1:8000"
+    }
+  ]
+}
