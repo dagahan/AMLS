@@ -33,7 +33,7 @@ ENV UV_PYTHON_PREFERENCE=managed \
 WORKDIR /app
 
 
-COPY --chown=appuser:appuser pyproject.toml ./
+COPY --chown=appuser:appuser pyproject.toml uv.lock* ./
 
 
 USER appuser
