@@ -1,0 +1,782 @@
+{
+  "info": {
+    "_postman_id": "thesis-admin-api",
+    "name": "Thesis Admin API",
+    "description": "Admin collection for the thesis EGE adaptive learning backend",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Health",
+      "item": [
+        {
+          "name": "Health Check",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/health",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "health"
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Auth",
+      "item": [
+        {
+          "name": "Login",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const body = pm.response.json();",
+                  "pm.environment.set('access_token', body.access_token);",
+                  "pm.environment.set('refresh_token', body.refresh_token);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{admin_email}}\",\n  \"password\": \"{{admin_password}}\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/auth/login",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "auth",
+                "login"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Refresh",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const body = pm.response.json();",
+                  "pm.environment.set('access_token', body.access_token);",
+                  "pm.environment.set('refresh_token', body.refresh_token);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"refresh_token\": \"{{refresh_token}}\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/auth/refresh",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "auth",
+                "refresh"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Validate Access",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"access_token\": \"{{access_token}}\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/auth/access/validate",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "auth",
+                "access",
+                "validate"
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Reference Data",
+      "item": [
+        {
+          "name": "List Topics",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{access_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/admin/topics",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "admin",
+                "topics"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Create Topic",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const body = pm.response.json();",
+                  "pm.environment.set('topic_id', body.id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{access_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"USE No.11 - Function graphs\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/admin/topics",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "admin",
+                "topics"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "List Subtopics",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{access_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/admin/subtopics?topic_id={{topic_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "admin",
+                "subtopics"
+              ],
+              "query": [
+                {
+                  "key": "topic_id",
+                  "value": "{{topic_id}}"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Create Subtopic",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const body = pm.response.json();",
+                  "pm.environment.set('subtopic_id', body.id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{access_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"topic_id\": \"{{topic_id}}\",\n  \"name\": \"parabolas\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/admin/subtopics",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "admin",
+                "subtopics"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "List Skills",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{access_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/admin/skills",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "admin",
+                "skills"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Create Skill",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const body = pm.response.json();",
+                  "pm.environment.set('skill_id', body.id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{access_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Functions\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/admin/skills",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "admin",
+                "skills"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "List Subskills",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{access_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/admin/subskills?skill_id={{skill_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "admin",
+                "subskills"
+              ],
+              "query": [
+                {
+                  "key": "skill_id",
+                  "value": "{{skill_id}}"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Create Subskill",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const body = pm.response.json();",
+                  "pm.environment.set('subskill_id', body.id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{access_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"skill_id\": \"{{skill_id}}\",\n  \"name\": \"recognize graphs of standard functions\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/admin/subskills",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "admin",
+                "subskills"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "List Difficulties",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{access_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/admin/difficulties",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "admin",
+                "difficulties"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Create Difficulty",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const body = pm.response.json();",
+                  "pm.environment.set('difficulty_id', body.id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{access_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"contest\",\n  \"coefficient_beta_bernoulli\": 0.9\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/admin/difficulties",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "admin",
+                "difficulties"
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Problems",
+      "item": [
+        {
+          "name": "List Problems",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{access_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/admin/problems",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "admin",
+                "problems"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Create Problem",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const body = pm.response.json();",
+                  "pm.environment.set('problem_id', body.id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{access_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"subtopic_id\": \"{{subtopic_id}}\",\n  \"difficulty_id\": \"{{difficulty_id}}\",\n  \"condition_latex\": \"Find the x-coordinate of the vertex of y=x^2-6x+5.\",\n  \"solution_latex\": \"For y=ax^2+bx+c the vertex x-coordinate is -b/(2a). Here it equals 3.\",\n  \"condition_image_urls\": [],\n  \"solution_image_urls\": [],\n  \"answer_options\": [\n    {\n      \"position\": 1,\n      \"text_latex\": \"2\",\n      \"is_correct\": false\n    },\n    {\n      \"position\": 2,\n      \"text_latex\": \"3\",\n      \"is_correct\": true\n    },\n    {\n      \"position\": 3,\n      \"text_latex\": \"5\",\n      \"is_correct\": false\n    },\n    {\n      \"position\": 4,\n      \"text_latex\": \"6\",\n      \"is_correct\": false\n    }\n  ],\n  \"subskills\": [\n    {\n      \"subskill_id\": \"{{subskill_id}}\",\n      \"weight\": 1.0\n    }\n  ]\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/admin/problems",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "admin",
+                "problems"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get Problem",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{access_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/admin/problems/{{problem_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "admin",
+                "problems",
+                "{{problem_id}}"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Update Problem",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{access_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"solution_latex\": \"For y=ax^2+bx+c the x-coordinate of the vertex is -b/(2a). Therefore x=3.\",\n  \"answer_options\": [\n    {\n      \"position\": 1,\n      \"text_latex\": \"1\",\n      \"is_correct\": false\n    },\n    {\n      \"position\": 2,\n      \"text_latex\": \"3\",\n      \"is_correct\": true\n    },\n    {\n      \"position\": 3,\n      \"text_latex\": \"4\",\n      \"is_correct\": false\n    },\n    {\n      \"position\": 4,\n      \"text_latex\": \"6\",\n      \"is_correct\": false\n    }\n  ]\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/admin/problems/{{problem_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "admin",
+                "problems",
+                "{{problem_id}}"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Delete Problem",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{access_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/admin/problems/{{problem_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "admin",
+                "problems",
+                "{{problem_id}}"
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    }
+  ],
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://127.0.0.1:8000",
+      "type": "string"
+    },
+    {
+      "key": "admin_email",
+      "value": "admin@example.org",
+      "type": "string"
+    },
+    {
+      "key": "admin_password",
+      "value": "Admin123!",
+      "type": "string"
+    },
+    {
+      "key": "access_token",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "refresh_token",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "topic_id",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "subtopic_id",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "skill_id",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "subskill_id",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "difficulty_id",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "problem_id",
+      "value": "",
+      "type": "string"
+    }
+  ]
+}
