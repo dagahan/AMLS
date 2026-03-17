@@ -23,7 +23,10 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = [
+    "httpx==0.28.1",
     "mypy==1.17.1",
+    "pytest==8.4.2",
+    "pytest-asyncio==1.2.0",
     "ruff==0.12.12",
 ]
 
@@ -42,7 +45,7 @@ unfixable = ["ANN"]
 
 [tool.mypy]
 python_version = "3.14"
-files = ["src", "main.py"]
+files = ["src", "tests", "main.py"]
 strict = true
 warn_unused_configs = true
 show_error_codes = true
@@ -70,6 +73,10 @@ module = [
     "valkey",
 ]
 ignore_missing_imports = true
+
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
 
 
 [jwt]

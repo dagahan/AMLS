@@ -1,8 +1,7 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
-PROJECT_ROOT="src"
-CHECK_PATH="${CHECK_PATH:-$PROJECT_ROOT}"
+CHECK_PATH="${CHECK_PATH:-src tests main.py}"
 
 RUFF_RULES="${RUFF_RULES:-ANN,TCH}"
 RUFF_IGNORES="${RUFF_IGNORES:-ANN401,TC001,TC003}"
@@ -16,13 +15,14 @@ if [[ "${RUNNING_INSIDE_DOCKER:-0}" != "1" ]]; then
   uv sync --extra dev >/dev/null
 
   echo "🔎 Ruff (rules: $RUFF_RULES; ignore: ${RUFF_IGNORES:-<none>})…"
-  ruff_args=(check "$CHECK_PATH" --select "$RUFF_RULES")
+  read -r -a check_paths <<< "$CHECK_PATH"
+  ruff_args=(check "${check_paths[@]}" --select "$RUFF_RULES")
   [[ -n "${RUFF_IGNORES// }" ]] && ruff_args+=(--ignore "$RUFF_IGNORES")
   [[ "$RUFF_FIX" == "1" ]] && ruff_args+=(--fix)
   uv run ruff "${ruff_args[@]}"
 
   echo "🔬 Mypy (strict)…"
-  uv run mypy "$CHECK_PATH"
+  uv run mypy "${check_paths[@]}"
 else
   echo "🐳 RUNNING_INSIDE_DOCKER=1 → skipping Ruff & Mypy."
 
