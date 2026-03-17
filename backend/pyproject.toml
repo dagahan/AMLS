@@ -1,37 +1,48 @@
 [project]
-name = "backend_monolith"
-version = "0.0.1"
-requires-python = "==3.12.6"
+name = "thesis_backend"
+version = "0.1.0"
+requires-python = "==3.14.0"
 dependencies = [
-    "loguru==0.7.3",
+    "alembic==1.16.4",
+    "asyncpg==0.31.0",
+    "bcrypt==5.0.0",
     "colorama==0.4.6",
+    "email-validator==2.2.0",
+    "fastapi==0.116.0",
+    "greenlet==3.3.2",
+    "loguru==0.7.3",
+    "psycopg[binary]==3.3.3",
+    "pydantic==2.12.5",
     "python-dotenv==1.1.1",
-    "grpcio==1.75.0",
-    "protobuf==6.32.0",
-    "pydantic>=2.0.0",
-    "fastapi>=0.100.0",
-    "uvicorn>=0.20.0",
-    "httpx>=0.25.0",
+    "python-jose[cryptography]==3.3.0",
+    "sqlalchemy==2.0.41",
+    "uvicorn[standard]==0.35.0",
+    "valkey==6.1.1",
 ]
+
 
 [project.optional-dependencies]
 dev = [
+    "mypy==1.17.1",
     "ruff==0.12.12",
-    "mypy>=1.17.1",
 ]
 
+
 [tool.ruff]
-target-version = "py312"
+target-version = "py314"
 line-length = 100
+preview = true
+
 
 [tool.ruff.lint]
-select = ["E", "F", "B", "UP", "I", "W", "N", "ANN", "TCH"]
-ignore = ["ANN401", "W293", "F403", "F405"]
+select = ["ANN", "B", "E", "F", "I", "N", "TCH", "UP", "W"]
+ignore = ["ANN401", "TC001", "TC003", "W293"]
+unfixable = ["ANN"]
+
 
 [tool.mypy]
-python_version = "3.12"
-files = ["src"]
-follow_imports = "skip"
+python_version = "3.14"
+files = ["src", "main.py"]
 strict = true
 warn_unused_configs = true
 show_error_codes = true
@@ -44,3 +55,29 @@ warn_return_any = true
 warn_redundant_casts = true
 warn_unused_ignores = true
 check_untyped_defs = true
+plugins = [
+    "pydantic.mypy",
+    "sqlalchemy.ext.mypy.plugin",
+]
+
+
+[[tool.mypy.overrides]]
+module = [
+    "colorama",
+    "jose",
+    "jose.exceptions",
+    "loguru",
+    "valkey",
+]
+ignore_missing_imports = true
+
+
+[jwt]
+private_key = "certs/jwt-private.pem"
+public_key = "certs/jwt-public.pem"
+
+
+[db]
+echo = false
+pool_size = 10
+max_overflow = 20
