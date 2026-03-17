@@ -3,7 +3,7 @@ from __future__ import annotations
 import uuid
 from datetime import datetime
 
-from sqlalchemy import Boolean, CheckConstraint, DateTime, Enum, Float, ForeignKey, Index, Integer
+from sqlalchemy import Boolean, CheckConstraint, DateTime, Enum, Float, ForeignKey, Index
 from sqlalchemy import PrimaryKeyConstraint, String, Text, UniqueConstraint, func, text
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -167,7 +167,7 @@ class Difficulty(Base, IdMixin, TimestampMixin):
     __tablename__ = "difficulties"
 
     name: Mapped[str] = mapped_column(String(255), unique=True, nullable=False)
-    coefficient_beta_bernoulli: Mapped[float] = mapped_column(Float, nullable=False)
+    coefficient: Mapped[float] = mapped_column(Float, nullable=False)
 
     problems: Mapped[list["Problem"]] = relationship(back_populates="difficulty")
 
@@ -185,17 +185,17 @@ class Problem(Base, IdMixin, TimestampMixin):
         ForeignKey("difficulties.id", ondelete="RESTRICT"),
         nullable=False,
     )
-    condition_latex: Mapped[str] = mapped_column(Text, nullable=False)
-    solution_latex: Mapped[str] = mapped_column(Text, nullable=False)
-    condition_image_urls: Mapped[list[str]] = mapped_column(JSONB, default=list, nullable=False)
-    solution_image_urls: Mapped[list[str]] = mapped_column(JSONB, default=list, nullable=False)
+    condition: Mapped[str] = mapped_column(Text, nullable=False)
+    solution: Mapped[str] = mapped_column(Text, nullable=False)
+    condition_images: Mapped[list[str]] = mapped_column(JSONB, default=list, nullable=False)
+    solution_images: Mapped[list[str]] = mapped_column(JSONB, default=list, nullable=False)
 
     subtopic: Mapped[Subtopic] = relationship(back_populates="problems")
     difficulty: Mapped[Difficulty] = relationship(back_populates="problems")
     answer_options: Mapped[list["ProblemAnswerOption"]] = relationship(
         back_populates="problem",
         cascade="all, delete-orphan",
-        order_by="ProblemAnswerOption.position",
+        order_by="ProblemAnswerOption.id",
     )
     subskill_links: Mapped[list["ProblemSubskill"]] = relationship(
         back_populates="problem",
@@ -229,8 +229,6 @@ class ProblemSubskill(Base):
 class ProblemAnswerOption(Base, IdMixin):
     __tablename__ = "problem_answer_options"
     __table_args__ = (
-        UniqueConstraint("problem_id", "position", name="uq_problem_answer_option_position"),
-        CheckConstraint("position >= 1 AND position <= 8", name="ck_answer_option_position"),
         Index(
             "uq_problem_correct_answer",
             "problem_id",
@@ -244,8 +242,7 @@ class ProblemAnswerOption(Base, IdMixin):
         ForeignKey("problems.id", ondelete="CASCADE"),
         nullable=False,
     )
-    position: Mapped[int] = mapped_column(Integer, nullable=False)
-    text_latex: Mapped[str] = mapped_column(Text, nullable=False)
+    text: Mapped[str] = mapped_column(Text, nullable=False)
     is_correct: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
 
     problem: Mapped[Problem] = relationship(back_populates="answer_options")

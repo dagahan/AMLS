@@ -25,11 +25,13 @@ class Service:
 
         for current_signal in (signal.SIGINT, signal.SIGTERM):
             try:
+                def request_stop() -> None:
+                    if not stop_future.done():
+                        stop_future.set_result(None)
+
                 loop.add_signal_handler(
                     current_signal,
-                    lambda current_signal=current_signal: (
-                        not stop_future.done()
-                    ) and stop_future.set_result(None),
+                    request_stop,
                 )
             except NotImplementedError:
                 continue

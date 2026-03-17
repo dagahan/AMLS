@@ -4,13 +4,11 @@ from pydantic import Field, model_validator
 
 from src.pydantic_schemas.common import ThesisSchema
 from src.pydantic_schemas.difficulty import DifficultyResponse
-from src.pydantic_schemas.skill import SubskillResponse
 from src.pydantic_schemas.topic import SubtopicResponse
 
 
 class ProblemAnswerOptionPayload(ThesisSchema):
-    position: int = Field(ge=1, le=8)
-    text_latex: str = Field(min_length=1)
+    text: str = Field(min_length=1)
     is_correct: bool
 
 
@@ -22,10 +20,10 @@ class ProblemSubskillPayload(ThesisSchema):
 class ProblemCreate(ThesisSchema):
     subtopic_id: UUID
     difficulty_id: UUID
-    condition_latex: str = Field(min_length=1)
-    solution_latex: str = Field(min_length=1)
-    condition_image_urls: list[str] = Field(default_factory=list)
-    solution_image_urls: list[str] = Field(default_factory=list)
+    condition: str = Field(min_length=1)
+    solution: str = Field(min_length=1)
+    condition_images: list[str] = Field(default_factory=list)
+    solution_images: list[str] = Field(default_factory=list)
     answer_options: list[ProblemAnswerOptionPayload]
     subskills: list[ProblemSubskillPayload]
 
@@ -40,10 +38,10 @@ class ProblemCreate(ThesisSchema):
 class ProblemUpdate(ThesisSchema):
     subtopic_id: UUID | None = None
     difficulty_id: UUID | None = None
-    condition_latex: str | None = Field(default=None, min_length=1)
-    solution_latex: str | None = Field(default=None, min_length=1)
-    condition_image_urls: list[str] | None = None
-    solution_image_urls: list[str] | None = None
+    condition: str | None = Field(default=None, min_length=1)
+    solution: str | None = Field(default=None, min_length=1)
+    condition_images: list[str] | None = None
+    solution_images: list[str] | None = None
     answer_options: list[ProblemAnswerOptionPayload] | None = None
     subskills: list[ProblemSubskillPayload] | None = None
 
@@ -59,13 +57,15 @@ class ProblemUpdate(ThesisSchema):
 
 class ProblemAnswerOptionResponse(ThesisSchema):
     id: UUID
-    position: int
-    text_latex: str
+    text: str
+
+
+class AdminProblemAnswerOptionResponse(ProblemAnswerOptionResponse):
     is_correct: bool
 
 
 class ProblemSubskillResponse(ThesisSchema):
-    subskill: SubskillResponse
+    subskill_id: UUID
     weight: float
 
 
@@ -73,12 +73,36 @@ class ProblemResponse(ThesisSchema):
     id: UUID
     subtopic: SubtopicResponse
     difficulty: DifficultyResponse
-    condition_latex: str
-    solution_latex: str
-    condition_image_urls: list[str]
-    solution_image_urls: list[str]
+    condition: str
+    condition_images: list[str]
     answer_options: list[ProblemAnswerOptionResponse]
+
+
+class AdminProblemResponse(ThesisSchema):
+    id: UUID
+    subtopic: SubtopicResponse
+    difficulty: DifficultyResponse
+    condition: str
+    condition_images: list[str]
+    solution: str
+    solution_images: list[str]
+    answer_options: list[AdminProblemAnswerOptionResponse]
     subskills: list[ProblemSubskillResponse]
+
+
+class ProblemSubmitRequest(ThesisSchema):
+    answer_option_id: UUID
+
+
+class ProblemSubmitResponse(ThesisSchema):
+    correct: bool
+    solution: str
+    solution_images: list[str]
+
+
+class StudentProgressResponse(ThesisSchema):
+    solved_problem_ids: list[UUID]
+    failed_problem_ids: list[UUID]
 
 
 def validate_answer_options(answer_options: list[ProblemAnswerOptionPayload]) -> None:
@@ -88,10 +112,6 @@ def validate_answer_options(answer_options: list[ProblemAnswerOptionPayload]) ->
     correct_answers_count = sum(1 for option in answer_options if option.is_correct)
     if correct_answers_count != 1:
         raise ValueError("Problem must contain exactly one correct answer option")
-
-    positions = {option.position for option in answer_options}
-    if len(positions) != len(answer_options):
-        raise ValueError("Answer option positions must be unique")
 
 
 def validate_subskills(subskills: list[ProblemSubskillPayload]) -> None:

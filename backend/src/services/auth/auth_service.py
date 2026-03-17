@@ -6,8 +6,10 @@ from fastapi import HTTPException, status
 from sqlalchemy import select
 
 from src.core.utils import PasswordTools
+from src.db.enums import UserRole
 from src.db.models import User
-from src.pydantic_schemas import ClientContext, TokenPairResponse
+from src.db.transaction_manager import TransactionManager
+from src.pydantic_schemas import ClientContext, RegisterRequest, TokenPairResponse
 from src.services.auth.sessions_manager import SessionsManager
 from src.services.jwt.jwt_parser import JwtParser
 
@@ -20,10 +22,11 @@ class AuthService:
         self.db = db
         self.jwt_parser = JwtParser()
         self.sessions_manager = SessionsManager()
+        self.transaction_manager = TransactionManager(db)
 
 
     async def authenticate_user(self, email: str, password: str) -> User:
-        async with self.db.session_ctx() as session:
+        async with self.transaction_manager.session() as session:
             result = await session.execute(select(User).where(User.email == email))
             user = result.scalar_one_or_none()
 
@@ -38,6 +41,32 @@ class AuthService:
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Account deactivated",
             )
+
+        return user
+
+
+    async def register_user(self, data: RegisterRequest) -> User:
+        async with self.transaction_manager.session() as session:
+            result = await session.execute(select(User).where(User.email == data.email))
+            existing_user = result.scalar_one_or_none()
+            if existing_user is not None:
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail="Email already registered",
+                )
+
+            user = User(
+                email=str(data.email),
+                first_name=data.first_name,
+                last_name=data.last_name,
+                avatar_url=data.avatar_url,
+                hashed_password=PasswordTools.hash_password(data.password.get_secret_value()),
+                role=UserRole.STUDENT,
+                is_active=True,
+            )
+            session.add(user)
+            await session.flush()
+            await session.refresh(user)
 
         return user
 

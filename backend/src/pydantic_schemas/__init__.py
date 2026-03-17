@@ -1,8 +1,10 @@
 from src.pydantic_schemas.auth import (
     AccessPayload,
     AccessValidationResponse,
+    AuthUserResponse,
     ClientContext,
     LoginRequest,
+    RegisterRequest,
     RefreshPayload,
     RefreshRequest,
     SessionData,
@@ -12,13 +14,18 @@ from src.pydantic_schemas.auth import (
 from src.pydantic_schemas.common import HealthResponse, MessageResponse, ThesisSchema
 from src.pydantic_schemas.difficulty import DifficultyCreate, DifficultyResponse, DifficultyUpdate
 from src.pydantic_schemas.problem import (
+    AdminProblemAnswerOptionResponse,
+    AdminProblemResponse,
     ProblemAnswerOptionPayload,
     ProblemAnswerOptionResponse,
     ProblemCreate,
     ProblemResponse,
     ProblemSubskillPayload,
     ProblemSubskillResponse,
+    ProblemSubmitRequest,
+    ProblemSubmitResponse,
     ProblemUpdate,
+    StudentProgressResponse,
 )
 from src.pydantic_schemas.skill import (
     SkillCreate,
@@ -41,7 +48,10 @@ from src.pydantic_schemas.user import UserResponse
 __all__ = [
     "AccessPayload",
     "AccessValidationResponse",
+    "AuthUserResponse",
     "ClientContext",
+    "AdminProblemAnswerOptionResponse",
+    "AdminProblemResponse",
     "DifficultyCreate",
     "DifficultyResponse",
     "DifficultyUpdate",
@@ -54,12 +64,16 @@ __all__ = [
     "ProblemResponse",
     "ProblemSubskillPayload",
     "ProblemSubskillResponse",
+    "ProblemSubmitRequest",
+    "ProblemSubmitResponse",
     "ProblemUpdate",
+    "RegisterRequest",
     "RefreshPayload",
     "RefreshRequest",
     "SessionData",
     "SkillCreate",
     "SkillResponse",
+    "StudentProgressResponse",
     "SkillUpdate",
     "SubskillCreate",
     "SubskillResponse",

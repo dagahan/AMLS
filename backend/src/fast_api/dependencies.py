@@ -9,6 +9,7 @@ from sqlalchemy import select
 
 from src.db.enums import UserRole
 from src.db.models import User
+from src.db.transaction_manager import TransactionManager
 from src.services.auth.auth_service import AuthService
 from src.services.jwt.jwt_parser import JwtParser
 
@@ -24,11 +25,11 @@ def build_current_user_dependency(db: "DataBase") -> "Callable[..., object]":
     bearer_scheme = HTTPBearer()
     auth_service = AuthService(db)
     jwt_parser = JwtParser()
+    transaction_manager = TransactionManager(db)
 
 
     async def get_current_user(
         credentials: HTTPAuthorizationCredentials = Depends(bearer_scheme),
-        session: "AsyncSession" = Depends(db.get_session),
     ) -> User:
         await auth_service.validate_access_token(credentials.credentials)
         payload = jwt_parser.decode_token(credentials.credentials)
@@ -48,8 +49,9 @@ def build_current_user_dependency(db: "DataBase") -> "Callable[..., object]":
                 detail="Invalid token subject",
             )
 
-        result = await session.execute(select(User).where(User.id == parsed_user_id))
-        user = result.scalar_one_or_none()
+        async with transaction_manager.session() as session:
+            result = await session.execute(select(User).where(User.id == parsed_user_id))
+            user = result.scalar_one_or_none()
         if user is None:
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found")
 
@@ -60,6 +62,19 @@ def build_current_user_dependency(db: "DataBase") -> "Callable[..., object]":
 
 
     return get_current_user
+
+
+def parse_optional_uuid(raw_value: str | None, field_name: str) -> uuid.UUID | None:
+    if raw_value is None or raw_value == "":
+        return None
+
+    try:
+        return uuid.UUID(raw_value)
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"{field_name} must be a valid UUID",
+        )
 
 
 def build_current_admin_dependency(db: "DataBase") -> "Callable[..., object]":

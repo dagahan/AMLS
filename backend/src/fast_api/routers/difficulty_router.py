@@ -7,6 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 
 from src.db.models import Difficulty
+from src.db.transaction_manager import TransactionManager
 from src.fast_api.dependencies import build_current_admin_dependency
 from src.pydantic_schemas import DifficultyCreate, DifficultyResponse, DifficultyUpdate, MessageResponse
 
@@ -18,8 +19,9 @@ if TYPE_CHECKING:
 
 
 def get_difficulty_router(db: "DataBase") -> APIRouter:
-    router = APIRouter(prefix="/admin/difficulties", tags=["admin-difficulties"])
+    router = APIRouter()
     current_admin = build_current_admin_dependency(db)
+    transaction_manager = TransactionManager(db)
 
 
     async def get_difficulty_or_404(session: "AsyncSession", difficulty_id: uuid.UUID) -> Difficulty:
@@ -44,75 +46,78 @@ def get_difficulty_router(db: "DataBase") -> APIRouter:
             )
 
 
-    @router.post("", response_model=DifficultyResponse, status_code=201)
+    @router.get("/difficulties", response_model=list[DifficultyResponse], status_code=200)
+    async def list_difficulties() -> list[DifficultyResponse]:
+        async with transaction_manager.session() as session:
+            result = await session.execute(select(Difficulty).order_by(Difficulty.coefficient))
+            difficulties = result.scalars().all()
+            return [DifficultyResponse.model_validate(item) for item in difficulties]
+
+
+    @router.get("/difficulties/{difficulty_id}", response_model=DifficultyResponse, status_code=200)
+    async def get_difficulty(difficulty_id: uuid.UUID) -> DifficultyResponse:
+        async with transaction_manager.session() as session:
+            difficulty = await get_difficulty_or_404(session, difficulty_id)
+            return DifficultyResponse.model_validate(difficulty)
+
+
+    @router.post("/admin/difficulties", response_model=DifficultyResponse, status_code=201)
     async def create_difficulty(
         data: DifficultyCreate,
         _: "User" = Depends(current_admin),
-        session: "AsyncSession" = Depends(db.get_session),
     ) -> DifficultyResponse:
-        await ensure_name_is_unique(session, data.name)
-
-        difficulty = Difficulty(
-            name=data.name,
-            coefficient_beta_bernoulli=data.coefficient_beta_bernoulli,
-        )
-        session.add(difficulty)
-        await session.commit()
-        await session.refresh(difficulty)
-        return DifficultyResponse.model_validate(difficulty)
+        async with transaction_manager.session() as session:
+            await ensure_name_is_unique(session, data.name)
+            difficulty = Difficulty(name=data.name, coefficient=data.coefficient)
+            session.add(difficulty)
+            await session.flush()
+            await session.refresh(difficulty)
+            return DifficultyResponse.model_validate(difficulty)
 
 
-    @router.get("", response_model=list[DifficultyResponse], status_code=200)
-    async def list_difficulties(
-        _: "User" = Depends(current_admin),
-        session: "AsyncSession" = Depends(db.get_session),
-    ) -> list[DifficultyResponse]:
-        result = await session.execute(select(Difficulty).order_by(Difficulty.name))
-        difficulties = result.scalars().all()
-        return [DifficultyResponse.model_validate(item) for item in difficulties]
+    @router.get("/admin/difficulties", response_model=list[DifficultyResponse], status_code=200)
+    async def list_admin_difficulties(_: "User" = Depends(current_admin)) -> list[DifficultyResponse]:
+        return await list_difficulties()
 
 
-    @router.get("/{difficulty_id}", response_model=DifficultyResponse, status_code=200)
-    async def get_difficulty(
+    @router.get("/admin/difficulties/{difficulty_id}", response_model=DifficultyResponse, status_code=200)
+    async def get_admin_difficulty(
         difficulty_id: uuid.UUID,
         _: "User" = Depends(current_admin),
-        session: "AsyncSession" = Depends(db.get_session),
     ) -> DifficultyResponse:
-        difficulty = await get_difficulty_or_404(session, difficulty_id)
-        return DifficultyResponse.model_validate(difficulty)
+        return await get_difficulty(difficulty_id)
 
 
-    @router.patch("/{difficulty_id}", response_model=DifficultyResponse, status_code=200)
+    @router.patch("/admin/difficulties/{difficulty_id}", response_model=DifficultyResponse, status_code=200)
     async def update_difficulty(
         difficulty_id: uuid.UUID,
         data: DifficultyUpdate,
         _: "User" = Depends(current_admin),
-        session: "AsyncSession" = Depends(db.get_session),
     ) -> DifficultyResponse:
-        difficulty = await get_difficulty_or_404(session, difficulty_id)
+        async with transaction_manager.session() as session:
+            difficulty = await get_difficulty_or_404(session, difficulty_id)
 
-        if data.name is not None:
-            await ensure_name_is_unique(session, data.name, current_id=difficulty.id)
-            difficulty.name = data.name
+            if data.name is not None:
+                await ensure_name_is_unique(session, data.name, current_id=difficulty.id)
+                difficulty.name = data.name
 
-        if data.coefficient_beta_bernoulli is not None:
-            difficulty.coefficient_beta_bernoulli = data.coefficient_beta_bernoulli
+            if data.coefficient is not None:
+                difficulty.coefficient = data.coefficient
 
-        await session.commit()
-        await session.refresh(difficulty)
-        return DifficultyResponse.model_validate(difficulty)
+            await session.flush()
+            await session.refresh(difficulty)
+            return DifficultyResponse.model_validate(difficulty)
 
 
-    @router.delete("/{difficulty_id}", response_model=MessageResponse, status_code=200)
+    @router.delete("/admin/difficulties/{difficulty_id}", response_model=MessageResponse, status_code=200)
     async def delete_difficulty(
         difficulty_id: uuid.UUID,
         _: "User" = Depends(current_admin),
-        session: "AsyncSession" = Depends(db.get_session),
     ) -> MessageResponse:
-        difficulty = await get_difficulty_or_404(session, difficulty_id)
-        await session.delete(difficulty)
-        await session.commit()
-        return MessageResponse(message="Difficulty deleted")
+        async with transaction_manager.session() as session:
+            difficulty = await get_difficulty_or_404(session, difficulty_id)
+            await session.delete(difficulty)
+            return MessageResponse(message="Difficulty deleted")
 
 
     return router

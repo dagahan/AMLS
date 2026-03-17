@@ -6,16 +6,16 @@ from typing import Any
 
 from loguru import logger
 
+from src.core.clients import get_valkey_client
 from src.core.utils import EnvTools, StringTools, TimeTools
 from src.pydantic_schemas import ClientContext, SessionData
-from src.services.valkey.valkey import ValkeyService
 
 
 class SessionsManager:
     def __init__(self) -> None:
         self.session_max_life_days = int(EnvTools.required_load_env_var("SESSIONS_MAX_LIFE_DAYS"))
         self.session_inactive_days = int(EnvTools.required_load_env_var("SESSIONS_INACTIVE_DAYS"))
-        self.valkey_service = ValkeyService()
+        self.valkey = get_valkey_client()
 
 
     def _days_to_seconds(self, days: int) -> int:
@@ -52,13 +52,13 @@ class SessionsManager:
         )
 
         payload = {key: str(value) for key, value in session_data.model_dump().items()}
-        self.valkey_service.valkey.hset(session_key, mapping=payload)
+        self.valkey.hset(session_key, mapping=payload)
 
         ttl = self._clamped_ttl_seconds(issued_at, max_life_timestamp)
         if ttl > 0:
-            self.valkey_service.valkey.expire(session_key, ttl)
+            self.valkey.expire(session_key, ttl)
         else:
-            self.valkey_service.valkey.delete(session_key)
+            self.valkey.delete(session_key)
 
         logger.debug(f"Created session {session_id} for user {user_id}")
 
@@ -78,15 +78,15 @@ class SessionsManager:
         now_timestamp = TimeTools.now_time_stamp()
         ttl = self._clamped_ttl_seconds(now_timestamp, session.mtl)
         if ttl <= 0:
-            self.valkey_service.valkey.delete(f"Session:{session_id}")
+            self.valkey.delete(f"Session:{session_id}")
             return False
 
-        self.valkey_service.valkey.expire(f"Session:{session_id}", ttl)
+        self.valkey.expire(f"Session:{session_id}", ttl)
         return True
 
 
     def delete_session(self, session_id: str) -> None:
-        self.valkey_service.valkey.delete(f"Session:{session_id}")
+        self.valkey.delete(f"Session:{session_id}")
 
 
     def delete_all_sessions_for_user(self, user_id: str) -> int:
@@ -94,14 +94,14 @@ class SessionsManager:
         cursor = 0
 
         while True:
-            cursor, keys = self.valkey_service.valkey.scan(
+            cursor, keys = self.valkey.scan(
                 cursor=cursor,
                 match="Session:*",
                 count=1000,
             )
 
             if keys:
-                pipeline = self.valkey_service.valkey.pipeline()
+                pipeline = self.valkey.pipeline()
                 for key in keys:
                     pipeline.hget(key, "sub")
                 user_ids = pipeline.execute()
@@ -113,7 +113,7 @@ class SessionsManager:
                 ]
 
                 if keys_to_delete:
-                    delete_pipeline = self.valkey_service.valkey.pipeline()
+                    delete_pipeline = self.valkey.pipeline()
                     for key in keys_to_delete:
                         delete_pipeline.delete(key)
                     deleted_results = delete_pipeline.execute()
@@ -130,7 +130,7 @@ class SessionsManager:
 
 
     def get_session(self, session_id: str) -> SessionData | None:
-        raw_data = self.valkey_service.valkey.hgetall(f"Session:{session_id}")
+        raw_data = self.valkey.hgetall(f"Session:{session_id}")
         if not raw_data:
             return None
 

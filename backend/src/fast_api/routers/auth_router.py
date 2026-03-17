@@ -2,25 +2,31 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Depends, Request
 
+from src.fast_api.dependencies import build_current_user_dependency
 from src.pydantic_schemas import (
     AccessValidationResponse,
+    AuthUserResponse,
     ClientContext,
     LoginRequest,
     RefreshRequest,
+    RegisterRequest,
     TokenPairResponse,
+    UserResponse,
     ValidateAccessRequest,
 )
 from src.services.auth.auth_service import AuthService
 
 if TYPE_CHECKING:
     from src.db.database import DataBase
+    from src.db.models import User
 
 
 def get_auth_router(db: "DataBase") -> APIRouter:
     router = APIRouter(prefix="/auth", tags=["auth"])
     auth_service = AuthService(db)
+    current_user = build_current_user_dependency(db)
 
 
     def build_client_context(request: Request) -> ClientContext:
@@ -33,11 +39,17 @@ def get_auth_router(db: "DataBase") -> APIRouter:
         )
 
 
+    @router.post("/register", response_model=UserResponse, status_code=201)
+    async def register(data: RegisterRequest) -> UserResponse:
+        user = await auth_service.register_user(data)
+        return UserResponse.model_validate(user)
+
+
     @router.post("/login", response_model=TokenPairResponse, status_code=201)
     async def login(data: LoginRequest, request: Request) -> TokenPairResponse:
         client_context = build_client_context(request)
         return await auth_service.login_user(
-            email=data.email,
+            email=str(data.email),
             password=data.password.get_secret_value(),
             client_context=client_context,
         )
@@ -52,6 +64,11 @@ def get_auth_router(db: "DataBase") -> APIRouter:
     async def validate_access(data: ValidateAccessRequest) -> AccessValidationResponse:
         is_valid = await auth_service.validate_access_token(data.access_token)
         return AccessValidationResponse(valid=is_valid)
+
+
+    @router.get("/me", response_model=AuthUserResponse, status_code=200)
+    async def get_me(user: "User" = Depends(current_user)) -> AuthUserResponse:
+        return AuthUserResponse(user=UserResponse.model_validate(user))
 
 
     return router

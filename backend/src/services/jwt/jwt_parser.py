@@ -111,9 +111,9 @@ class JwtParser:
 
         now_timestamp = TimeTools.now_time_stamp()
         ttl = max(1, expires_at - now_timestamp) if expires_at is not None else 1
-        self.sessions_manager.valkey_service.valkey.set(f"Invalid_refresh:{refresh_token}", "1", ex=ttl)
+        self.sessions_manager.valkey.set(f"Invalid_refresh:{refresh_token}", "1", ex=ttl)
 
 
     def is_refresh_token_in_invalid_list(self, refresh_token: str) -> bool:
-        exists = int(self.sessions_manager.valkey_service.valkey.exists(f"Invalid_refresh:{refresh_token}"))
+        exists = int(self.sessions_manager.valkey.exists(f"Invalid_refresh:{refresh_token}"))
         return exists == 1
