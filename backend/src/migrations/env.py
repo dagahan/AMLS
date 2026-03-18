@@ -6,11 +6,11 @@ from alembic import context
 from sqlalchemy import engine_from_config, pool
 
 from src.core.utils import EnvTools
-from src.db.base import Base
 from src.db.database import DataBase
+from src.db.models import Base
 import src.db.models as loaded_models
 
-EnvTools.bootstrap_env(service_directory="backend")
+EnvTools.bootstrap_env()
 MODELS_MODULE = loaded_models
 
 config = context.config

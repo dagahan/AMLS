@@ -40,18 +40,25 @@ class EnvTools:
 
 
     @staticmethod
-    def bootstrap_env(service_directory: str | None = None, conf_filename: str = ".conf") -> None:
+    def get_project_root() -> Path:
+        return EnvTools._find_project_root()
+
+
+    @staticmethod
+    def resolve_project_path(path_value: str) -> Path:
+        path = Path(path_value)
+        if path.is_absolute():
+            return path
+        return EnvTools.get_project_root() / path
+
+
+    @staticmethod
+    def bootstrap_env() -> None:
         if os.getenv("RUNNING_INSIDE_DOCKER") == "1":
             return
 
-        project_root = EnvTools._find_project_root()
+        project_root = EnvTools.get_project_root()
         EnvTools._load_variables_from_file(project_root / ".env", override=True)
-
-        if service_directory is not None:
-            EnvTools._load_variables_from_file(
-                project_root / service_directory / conf_filename,
-                override=True,
-            )
 
         os.environ.setdefault("RUNNING_INSIDE_DOCKER", "0")
 

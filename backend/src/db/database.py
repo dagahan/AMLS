@@ -7,7 +7,6 @@ from loguru import logger
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker, create_async_engine
 
-from src.core.config import ConfigLoader
 from src.core.utils import EnvTools
 
 if TYPE_CHECKING:
@@ -16,7 +15,6 @@ if TYPE_CHECKING:
 
 class DataBase:
     def __init__(self) -> None:
-        self.config = ConfigLoader()
         self.engine: AsyncEngine | None = None
         self.async_session: async_sessionmaker[AsyncSession] | None = None
 
@@ -34,14 +32,17 @@ class DataBase:
             f"postgresql+psycopg://{self.db_user}:{self.db_password}"
             f"@{self.db_host}:{self.db_port}/{self.db_name}"
         )
+        self.echo = EnvTools.required_load_env_var("DB_ECHO") == "1"
+        self.pool_size = int(EnvTools.required_load_env_var("DB_POOL_SIZE"))
+        self.max_overflow = int(EnvTools.required_load_env_var("DB_MAX_OVERFLOW"))
 
 
     async def init_alchemy_engine(self) -> None:
         self.engine = create_async_engine(
             url=self.async_engine_config,
-            echo=bool(self.config.get("db", "echo")),
-            pool_size=int(self.config.get("db", "pool_size")),
-            max_overflow=int(self.config.get("db", "max_overflow")),
+            echo=self.echo,
+            pool_size=self.pool_size,
+            max_overflow=self.max_overflow,
             pool_timeout=30,
             pool_recycle=1800,
             pool_pre_ping=True,

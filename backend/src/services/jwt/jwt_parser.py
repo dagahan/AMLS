@@ -8,7 +8,6 @@ from jose import JWTError, jwt
 from jose.exceptions import ExpiredSignatureError
 from loguru import logger
 
-from src.core.config import ConfigLoader
 from src.core.utils import EnvTools, TimeTools
 from src.pydantic_schemas import AccessPayload, RefreshPayload
 from src.services.auth.sessions_manager import SessionsManager
@@ -16,10 +15,9 @@ from src.services.auth.sessions_manager import SessionsManager
 
 class JwtParser:
     def __init__(self) -> None:
-        self.config = ConfigLoader()
         self.sessions_manager = SessionsManager()
-        self.private_key = self._read_key("private_key")
-        self.public_key = EnvTools.load_env_var("public_key") or self._read_key("public_key")
+        self.private_key = self._read_key("JWT_PRIVATE_KEY_PATH")
+        self.public_key = self._read_key("JWT_PUBLIC_KEY_PATH")
         self.access_token_expire_minutes = int(
             EnvTools.required_load_env_var("ACCESS_TOKEN_EXPIRE_MINUTES")
         )
@@ -29,8 +27,8 @@ class JwtParser:
         self.algorithm = "RS256"
 
 
-    def _read_key(self, key_type: str) -> str:
-        path = self.config.get("jwt", key_type)
+    def _read_key(self, env_var_name: str) -> str:
+        path = EnvTools.resolve_project_path(EnvTools.required_load_env_var(env_var_name))
         with open(path, "rb") as key_file:
             return key_file.read().decode("utf-8")
 

@@ -86,7 +86,7 @@ class Service:
 
 if __name__ == "__main__":
     try:
-        EnvTools.bootstrap_env(service_directory="backend")
+        EnvTools.bootstrap_env()
         asyncio.run(Service().run_service())
     except KeyboardInterrupt:
         logger.info(f"{colorama.Fore.CYAN}Service stopped by user{colorama.Style.RESET_ALL}")

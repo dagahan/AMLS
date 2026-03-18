@@ -25,7 +25,7 @@ from src.pydantic_schemas import TokenPairResponse
 
 @pytest.fixture(scope="session", autouse=True)
 def bootstrap_environment() -> Iterator[None]:
-    EnvTools.bootstrap_env(service_directory="backend")
+    EnvTools.bootstrap_env()
     yield
 
 

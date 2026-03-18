@@ -81,14 +81,3 @@ ignore_missing_imports = true
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
-
-
-[jwt]
-private_key = "certs/jwt-private.pem"
-public_key = "certs/jwt-public.pem"
-
-
-[db]
-echo = false
-pool_size = 10
-max_overflow = 20
