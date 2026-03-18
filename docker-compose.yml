@@ -52,31 +52,31 @@ services:
     restart: ${DOCKER_CONTAINERS_RESTART}
 
 
-  backend:
-    build:
-      context: ./backend
-      dockerfile: dockerfile
-    image: backend-${COMPOSE_PROJECT_NAME}
-    container_name: backend-${COMPOSE_PROJECT_NAME}
-    env_file: 
-      - .env
-    environment:
-      RUNNING_INSIDE_DOCKER: 1
-      COMPOSE_PROJECT_NAME: ${COMPOSE_PROJECT_NAME}
-    depends_on:
-      postgres:
-        condition: service_healthy
-      valkey:
-        condition: service_started
-    ports:
-      - "${BACKEND_PORT:-8000}:8000"
-    networks:
-      - amls_net
-    restart: ${DOCKER_CONTAINERS_RESTART}
-    develop:
-      watch:
-        - action: rebuild
-          path: ./backend
+  # backend:
+  #   build:
+  #     context: ./backend
+  #     dockerfile: dockerfile
+  #   image: backend-${COMPOSE_PROJECT_NAME}
+  #   container_name: backend-${COMPOSE_PROJECT_NAME}
+  #   env_file: 
+  #     - .env
+  #   environment:
+  #     RUNNING_INSIDE_DOCKER: 1
+  #     COMPOSE_PROJECT_NAME: ${COMPOSE_PROJECT_NAME}
+  #   depends_on:
+  #     postgres:
+  #       condition: service_healthy
+  #     valkey:
+  #       condition: service_started
+  #   ports:
+  #     - "${BACKEND_PORT:-8000}:8000"
+  #   networks:
+  #     - amls_net
+  #   restart: ${DOCKER_CONTAINERS_RESTART}
+  #   develop:
+  #     watch:
+  #       - action: rebuild
+  #         path: ./backend
 
 
 networks:
