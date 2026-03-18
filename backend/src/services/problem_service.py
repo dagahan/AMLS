@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import uuid
-from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, cast
 
 from fastapi import HTTPException, status
@@ -22,10 +21,12 @@ from src.pydantic_schemas import (
     AdminProblemResponse,
     ProblemAnswerOptionResponse,
     ProblemCreate,
+    ProblemSnapshot,
     ProblemResponse,
     ProblemSubmitResponse,
     ProblemUpdate,
     StudentProgressResponse,
+    SubmissionSnapshot,
 )
 from src.pydantic_schemas.difficulty import DifficultyResponse
 from src.pydantic_schemas.problem import ProblemSubskillResponse
@@ -34,28 +35,6 @@ from src.transaction_manager.transaction_manager import execute_atomic_step, tra
 
 if TYPE_CHECKING:
     from src.db.database import DataBase
-
-
-@dataclass(slots=True)
-class ProblemSnapshot:
-    id: uuid.UUID
-    subtopic_id: uuid.UUID
-    difficulty_id: uuid.UUID
-    condition: str
-    solution: str
-    right_answer: str
-    condition_images: list[str]
-    solution_images: list[str]
-    answer_options: list[str]
-    subskills: list[tuple[uuid.UUID, float]]
-
-
-@dataclass(slots=True)
-class SubmissionSnapshot:
-    user_id: uuid.UUID
-    problem_id: uuid.UUID
-    solved_exists: bool
-    failed_exists: bool
 
 
 class ProblemService:

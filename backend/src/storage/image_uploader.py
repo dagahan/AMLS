@@ -1,12 +1,12 @@
 from __future__ import annotations
 
 import uuid
-from dataclasses import dataclass
 from typing import TYPE_CHECKING, Literal
 
 from fastapi import HTTPException, UploadFile, status
 
 from src.db.models import User
+from src.pydantic_schemas import AvatarSnapshot, StoredFile
 from src.pydantic_schemas.storage import UploadedImageResponse
 from src.s3.s3_connector import S3Client
 from src.transaction_manager.transaction_manager import execute_atomic_step, transactional
@@ -15,18 +15,6 @@ if TYPE_CHECKING:
     from collections.abc import Callable, Sequence
 
     from src.db.database import DataBase
-
-
-@dataclass(slots=True)
-class AvatarSnapshot:
-    user_id: uuid.UUID
-    avatar_url: str | None
-
-
-@dataclass(slots=True)
-class StoredFile:
-    content: bytes
-    content_type: str | None
 
 
 class ImageUploader:

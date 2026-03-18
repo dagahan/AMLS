@@ -13,6 +13,7 @@ from src.pydantic_schemas.auth import (
 )
 from src.pydantic_schemas.common import AmlsSchema, HealthResponse, MessageResponse
 from src.pydantic_schemas.difficulty import DifficultyCreate, DifficultyResponse, DifficultyUpdate
+from src.pydantic_schemas.internal import AvatarSnapshot, ProblemSnapshot, StoredFile, SubmissionSnapshot
 from src.pydantic_schemas.problem import (
     AdminProblemResponse,
     ProblemAnswerOptionResponse,
@@ -50,6 +51,7 @@ __all__ = [
     "AdminProblemResponse",
     "AmlsSchema",
     "AuthUserResponse",
+    "AvatarSnapshot",
     "ClientContext",
     "DifficultyCreate",
     "DifficultyResponse",
@@ -59,6 +61,7 @@ __all__ = [
     "MessageResponse",
     "ProblemAnswerOptionResponse",
     "ProblemCreate",
+    "ProblemSnapshot",
     "ProblemResponse",
     "ProblemSubskillPayload",
     "ProblemSubskillResponse",
@@ -76,9 +79,11 @@ __all__ = [
     "SubskillCreate",
     "SubskillResponse",
     "SubskillUpdate",
+    "StoredFile",
     "SubtopicCreate",
     "SubtopicResponse",
     "SubtopicUpdate",
+    "SubmissionSnapshot",
     "TokenPairResponse",
     "TopicCreate",
     "TopicResponse",
