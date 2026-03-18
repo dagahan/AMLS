@@ -1,10 +1,10 @@
 from pydantic import EmailStr, Field, SecretStr
 
-from src.pydantic_schemas.common import ThesisSchema
+from src.pydantic_schemas.common import AmlsSchema
 from src.pydantic_schemas.user import UserResponse
 
 
-class AccessPayload(ThesisSchema):
+class AccessPayload(AmlsSchema):
     sub: str
     sid: str
     exp: int
@@ -14,7 +14,7 @@ class RefreshPayload(AccessPayload):
     dsh: str
 
 
-class SessionData(ThesisSchema):
+class SessionData(AmlsSchema):
     sub: str
     iat: int
     mtl: int
@@ -22,7 +22,7 @@ class SessionData(ThesisSchema):
     ish: str
 
 
-class ClientContext(ThesisSchema):
+class ClientContext(AmlsSchema):
     user_agent: str
     client_id: str
     local_system_time_zone: str
@@ -30,7 +30,7 @@ class ClientContext(ThesisSchema):
     ip: str
 
 
-class RegisterRequest(ThesisSchema):
+class RegisterRequest(AmlsSchema):
     email: EmailStr
     first_name: str = Field(min_length=1, max_length=100)
     last_name: str = Field(min_length=1, max_length=100)
@@ -38,27 +38,27 @@ class RegisterRequest(ThesisSchema):
     avatar_url: str | None = Field(default=None, max_length=500)
 
 
-class LoginRequest(ThesisSchema):
+class LoginRequest(AmlsSchema):
     email: EmailStr
     password: SecretStr
 
 
-class RefreshRequest(ThesisSchema):
+class RefreshRequest(AmlsSchema):
     refresh_token: str = Field(min_length=1)
 
 
-class ValidateAccessRequest(ThesisSchema):
+class ValidateAccessRequest(AmlsSchema):
     access_token: str = Field(min_length=1)
 
 
-class AccessValidationResponse(ThesisSchema):
+class AccessValidationResponse(AmlsSchema):
     valid: bool
 
 
-class TokenPairResponse(ThesisSchema):
+class TokenPairResponse(AmlsSchema):
     access_token: str
     refresh_token: str
 
 
-class AuthUserResponse(ThesisSchema):
+class AuthUserResponse(AmlsSchema):
     user: UserResponse

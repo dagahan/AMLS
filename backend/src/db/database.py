@@ -73,7 +73,12 @@ class DataBase:
             raise RuntimeError("Database engine is not initialized")
 
         async with self.async_session() as session:
-            yield session
+            try:
+                yield session
+                await session.commit()
+            except Exception:
+                await session.rollback()
+                raise
 
 
     async def test_connection(self) -> bool:

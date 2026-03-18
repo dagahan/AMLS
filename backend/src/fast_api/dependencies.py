@@ -9,7 +9,6 @@ from sqlalchemy import select
 
 from src.db.enums import UserRole
 from src.db.models import User
-from src.db.transaction_manager import TransactionManager
 from src.services.auth.auth_service import AuthService
 from src.services.jwt.jwt_parser import JwtParser
 
@@ -25,7 +24,6 @@ def build_current_user_dependency(db: "DataBase") -> "Callable[..., object]":
     bearer_scheme = HTTPBearer()
     auth_service = AuthService(db)
     jwt_parser = JwtParser()
-    transaction_manager = TransactionManager(db)
 
 
     async def get_current_user(
@@ -49,7 +47,7 @@ def build_current_user_dependency(db: "DataBase") -> "Callable[..., object]":
                 detail="Invalid token subject",
             )
 
-        async with transaction_manager.session() as session:
+        async with db.session_ctx() as session:
             result = await session.execute(select(User).where(User.id == parsed_user_id))
             user = result.scalar_one_or_none()
         if user is None:

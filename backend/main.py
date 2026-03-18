@@ -38,7 +38,7 @@ class Service:
 
         server_task = asyncio.create_task(
             self.fastapi_server.run_server(),
-            name="FastAPI-Thesis",
+            name="FastAPI-AMLS",
         )
 
         pending_tasks: set[asyncio.Future[None]] = {server_task, stop_future}
@@ -69,7 +69,7 @@ class Service:
                 if not isinstance(task, asyncio.Task):
                     continue
 
-                if task.get_name() == "FastAPI-Thesis":
+                if task.get_name() == "FastAPI-AMLS":
                     await task
                     continue
 

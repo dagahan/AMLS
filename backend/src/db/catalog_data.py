@@ -360,11 +360,6 @@ SKILL_SUBSKILLS: dict[str, list[str]] = {
 }
 
 
-class AnswerOptionSeed(TypedDict):
-    text: str
-    is_correct: bool
-
-
 class ProblemSubskillSeed(TypedDict):
     name: str
     weight: float
@@ -378,7 +373,8 @@ class ProblemSeed(TypedDict):
     solution: str
     condition_images: list[str]
     solution_images: list[str]
-    answer_options: list[AnswerOptionSeed]
+    answer_options: list[str]
+    right_answer: str
     subskills: list[ProblemSubskillSeed]
 
 
@@ -391,12 +387,8 @@ SAMPLE_PROBLEMS: list[ProblemSeed] = [
         "solution": "The area of a right triangle is \\\\frac{1}{2}ab. Therefore, S=\\\\frac{1}{2}\\\\cdot 6 \\\\cdot 8 = 24.",
         "condition_images": [],
         "solution_images": [],
-        "answer_options": [
-            {"text": "20", "is_correct": False},
-            {"text": "24", "is_correct": True},
-            {"text": "28", "is_correct": False},
-            {"text": "48", "is_correct": False},
-        ],
+        "answer_options": ["20", "24", "28", "48"],
+        "right_answer": "24",
         "subskills": [
             {"name": "solve right-triangle configurations", "weight": 0.7},
             {"name": "compute lengths and areas in plane figures", "weight": 0.3},
@@ -410,12 +402,8 @@ SAMPLE_PROBLEMS: list[ProblemSeed] = [
         "solution": "The scalar product equals 2\\\\cdot 3 + (-1)\\\\cdot 4 = 6-4=2.",
         "condition_images": [],
         "solution_images": [],
-        "answer_options": [
-            {"text": "-2", "is_correct": False},
-            {"text": "2", "is_correct": True},
-            {"text": "10", "is_correct": False},
-            {"text": "14", "is_correct": False},
-        ],
+        "answer_options": ["-2", "2", "10", "14"],
+        "right_answer": "2",
         "subskills": [
             {"name": "represent a vector in coordinates", "weight": 0.4},
             {"name": "use the scalar product", "weight": 0.6},
@@ -429,12 +417,8 @@ SAMPLE_PROBLEMS: list[ProblemSeed] = [
         "solution": "From \\\\log_2(x-1)=3 we get x-1=2^3=8, so x=9. The restriction x>1 is satisfied.",
         "condition_images": [],
         "solution_images": [],
-        "answer_options": [
-            {"text": "7", "is_correct": False},
-            {"text": "8", "is_correct": False},
-            {"text": "9", "is_correct": True},
-            {"text": "10", "is_correct": False},
-        ],
+        "answer_options": ["7", "8", "9", "10"],
+        "right_answer": "9",
         "subskills": [
             {"name": "solve logarithmic equations", "weight": 0.7},
             {"name": "remove extraneous roots by checking restrictions", "weight": 0.3},
@@ -448,12 +432,8 @@ SAMPLE_PROBLEMS: list[ProblemSeed] = [
         "solution": "The derivative is f'(x)=2x. At x=3 we have f'(3)=6, so the slope equals 6.",
         "condition_images": [],
         "solution_images": [],
-        "answer_options": [
-            {"text": "3", "is_correct": False},
-            {"text": "6", "is_correct": True},
-            {"text": "9", "is_correct": False},
-            {"text": "12", "is_correct": False},
-        ],
+        "answer_options": ["3", "6", "9", "12"],
+        "right_answer": "6",
         "subskills": [
             {"name": "use the geometric meaning of the derivative", "weight": 0.7},
             {"name": "write the tangent-line equation", "weight": 0.3},

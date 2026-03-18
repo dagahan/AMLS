@@ -94,6 +94,7 @@ def upgrade() -> None:
         sa.Column("difficulty_id", sa.UUID(), nullable=False),
         sa.Column("condition", sa.Text(), nullable=False),
         sa.Column("solution", sa.Text(), nullable=False),
+        sa.Column("right_answer", sa.Text(), nullable=False),
         sa.Column("condition_images", postgresql.JSONB(astext_type=sa.Text()), nullable=False),
         sa.Column("solution_images", postgresql.JSONB(astext_type=sa.Text()), nullable=False),
         sa.Column("id", sa.UUID(), nullable=False),
@@ -131,17 +132,9 @@ def upgrade() -> None:
         "problem_answer_options",
         sa.Column("problem_id", sa.UUID(), nullable=False),
         sa.Column("text", sa.Text(), nullable=False),
-        sa.Column("is_correct", sa.Boolean(), nullable=False),
         sa.Column("id", sa.UUID(), nullable=False),
         sa.ForeignKeyConstraint(["problem_id"], ["problems.id"], ondelete="CASCADE"),
         sa.PrimaryKeyConstraint("id"),
-    )
-    op.create_index(
-        "uq_problem_correct_answer",
-        "problem_answer_options",
-        ["problem_id"],
-        unique=True,
-        postgresql_where=sa.text("is_correct = true"),
     )
     op.create_table(
         "problem_subskills",
@@ -221,6 +214,7 @@ def seed_catalog_data() -> None:
         sa.column("difficulty_id", sa.UUID()),
         sa.column("condition", sa.Text()),
         sa.column("solution", sa.Text()),
+        sa.column("right_answer", sa.Text()),
         sa.column("condition_images", postgresql.JSONB(astext_type=sa.Text())),
         sa.column("solution_images", postgresql.JSONB(astext_type=sa.Text())),
     )
@@ -229,7 +223,6 @@ def seed_catalog_data() -> None:
         sa.column("id", sa.UUID()),
         sa.column("problem_id", sa.UUID()),
         sa.column("text", sa.Text()),
-        sa.column("is_correct", sa.Boolean()),
     )
     problem_subskill_table = sa.table(
         "problem_subskills",
@@ -317,6 +310,7 @@ def seed_catalog_data() -> None:
                 "difficulty_id": difficulty_ids[problem["difficulty"]],
                 "condition": problem["condition"],
                 "solution": problem["solution"],
+                "right_answer": problem["right_answer"],
                 "condition_images": problem["condition_images"],
                 "solution_images": problem["solution_images"],
             }
@@ -325,10 +319,9 @@ def seed_catalog_data() -> None:
         for option in problem["answer_options"]:
             answer_option_rows.append(
                 {
-                    "id": build_stable_uuid("answer_option", f"{problem['key']}:{option['text']}"),
+                    "id": build_stable_uuid("answer_option", f"{problem['key']}:{option}"),
                     "problem_id": problem_id,
-                    "text": option["text"],
-                    "is_correct": option["is_correct"],
+                    "text": option,
                 }
             )
 

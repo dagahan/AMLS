@@ -3,8 +3,8 @@ from __future__ import annotations
 import uuid
 from datetime import datetime
 
-from sqlalchemy import Boolean, CheckConstraint, DateTime, Enum, Float, ForeignKey, Index
-from sqlalchemy import PrimaryKeyConstraint, String, Text, UniqueConstraint, func, text
+from sqlalchemy import Boolean, CheckConstraint, DateTime, Enum, Float, ForeignKey, String, Text
+from sqlalchemy import PrimaryKeyConstraint, UniqueConstraint, func
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -187,6 +187,7 @@ class Problem(Base, IdMixin, TimestampMixin):
     )
     condition: Mapped[str] = mapped_column(Text, nullable=False)
     solution: Mapped[str] = mapped_column(Text, nullable=False)
+    right_answer: Mapped[str] = mapped_column(Text, nullable=False)
     condition_images: Mapped[list[str]] = mapped_column(JSONB, default=list, nullable=False)
     solution_images: Mapped[list[str]] = mapped_column(JSONB, default=list, nullable=False)
 
@@ -228,14 +229,6 @@ class ProblemSubskill(Base):
 
 class ProblemAnswerOption(Base, IdMixin):
     __tablename__ = "problem_answer_options"
-    __table_args__ = (
-        Index(
-            "uq_problem_correct_answer",
-            "problem_id",
-            unique=True,
-            postgresql_where=text("is_correct = true"),
-        ),
-    )
 
     problem_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
@@ -243,7 +236,6 @@ class ProblemAnswerOption(Base, IdMixin):
         nullable=False,
     )
     text: Mapped[str] = mapped_column(Text, nullable=False)
-    is_correct: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
 
     problem: Mapped[Problem] = relationship(back_populates="answer_options")
 

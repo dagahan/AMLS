@@ -1,11 +1,13 @@
 [project]
-name = "thesis_backend"
+name = "amls_backend"
 version = "0.1.0"
 requires-python = "==3.14.0"
 dependencies = [
+    "aiobotocore==2.15.2",
     "alembic==1.16.4",
     "asyncpg==0.31.0",
     "bcrypt==5.0.0",
+    "botocore==1.35.36",
     "colorama==0.4.6",
     "email-validator==2.2.0",
     "fastapi==0.116.0",
@@ -15,6 +17,7 @@ dependencies = [
     "pydantic==2.12.5",
     "python-dotenv==1.1.1",
     "python-jose[cryptography]==3.3.0",
+    "python-multipart==0.0.20",
     "sqlalchemy==2.0.41",
     "uvicorn[standard]==0.35.0",
     "valkey==6.1.1",
@@ -28,6 +31,7 @@ dev = [
     "pytest==8.4.2",
     "pytest-asyncio==1.2.0",
     "ruff==0.12.12",
+    "types-aiobotocore[s3]==2.15.2",
 ]
 
 

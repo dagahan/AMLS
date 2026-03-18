@@ -2,74 +2,67 @@ from uuid import UUID
 
 from pydantic import Field, model_validator
 
-from src.pydantic_schemas.common import ThesisSchema
+from src.pydantic_schemas.common import AmlsSchema
 from src.pydantic_schemas.difficulty import DifficultyResponse
 from src.pydantic_schemas.topic import SubtopicResponse
 
 
-class ProblemAnswerOptionPayload(ThesisSchema):
-    text: str = Field(min_length=1)
-    is_correct: bool
-
-
-class ProblemSubskillPayload(ThesisSchema):
+class ProblemSubskillPayload(AmlsSchema):
     subskill_id: UUID
     weight: float = Field(ge=0, le=1)
 
 
-class ProblemCreate(ThesisSchema):
+class ProblemCreate(AmlsSchema):
     subtopic_id: UUID
     difficulty_id: UUID
     condition: str = Field(min_length=1)
     solution: str = Field(min_length=1)
     condition_images: list[str] = Field(default_factory=list)
     solution_images: list[str] = Field(default_factory=list)
-    answer_options: list[ProblemAnswerOptionPayload]
+    answer_options: list[str]
+    right_answer: str = Field(min_length=1)
     subskills: list[ProblemSubskillPayload]
 
 
     @model_validator(mode="after")
     def validate_payload(self) -> "ProblemCreate":
-        validate_answer_options(self.answer_options)
+        validate_answer_options(self.answer_options, self.right_answer)
         validate_subskills(self.subskills)
         return self
 
 
-class ProblemUpdate(ThesisSchema):
+class ProblemUpdate(AmlsSchema):
     subtopic_id: UUID | None = None
     difficulty_id: UUID | None = None
     condition: str | None = Field(default=None, min_length=1)
     solution: str | None = Field(default=None, min_length=1)
     condition_images: list[str] | None = None
     solution_images: list[str] | None = None
-    answer_options: list[ProblemAnswerOptionPayload] | None = None
+    answer_options: list[str] | None = None
+    right_answer: str | None = Field(default=None, min_length=1)
     subskills: list[ProblemSubskillPayload] | None = None
 
 
     @model_validator(mode="after")
     def validate_payload(self) -> "ProblemUpdate":
         if self.answer_options is not None:
-            validate_answer_options(self.answer_options)
+            validate_answer_options(self.answer_options, self.right_answer)
         if self.subskills is not None:
             validate_subskills(self.subskills)
         return self
 
 
-class ProblemAnswerOptionResponse(ThesisSchema):
+class ProblemAnswerOptionResponse(AmlsSchema):
     id: UUID
     text: str
 
 
-class AdminProblemAnswerOptionResponse(ProblemAnswerOptionResponse):
-    is_correct: bool
-
-
-class ProblemSubskillResponse(ThesisSchema):
+class ProblemSubskillResponse(AmlsSchema):
     subskill_id: UUID
     weight: float
 
 
-class ProblemResponse(ThesisSchema):
+class ProblemResponse(AmlsSchema):
     id: UUID
     subtopic: SubtopicResponse
     difficulty: DifficultyResponse
@@ -78,7 +71,7 @@ class ProblemResponse(ThesisSchema):
     answer_options: list[ProblemAnswerOptionResponse]
 
 
-class AdminProblemResponse(ThesisSchema):
+class AdminProblemResponse(AmlsSchema):
     id: UUID
     subtopic: SubtopicResponse
     difficulty: DifficultyResponse
@@ -86,32 +79,39 @@ class AdminProblemResponse(ThesisSchema):
     condition_images: list[str]
     solution: str
     solution_images: list[str]
-    answer_options: list[AdminProblemAnswerOptionResponse]
+    answer_options: list[ProblemAnswerOptionResponse]
+    right_answer: str
     subskills: list[ProblemSubskillResponse]
 
 
-class ProblemSubmitRequest(ThesisSchema):
+class ProblemSubmitRequest(AmlsSchema):
     answer_option_id: UUID
 
 
-class ProblemSubmitResponse(ThesisSchema):
+class ProblemSubmitResponse(AmlsSchema):
     correct: bool
     solution: str
     solution_images: list[str]
 
 
-class StudentProgressResponse(ThesisSchema):
+class StudentProgressResponse(AmlsSchema):
     solved_problem_ids: list[UUID]
     failed_problem_ids: list[UUID]
 
 
-def validate_answer_options(answer_options: list[ProblemAnswerOptionPayload]) -> None:
+def validate_answer_options(answer_options: list[str], right_answer: str | None) -> None:
     if not 3 <= len(answer_options) <= 8:
         raise ValueError("Problem must contain from 3 to 8 answer options")
 
-    correct_answers_count = sum(1 for option in answer_options if option.is_correct)
-    if correct_answers_count != 1:
-        raise ValueError("Problem must contain exactly one correct answer option")
+    normalized_options = [item.strip() for item in answer_options if item.strip()]
+    if len(normalized_options) != len(answer_options):
+        raise ValueError("Answer options must not be empty")
+
+    if len(set(answer_options)) != len(answer_options):
+        raise ValueError("Answer options must be unique")
+
+    if right_answer is not None and right_answer not in answer_options:
+        raise ValueError("Right answer must match one of the answer options")
 
 
 def validate_subskills(subskills: list[ProblemSubskillPayload]) -> None:

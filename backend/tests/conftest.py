@@ -33,6 +33,17 @@ def bootstrap_environment() -> Iterator[None]:
 def reset_database(bootstrap_environment: None) -> Iterator[None]:
     database = DataBase()
     sync_dsn = database.sync_engine_config.replace("+psycopg", "")
+    admin_dsn = sync_dsn.rsplit("/", maxsplit=1)[0] + "/postgres"
+
+    with psycopg.connect(admin_dsn, autocommit=True) as connection:
+        with connection.cursor() as cursor:
+            cursor.execute(
+                "SELECT 1 FROM pg_database WHERE datname = %s",
+                (database.db_name,),
+            )
+            if cursor.fetchone() is None:
+                cursor.execute(f'CREATE DATABASE "{database.db_name}"')
+
     with psycopg.connect(sync_dsn, autocommit=True) as connection:
         with connection.cursor() as cursor:
             cursor.execute("DROP SCHEMA IF EXISTS public CASCADE")

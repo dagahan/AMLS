@@ -1,4 +1,4 @@
-name: thesis-service
+name: amls-service
 
 
 services:
@@ -19,7 +19,7 @@ services:
     ports:
       - "${POSTGRES_PORT:-5432}:5432"
     networks:
-      - thesis_net
+      - amls_net
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
       interval: 5s
@@ -48,7 +48,7 @@ services:
     ports:
       - "${VALKEY_PORT:-6379}:6379"
     networks:
-      - thesis_net
+      - amls_net
     restart: ${DOCKER_CONTAINERS_RESTART}
 
 
@@ -71,7 +71,7 @@ services:
     ports:
       - "${BACKEND_PORT:-8000}:8000"
     networks:
-      - thesis_net
+      - amls_net
     restart: ${DOCKER_CONTAINERS_RESTART}
     develop:
       watch:
@@ -80,7 +80,7 @@ services:
 
 
 networks:
-  thesis_net:
+  amls_net:
     driver: bridge
 
 

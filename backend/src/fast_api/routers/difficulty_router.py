@@ -7,7 +7,6 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 
 from src.db.models import Difficulty
-from src.db.transaction_manager import TransactionManager
 from src.fast_api.dependencies import build_current_admin_dependency
 from src.pydantic_schemas import DifficultyCreate, DifficultyResponse, DifficultyUpdate, MessageResponse
 
@@ -21,7 +20,6 @@ if TYPE_CHECKING:
 def get_difficulty_router(db: "DataBase") -> APIRouter:
     router = APIRouter()
     current_admin = build_current_admin_dependency(db)
-    transaction_manager = TransactionManager(db)
 
 
     async def get_difficulty_or_404(session: "AsyncSession", difficulty_id: uuid.UUID) -> Difficulty:
@@ -48,7 +46,7 @@ def get_difficulty_router(db: "DataBase") -> APIRouter:
 
     @router.get("/difficulties", response_model=list[DifficultyResponse], status_code=200)
     async def list_difficulties() -> list[DifficultyResponse]:
-        async with transaction_manager.session() as session:
+        async with db.session_ctx() as session:
             result = await session.execute(select(Difficulty).order_by(Difficulty.coefficient))
             difficulties = result.scalars().all()
             return [DifficultyResponse.model_validate(item) for item in difficulties]
@@ -56,7 +54,7 @@ def get_difficulty_router(db: "DataBase") -> APIRouter:
 
     @router.get("/difficulties/{difficulty_id}", response_model=DifficultyResponse, status_code=200)
     async def get_difficulty(difficulty_id: uuid.UUID) -> DifficultyResponse:
-        async with transaction_manager.session() as session:
+        async with db.session_ctx() as session:
             difficulty = await get_difficulty_or_404(session, difficulty_id)
             return DifficultyResponse.model_validate(difficulty)
 
@@ -66,7 +64,7 @@ def get_difficulty_router(db: "DataBase") -> APIRouter:
         data: DifficultyCreate,
         _: "User" = Depends(current_admin),
     ) -> DifficultyResponse:
-        async with transaction_manager.session() as session:
+        async with db.session_ctx() as session:
             await ensure_name_is_unique(session, data.name)
             difficulty = Difficulty(name=data.name, coefficient=data.coefficient)
             session.add(difficulty)
@@ -94,7 +92,7 @@ def get_difficulty_router(db: "DataBase") -> APIRouter:
         data: DifficultyUpdate,
         _: "User" = Depends(current_admin),
     ) -> DifficultyResponse:
-        async with transaction_manager.session() as session:
+        async with db.session_ctx() as session:
             difficulty = await get_difficulty_or_404(session, difficulty_id)
 
             if data.name is not None:
@@ -114,7 +112,7 @@ def get_difficulty_router(db: "DataBase") -> APIRouter:
         difficulty_id: uuid.UUID,
         _: "User" = Depends(current_admin),
     ) -> MessageResponse:
-        async with transaction_manager.session() as session:
+        async with db.session_ctx() as session:
             difficulty = await get_difficulty_or_404(session, difficulty_id)
             await session.delete(difficulty)
             return MessageResponse(message="Difficulty deleted")

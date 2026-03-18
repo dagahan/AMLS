@@ -1,15 +1,18 @@
 from __future__ import annotations
 
+import os
 import uuid
 from typing import TYPE_CHECKING
 
 from sqlalchemy import select
 
 from src.db.database import DataBase
-from src.db.models import ProblemAnswerOption
+from src.db.models import Problem, ProblemAnswerOption
+from src.s3.s3_connector import S3Client
 
 if TYPE_CHECKING:
     from httpx import AsyncClient
+    from pytest import MonkeyPatch
     from sqlalchemy.ext.asyncio import AsyncSession
 
 
@@ -38,12 +41,14 @@ async def get_problem_ids_for_creation(client: AsyncClient) -> tuple[str, str, l
 
 
 async def get_problem_answer_ids(session: AsyncSession, problem_id: str) -> tuple[str, str]:
+    problem_result = await session.execute(select(Problem).where(Problem.id == uuid.UUID(problem_id)))
+    problem = problem_result.scalar_one()
     result = await session.execute(
         select(ProblemAnswerOption).where(ProblemAnswerOption.problem_id == uuid.UUID(problem_id))
     )
     answer_options = result.scalars().all()
-    correct_option = next(item for item in answer_options if item.is_correct)
-    wrong_option = next(item for item in answer_options if not item.is_correct)
+    correct_option = next(item for item in answer_options if item.text == problem.right_answer)
+    wrong_option = next(item for item in answer_options if item.text != problem.right_answer)
     return str(correct_option.id), str(wrong_option.id)
 
 
@@ -108,11 +113,8 @@ async def test_admin_problem_crud_and_public_shape(
             "solution": "Test solution",
             "condition_images": [],
             "solution_images": [],
-            "answer_options": [
-                {"text": "10", "is_correct": False},
-                {"text": "12", "is_correct": True},
-                {"text": "14", "is_correct": False},
-            ],
+            "answer_options": ["10", "12", "14"],
+            "right_answer": "12",
             "subskills": [
                 {"subskill_id": subskill_ids[0], "weight": 0.6},
                 {"subskill_id": subskill_ids[1], "weight": 0.4},
@@ -125,14 +127,15 @@ async def test_admin_problem_crud_and_public_shape(
     created_problem = create_response.json()
     problem_id = created_problem["id"]
     assert all("subskill_id" in item and "weight" in item for item in created_problem["subskills"])
-    assert all("is_correct" in item for item in created_problem["answer_options"])
+    assert created_problem["right_answer"] == "12"
+    assert all("text" in item for item in created_problem["answer_options"])
 
     public_response = await client.get(f"/problems/{problem_id}")
     assert public_response.status_code == 200
     public_problem = public_response.json()
     assert public_problem["condition"] == condition
     assert "solution" not in public_problem
-    assert all("is_correct" not in item for item in public_problem["answer_options"])
+    assert "right_answer" not in public_problem
 
     update_response = await client.patch(
         f"/admin/problems/{problem_id}",
@@ -198,3 +201,57 @@ async def test_student_submission_updates_progress(
     solved_payload = solved_progress.json()
     assert problem_id in solved_payload["solved_problem_ids"]
     assert problem_id not in solved_payload["failed_problem_ids"]
+
+
+async def test_storage_uploads_update_problem_and_profile_urls(
+    client: AsyncClient,
+    admin_tokens: dict[str, str],
+    student_tokens: dict[str, str],
+    monkeypatch: MonkeyPatch,
+) -> None:
+    os.environ.setdefault("S3_BUCKET_NAME", "test-bucket")
+    os.environ.setdefault("S3_ENDPOINT_URL", "https://storage.example.org")
+    os.environ.setdefault("S3_PUBLIC_BASE_URL", "https://storage.example.org/test-bucket")
+    os.environ.setdefault("S3_ACCESS_KEY", "test-access")
+    os.environ.setdefault("S3_SECRET_KEY", "test-secret")
+    os.environ.setdefault("S3_REGION", "ru-7")
+    os.environ.setdefault("S3_TLS_VERIFY", "1")
+
+    async def fake_upload_bytes(
+        self: S3Client,
+        data: bytes,
+        s3_key: str,
+        content_type: str | None = None,
+    ) -> None:
+        return None
+
+
+    async def fake_delete_object(self: S3Client, key: str) -> None:
+        return None
+
+
+    monkeypatch.setattr(S3Client, "upload_bytes", fake_upload_bytes)
+    monkeypatch.setattr(S3Client, "delete_object", fake_delete_object)
+
+    avatar_response = await client.post(
+        "/storage/profile-image",
+        headers=build_auth_headers(student_tokens["access_token"]),
+        files={"file": ("avatar.png", b"avatar-bytes", "image/png")},
+    )
+
+    assert avatar_response.status_code == 201
+    avatar_payload = avatar_response.json()
+    assert avatar_payload["avatar_url"] is not None
+    assert "/users/avatars/" in avatar_payload["avatar_url"]
+
+    problem_image_response = await client.post(
+        "/admin/problem-images/upload",
+        headers=build_auth_headers(admin_tokens["access_token"]),
+        data={"kind": "condition"},
+        files=[("files", ("condition.png", b"condition-bytes", "image/png"))],
+    )
+
+    assert problem_image_response.status_code == 201
+    uploaded_images = problem_image_response.json()
+    assert len(uploaded_images) == 1
+    assert "/problems/condition/" in uploaded_images[0]["url"]

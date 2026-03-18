@@ -1,10 +1,10 @@
 from uuid import UUID
 
 from src.db.enums import UserRole
-from src.pydantic_schemas.common import ThesisSchema
+from src.pydantic_schemas.common import AmlsSchema
 
 
-class UserResponse(ThesisSchema):
+class UserResponse(AmlsSchema):
     id: UUID
     email: str
     first_name: str

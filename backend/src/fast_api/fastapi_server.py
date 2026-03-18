@@ -11,13 +11,14 @@ from src.fast_api.routers.difficulty_router import get_difficulty_router
 from src.fast_api.routers.health_router import get_health_router
 from src.fast_api.routers.problem_router import get_problem_router
 from src.fast_api.routers.skill_router import get_skill_router
+from src.fast_api.routers.storage_router import get_storage_router
 from src.fast_api.routers.topic_router import get_topic_router
 
 
 def create_application(database: DataBase) -> FastAPI:
     app = FastAPI(
-        title="thesis-backend",
-        description="Graph-based adaptive learning system backend for EGE advanced math",
+        title="Adaptive Mathematics Learning System",
+        description="AMLS backend for graph-based adaptive mathematics learning",
         version="0.1.0",
     )
     app.state.database = database
@@ -27,6 +28,7 @@ def create_application(database: DataBase) -> FastAPI:
     app.include_router(get_topic_router(database))
     app.include_router(get_skill_router(database))
     app.include_router(get_problem_router(database))
+    app.include_router(get_storage_router(database))
     return app
 
 

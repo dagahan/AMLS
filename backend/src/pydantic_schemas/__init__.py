@@ -11,12 +11,10 @@ from src.pydantic_schemas.auth import (
     TokenPairResponse,
     ValidateAccessRequest,
 )
-from src.pydantic_schemas.common import HealthResponse, MessageResponse, ThesisSchema
+from src.pydantic_schemas.common import AmlsSchema, HealthResponse, MessageResponse
 from src.pydantic_schemas.difficulty import DifficultyCreate, DifficultyResponse, DifficultyUpdate
 from src.pydantic_schemas.problem import (
-    AdminProblemAnswerOptionResponse,
     AdminProblemResponse,
-    ProblemAnswerOptionPayload,
     ProblemAnswerOptionResponse,
     ProblemCreate,
     ProblemResponse,
@@ -35,6 +33,7 @@ from src.pydantic_schemas.skill import (
     SubskillResponse,
     SubskillUpdate,
 )
+from src.pydantic_schemas.storage import UploadedImageResponse
 from src.pydantic_schemas.topic import (
     SubtopicCreate,
     SubtopicResponse,
@@ -48,17 +47,16 @@ from src.pydantic_schemas.user import UserResponse
 __all__ = [
     "AccessPayload",
     "AccessValidationResponse",
+    "AdminProblemResponse",
+    "AmlsSchema",
     "AuthUserResponse",
     "ClientContext",
-    "AdminProblemAnswerOptionResponse",
-    "AdminProblemResponse",
     "DifficultyCreate",
     "DifficultyResponse",
     "DifficultyUpdate",
     "HealthResponse",
     "LoginRequest",
     "MessageResponse",
-    "ProblemAnswerOptionPayload",
     "ProblemAnswerOptionResponse",
     "ProblemCreate",
     "ProblemResponse",
@@ -73,19 +71,19 @@ __all__ = [
     "SessionData",
     "SkillCreate",
     "SkillResponse",
-    "StudentProgressResponse",
     "SkillUpdate",
+    "StudentProgressResponse",
     "SubskillCreate",
     "SubskillResponse",
     "SubskillUpdate",
     "SubtopicCreate",
     "SubtopicResponse",
     "SubtopicUpdate",
-    "ThesisSchema",
     "TokenPairResponse",
     "TopicCreate",
     "TopicResponse",
     "TopicUpdate",
+    "UploadedImageResponse",
     "UserResponse",
     "ValidateAccessRequest",
 ]

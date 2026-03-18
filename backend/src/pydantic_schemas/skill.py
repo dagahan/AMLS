@@ -2,33 +2,33 @@ from uuid import UUID
 
 from pydantic import Field
 
-from src.pydantic_schemas.common import ThesisSchema
+from src.pydantic_schemas.common import AmlsSchema
 
 
-class SkillCreate(ThesisSchema):
+class SkillCreate(AmlsSchema):
     name: str = Field(min_length=1, max_length=255)
 
 
-class SkillUpdate(ThesisSchema):
+class SkillUpdate(AmlsSchema):
     name: str | None = Field(default=None, min_length=1, max_length=255)
 
 
-class SkillResponse(ThesisSchema):
+class SkillResponse(AmlsSchema):
     id: UUID
     name: str
 
 
-class SubskillCreate(ThesisSchema):
+class SubskillCreate(AmlsSchema):
     skill_id: UUID
     name: str = Field(min_length=1, max_length=255)
 
 
-class SubskillUpdate(ThesisSchema):
+class SubskillUpdate(AmlsSchema):
     skill_id: UUID | None = None
     name: str | None = Field(default=None, min_length=1, max_length=255)
 
 
-class SubskillResponse(ThesisSchema):
+class SubskillResponse(AmlsSchema):
     id: UUID
     skill_id: UUID
     name: str

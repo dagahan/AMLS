@@ -7,7 +7,6 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import select
 
 from src.db.models import Subtopic, Topic
-from src.db.transaction_manager import TransactionManager
 from src.fast_api.dependencies import build_current_admin_dependency, parse_optional_uuid
 from src.pydantic_schemas import (
     MessageResponse,
@@ -29,7 +28,6 @@ if TYPE_CHECKING:
 def get_topic_router(db: "DataBase") -> APIRouter:
     router = APIRouter()
     current_admin = build_current_admin_dependency(db)
-    transaction_manager = TransactionManager(db)
 
 
     async def get_topic_or_404(session: "AsyncSession", topic_id: uuid.UUID) -> Topic:
@@ -78,7 +76,7 @@ def get_topic_router(db: "DataBase") -> APIRouter:
 
     @router.get("/topics", response_model=list[TopicResponse], status_code=200)
     async def list_topics() -> list[TopicResponse]:
-        async with transaction_manager.session() as session:
+        async with db.session_ctx() as session:
             result = await session.execute(select(Topic).order_by(Topic.name))
             topics = result.scalars().all()
             return [TopicResponse.model_validate(item) for item in topics]
@@ -86,7 +84,7 @@ def get_topic_router(db: "DataBase") -> APIRouter:
 
     @router.get("/topics/{topic_id}", response_model=TopicResponse, status_code=200)
     async def get_topic(topic_id: uuid.UUID) -> TopicResponse:
-        async with transaction_manager.session() as session:
+        async with db.session_ctx() as session:
             topic = await get_topic_or_404(session, topic_id)
             return TopicResponse.model_validate(topic)
 
@@ -96,7 +94,7 @@ def get_topic_router(db: "DataBase") -> APIRouter:
         topic_id: str | None = Query(default=None),
     ) -> list[SubtopicResponse]:
         parsed_topic_id = parse_optional_uuid(topic_id, "topic_id")
-        async with transaction_manager.session() as session:
+        async with db.session_ctx() as session:
             statement = select(Subtopic).order_by(Subtopic.name)
             if parsed_topic_id is not None:
                 statement = statement.where(Subtopic.topic_id == parsed_topic_id)
@@ -107,7 +105,7 @@ def get_topic_router(db: "DataBase") -> APIRouter:
 
     @router.get("/subtopics/{subtopic_id}", response_model=SubtopicResponse, status_code=200)
     async def get_subtopic(subtopic_id: uuid.UUID) -> SubtopicResponse:
-        async with transaction_manager.session() as session:
+        async with db.session_ctx() as session:
             subtopic = await get_subtopic_or_404(session, subtopic_id)
             return SubtopicResponse.model_validate(subtopic)
 
@@ -117,7 +115,7 @@ def get_topic_router(db: "DataBase") -> APIRouter:
         data: TopicCreate,
         _: "User" = Depends(current_admin),
     ) -> TopicResponse:
-        async with transaction_manager.session() as session:
+        async with db.session_ctx() as session:
             await ensure_topic_name_is_unique(session, data.name)
             topic = Topic(name=data.name)
             session.add(topic)
@@ -145,7 +143,7 @@ def get_topic_router(db: "DataBase") -> APIRouter:
         data: TopicUpdate,
         _: "User" = Depends(current_admin),
     ) -> TopicResponse:
-        async with transaction_manager.session() as session:
+        async with db.session_ctx() as session:
             topic = await get_topic_or_404(session, topic_id)
             if data.name is not None:
                 await ensure_topic_name_is_unique(session, data.name, current_id=topic.id)
@@ -160,7 +158,7 @@ def get_topic_router(db: "DataBase") -> APIRouter:
         topic_id: uuid.UUID,
         _: "User" = Depends(current_admin),
     ) -> MessageResponse:
-        async with transaction_manager.session() as session:
+        async with db.session_ctx() as session:
             topic = await get_topic_or_404(session, topic_id)
             await session.delete(topic)
             return MessageResponse(message="Topic deleted")
@@ -171,7 +169,7 @@ def get_topic_router(db: "DataBase") -> APIRouter:
         data: SubtopicCreate,
         _: "User" = Depends(current_admin),
     ) -> SubtopicResponse:
-        async with transaction_manager.session() as session:
+        async with db.session_ctx() as session:
             await get_topic_or_404(session, data.topic_id)
             await ensure_subtopic_name_is_unique(session, data.topic_id, data.name)
             subtopic = Subtopic(topic_id=data.topic_id, name=data.name)
@@ -203,7 +201,7 @@ def get_topic_router(db: "DataBase") -> APIRouter:
         data: SubtopicUpdate,
         _: "User" = Depends(current_admin),
     ) -> SubtopicResponse:
-        async with transaction_manager.session() as session:
+        async with db.session_ctx() as session:
             subtopic = await get_subtopic_or_404(session, subtopic_id)
 
             if data.topic_id is not None:
@@ -236,7 +234,7 @@ def get_topic_router(db: "DataBase") -> APIRouter:
         subtopic_id: uuid.UUID,
         _: "User" = Depends(current_admin),
     ) -> MessageResponse:
-        async with transaction_manager.session() as session:
+        async with db.session_ctx() as session:
             subtopic = await get_subtopic_or_404(session, subtopic_id)
             await session.delete(subtopic)
             return MessageResponse(message="Subtopic deleted")

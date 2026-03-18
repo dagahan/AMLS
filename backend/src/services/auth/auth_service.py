@@ -8,10 +8,10 @@ from sqlalchemy import select
 from src.core.utils import PasswordTools
 from src.db.enums import UserRole
 from src.db.models import User
-from src.db.transaction_manager import TransactionManager
 from src.pydantic_schemas import ClientContext, RegisterRequest, TokenPairResponse
 from src.services.auth.sessions_manager import SessionsManager
 from src.services.jwt.jwt_parser import JwtParser
+from src.transaction_manager.transaction_manager import execute_atomic_step, transactional
 
 if TYPE_CHECKING:
     from src.db.database import DataBase
@@ -22,11 +22,10 @@ class AuthService:
         self.db = db
         self.jwt_parser = JwtParser()
         self.sessions_manager = SessionsManager()
-        self.transaction_manager = TransactionManager(db)
 
 
     async def authenticate_user(self, email: str, password: str) -> User:
-        async with self.transaction_manager.session() as session:
+        async with self.db.session_ctx() as session:
             result = await session.execute(select(User).where(User.email == email))
             user = result.scalar_one_or_none()
 
@@ -45,8 +44,17 @@ class AuthService:
         return user
 
 
+    @transactional
     async def register_user(self, data: RegisterRequest) -> User:
-        async with self.transaction_manager.session() as session:
+        return await execute_atomic_step(
+            action=lambda: self._create_user_record(data),
+            rollback=lambda user: self._delete_user_record(user.id),
+            step_name="create_user_record",
+        )
+
+
+    async def _create_user_record(self, data: RegisterRequest) -> User:
+        async with self.db.session_ctx() as session:
             result = await session.execute(select(User).where(User.email == data.email))
             existing_user = result.scalar_one_or_none()
             if existing_user is not None:
@@ -69,6 +77,13 @@ class AuthService:
             await session.refresh(user)
 
         return user
+
+
+    async def _delete_user_record(self, user_id: object) -> None:
+        async with self.db.session_ctx() as session:
+            user = await session.get(User, user_id)
+            if user is not None:
+                await session.delete(user)
 
 
     async def login_user(self, email: str, password: str, client_context: ClientContext) -> TokenPairResponse:
