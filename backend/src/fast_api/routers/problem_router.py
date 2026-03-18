@@ -10,7 +10,7 @@ from src.fast_api.dependencies import (
     build_current_user_dependency,
     parse_optional_uuid,
 )
-from src.pydantic_schemas import (
+from src.models.pydantic import (
     AdminProblemResponse,
     MessageResponse,
     ProblemCreate,
@@ -24,7 +24,7 @@ from src.services.problem_service import ProblemService
 
 if TYPE_CHECKING:
     from src.db.database import DataBase
-    from src.db.models import User
+    from src.models.alchemy import User
 
 
 def get_problem_router(db: "DataBase") -> APIRouter:

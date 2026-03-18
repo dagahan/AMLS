@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING
 from sqlalchemy import select
 
 from src.db.database import DataBase
-from src.db.models import Problem, ProblemAnswerOption
+from src.models.alchemy import Problem, ProblemAnswerOption
 from src.s3.s3_connector import S3Client
 
 if TYPE_CHECKING:

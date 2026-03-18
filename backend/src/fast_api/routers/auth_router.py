@@ -5,7 +5,7 @@ from typing import TYPE_CHECKING
 from fastapi import APIRouter, Depends, Request
 
 from src.fast_api.dependencies import build_current_user_dependency
-from src.pydantic_schemas import (
+from src.models.pydantic import (
     AccessValidationResponse,
     AuthUserResponse,
     ClientContext,
@@ -20,7 +20,7 @@ from src.services.auth.auth_service import AuthService
 
 if TYPE_CHECKING:
     from src.db.database import DataBase
-    from src.db.models import User
+    from src.models.alchemy import User
 
 
 def get_auth_router(db: "DataBase") -> APIRouter:

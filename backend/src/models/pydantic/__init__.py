@@ -1,4 +1,4 @@
-from src.pydantic_schemas.auth import (
+from src.models.pydantic.auth import (
     AccessPayload,
     AccessValidationResponse,
     AuthUserResponse,
@@ -11,9 +11,9 @@ from src.pydantic_schemas.auth import (
     TokenPairResponse,
     ValidateAccessRequest,
 )
-from src.pydantic_schemas.common import AmlsSchema, HealthResponse, MessageResponse
-from src.pydantic_schemas.difficulty import DifficultyCreate, DifficultyResponse, DifficultyUpdate
-from src.pydantic_schemas.problem import (
+from src.models.pydantic.common import AmlsSchema, HealthResponse, MessageResponse
+from src.models.pydantic.difficulty import DifficultyCreate, DifficultyResponse, DifficultyUpdate
+from src.models.pydantic.problem import (
     AdminProblemResponse,
     ProblemAnswerOptionResponse,
     ProblemCreate,
@@ -27,7 +27,7 @@ from src.pydantic_schemas.problem import (
     SubmissionSnapshot,
     StudentProgressResponse,
 )
-from src.pydantic_schemas.skill import (
+from src.models.pydantic.skill import (
     SkillCreate,
     SkillResponse,
     SkillUpdate,
@@ -35,8 +35,8 @@ from src.pydantic_schemas.skill import (
     SubskillResponse,
     SubskillUpdate,
 )
-from src.pydantic_schemas.storage import StoredFile, UploadedImageResponse
-from src.pydantic_schemas.topic import (
+from src.models.pydantic.storage import StoredFile, UploadedImageResponse
+from src.models.pydantic.topic import (
     SubtopicCreate,
     SubtopicResponse,
     SubtopicUpdate,
@@ -44,7 +44,7 @@ from src.pydantic_schemas.topic import (
     TopicResponse,
     TopicUpdate,
 )
-from src.pydantic_schemas.user import AvatarSnapshot, UserResponse
+from src.models.pydantic.user import AvatarSnapshot, UserResponse
 
 __all__ = [
     "AccessPayload",

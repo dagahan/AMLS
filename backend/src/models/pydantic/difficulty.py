@@ -2,7 +2,7 @@ from uuid import UUID
 
 from pydantic import Field
 
-from src.pydantic_schemas.common import AmlsSchema
+from src.models.pydantic.common import AmlsSchema
 
 
 class DifficultyCreate(AmlsSchema):

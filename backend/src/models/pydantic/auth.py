@@ -1,7 +1,7 @@
 from pydantic import EmailStr, Field, SecretStr
 
-from src.pydantic_schemas.common import AmlsSchema
-from src.pydantic_schemas.user import UserResponse
+from src.models.pydantic.common import AmlsSchema
+from src.models.pydantic.user import UserResponse
 
 
 class AccessPayload(AmlsSchema):

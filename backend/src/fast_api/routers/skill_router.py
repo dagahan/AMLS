@@ -6,9 +6,9 @@ from typing import TYPE_CHECKING
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import select
 
-from src.db.models import Skill, Subskill
+from src.models.alchemy import Skill, Subskill
 from src.fast_api.dependencies import build_current_admin_dependency, parse_optional_uuid
-from src.pydantic_schemas import (
+from src.models.pydantic import (
     MessageResponse,
     SkillCreate,
     SkillResponse,
@@ -22,7 +22,7 @@ if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
 
     from src.db.database import DataBase
-    from src.db.models import User
+    from src.models.alchemy import User
 
 
 def get_skill_router(db: "DataBase") -> APIRouter:

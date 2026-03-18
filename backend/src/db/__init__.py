@@ -1,7 +1,7 @@
-from src.db.base import Base
 from src.db.database import DataBase
 from src.db.enums import UserRole
-from src.db.models import (
+from src.models.alchemy import (
+    Base,
     Difficulty,
     Problem,
     ProblemAnswerOption,

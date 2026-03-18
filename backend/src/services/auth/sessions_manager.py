@@ -8,7 +8,7 @@ from loguru import logger
 
 from src.core.clients import get_valkey_client
 from src.core.utils import EnvTools, StringTools, TimeTools
-from src.pydantic_schemas import ClientContext, SessionData
+from src.models.pydantic import ClientContext, SessionData
 
 
 class SessionsManager:

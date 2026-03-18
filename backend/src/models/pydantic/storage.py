@@ -1,4 +1,4 @@
-from src.pydantic_schemas.common import AmlsSchema
+from src.models.pydantic.common import AmlsSchema
 
 
 class UploadedImageResponse(AmlsSchema):

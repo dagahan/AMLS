@@ -7,7 +7,7 @@ from fastapi import HTTPException, status
 from sqlalchemy import delete, select
 from sqlalchemy.orm import selectinload
 
-from src.db.models import (
+from src.models.alchemy import (
     Difficulty,
     Problem,
     ProblemAnswerOption,
@@ -17,7 +17,7 @@ from src.db.models import (
     UserFailedProblem,
     UserSolvedProblem,
 )
-from src.pydantic_schemas import (
+from src.models.pydantic import (
     AdminProblemResponse,
     ProblemAnswerOptionResponse,
     ProblemCreate,
@@ -26,9 +26,9 @@ from src.pydantic_schemas import (
     ProblemUpdate,
     StudentProgressResponse,
 )
-from src.pydantic_schemas.difficulty import DifficultyResponse
-from src.pydantic_schemas.problem import ProblemSnapshot, ProblemSubskillResponse, SubmissionSnapshot
-from src.pydantic_schemas.topic import SubtopicResponse
+from src.models.pydantic.difficulty import DifficultyResponse
+from src.models.pydantic.problem import ProblemSnapshot, ProblemSubskillResponse, SubmissionSnapshot
+from src.models.pydantic.topic import SubtopicResponse
 from src.transaction_manager.transaction_manager import execute_atomic_step, transactional
 
 if TYPE_CHECKING:

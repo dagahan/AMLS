@@ -5,13 +5,13 @@ from typing import TYPE_CHECKING, Literal
 from fastapi import APIRouter, Depends, File, Form, Request, Response, UploadFile
 
 from src.fast_api.dependencies import build_current_admin_dependency, build_current_user_dependency
-from src.pydantic_schemas.storage import UploadedImageResponse
-from src.pydantic_schemas.user import UserResponse
+from src.models.pydantic.storage import UploadedImageResponse
+from src.models.pydantic.user import UserResponse
 from src.storage.storage_manager import StorageManager
 
 if TYPE_CHECKING:
     from src.db.database import DataBase
-    from src.db.models import User
+    from src.models.alchemy import User
 
 
 def get_storage_router(db: "DataBase") -> APIRouter:

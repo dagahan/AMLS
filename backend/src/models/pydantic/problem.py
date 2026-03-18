@@ -2,9 +2,9 @@ from uuid import UUID
 
 from pydantic import Field, model_validator
 
-from src.pydantic_schemas.common import AmlsSchema
-from src.pydantic_schemas.difficulty import DifficultyResponse
-from src.pydantic_schemas.topic import SubtopicResponse
+from src.models.pydantic.common import AmlsSchema
+from src.models.pydantic.difficulty import DifficultyResponse
+from src.models.pydantic.topic import SubtopicResponse
 
 
 class ProblemSubskillPayload(AmlsSchema):

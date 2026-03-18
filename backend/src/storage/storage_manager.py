@@ -3,7 +3,7 @@ from __future__ import annotations
 import uuid
 from typing import TYPE_CHECKING, Literal
 
-from src.pydantic_schemas.storage import StoredFile
+from src.models.pydantic.storage import StoredFile
 from src.storage.image_uploader import ImageUploader
 
 if TYPE_CHECKING:
@@ -12,8 +12,8 @@ if TYPE_CHECKING:
     from fastapi import UploadFile
 
     from src.db.database import DataBase
-    from src.db.models import User
-    from src.pydantic_schemas.storage import UploadedImageResponse
+    from src.models.alchemy import User
+    from src.models.pydantic.storage import UploadedImageResponse
 
 
 class StorageManager:

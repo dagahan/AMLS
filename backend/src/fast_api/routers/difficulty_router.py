@@ -6,15 +6,15 @@ from typing import TYPE_CHECKING
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 
-from src.db.models import Difficulty
+from src.models.alchemy import Difficulty
 from src.fast_api.dependencies import build_current_admin_dependency
-from src.pydantic_schemas import DifficultyCreate, DifficultyResponse, DifficultyUpdate, MessageResponse
+from src.models.pydantic import DifficultyCreate, DifficultyResponse, DifficultyUpdate, MessageResponse
 
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
 
     from src.db.database import DataBase
-    from src.db.models import User
+    from src.models.alchemy import User
 
 
 def get_difficulty_router(db: "DataBase") -> APIRouter:

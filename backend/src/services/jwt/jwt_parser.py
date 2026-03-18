@@ -9,7 +9,7 @@ from jose.exceptions import ExpiredSignatureError
 from loguru import logger
 
 from src.core.utils import EnvTools, TimeTools
-from src.pydantic_schemas import AccessPayload, RefreshPayload
+from src.models.pydantic import AccessPayload, RefreshPayload
 from src.services.auth.sessions_manager import SessionsManager
 
 

@@ -7,8 +7,8 @@ from sqlalchemy import select
 
 from src.core.utils import PasswordTools
 from src.db.enums import UserRole
-from src.db.models import User
-from src.pydantic_schemas import ClientContext, RegisterRequest, TokenPairResponse
+from src.models.alchemy import User
+from src.models.pydantic import ClientContext, RegisterRequest, TokenPairResponse
 from src.services.auth.sessions_manager import SessionsManager
 from src.services.jwt.jwt_parser import JwtParser
 from src.transaction_manager.transaction_manager import execute_atomic_step, transactional

@@ -6,9 +6,9 @@ from typing import TYPE_CHECKING
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import select
 
-from src.db.models import Subtopic, Topic
+from src.models.alchemy import Subtopic, Topic
 from src.fast_api.dependencies import build_current_admin_dependency, parse_optional_uuid
-from src.pydantic_schemas import (
+from src.models.pydantic import (
     MessageResponse,
     SubtopicCreate,
     SubtopicResponse,
@@ -22,7 +22,7 @@ if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
 
     from src.db.database import DataBase
-    from src.db.models import User
+    from src.models.alchemy import User
 
 
 def get_topic_router(db: "DataBase") -> APIRouter:

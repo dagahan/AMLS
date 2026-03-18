@@ -5,10 +5,10 @@ from typing import TYPE_CHECKING, Literal
 
 from fastapi import HTTPException, UploadFile, status
 
-from src.db.models import User
-from src.pydantic_schemas.storage import UploadedImageResponse
-from src.pydantic_schemas.storage import StoredFile
-from src.pydantic_schemas.user import AvatarSnapshot
+from src.models.alchemy import User
+from src.models.pydantic.storage import UploadedImageResponse
+from src.models.pydantic.storage import StoredFile
+from src.models.pydantic.user import AvatarSnapshot
 from src.s3.s3_connector import S3Client
 from src.transaction_manager.transaction_manager import execute_atomic_step, transactional
 

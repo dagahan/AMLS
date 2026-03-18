@@ -1,7 +1,7 @@
 from uuid import UUID
 
 from src.db.enums import UserRole
-from src.pydantic_schemas.common import AmlsSchema
+from src.models.pydantic.common import AmlsSchema
 
 
 class UserResponse(AmlsSchema):

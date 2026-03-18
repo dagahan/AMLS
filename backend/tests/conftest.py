@@ -20,7 +20,7 @@ from src.core.clients import get_valkey_client
 from src.core.utils import EnvTools
 from src.db.database import DataBase
 from src.fast_api.fastapi_server import create_application
-from src.pydantic_schemas import TokenPairResponse
+from src.models.pydantic import TokenPairResponse
 
 
 @pytest.fixture(scope="session", autouse=True)

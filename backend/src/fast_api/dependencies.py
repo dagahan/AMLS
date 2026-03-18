@@ -8,7 +8,7 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy import select
 
 from src.db.enums import UserRole
-from src.db.models import User
+from src.models.alchemy import User
 from src.services.auth.auth_service import AuthService
 from src.services.jwt.jwt_parser import JwtParser
 
