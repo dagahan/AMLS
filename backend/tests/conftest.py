@@ -11,15 +11,30 @@ import pytest_asyncio
 from alembic import command
 from alembic.config import Config
 from httpx import ASGITransport, AsyncClient
+from sqlalchemy import create_engine
+from sqlalchemy.orm import Session
 
 BACKEND_DIR = Path(__file__).resolve().parents[1]
 if str(BACKEND_DIR) not in sys.path:
     sys.path.insert(0, str(BACKEND_DIR))
 
 from src.core.clients import get_valkey_client
-from src.core.utils import EnvTools
+from src.core.utils import EnvTools, PasswordTools
 from src.db.database import DataBase
+from src.db.enums import UserRole
 from src.fast_api.fastapi_server import create_application
+from src.models.alchemy import (
+    Base,
+    Difficulty,
+    Problem,
+    ProblemAnswerOption,
+    ProblemSubskill,
+    Skill,
+    Subskill,
+    Subtopic,
+    Topic,
+    User,
+)
 from src.models.pydantic import TokenPairResponse
 
 
@@ -51,9 +66,12 @@ def reset_database(bootstrap_environment: None) -> Iterator[None]:
 
     get_valkey_client().flushdb()
 
-    alembic_config = Config(str(BACKEND_DIR / "alembic.ini"))
-    alembic_config.set_main_option("script_location", str(BACKEND_DIR / "src/migrations"))
-    command.upgrade(alembic_config, "head")
+    if _has_alembic_revisions():
+        alembic_config = Config(str(BACKEND_DIR / "alembic.ini"))
+        alembic_config.set_main_option("script_location", str(BACKEND_DIR / "src/migrations"))
+        command.upgrade(alembic_config, "head")
+    else:
+        _create_schema_and_seed(database.sync_engine_config)
     yield
 
 
@@ -113,3 +131,65 @@ async def student_tokens(client: AsyncClient) -> dict[str, str]:
     assert login_response.status_code == 201
     tokens = TokenPairResponse.model_validate(login_response.json())
     return tokens.model_dump()
+
+
+def _has_alembic_revisions() -> bool:
+    versions_dir = BACKEND_DIR / "src/migrations/versions"
+    return any(versions_dir.glob("*.py"))
+
+
+def _create_schema_and_seed(sync_engine_config: str) -> None:
+    engine = create_engine(sync_engine_config)
+
+    try:
+        Base.metadata.create_all(engine)
+
+        with Session(engine) as session:
+            topic = Topic(name="Planimetry")
+            subtopic = Subtopic(topic=topic, name="right triangle")
+
+            difficulty = Difficulty(name="medium", coefficient=1.5)
+
+            skill = Skill(name="Planimetry")
+            subskill_one = Subskill(
+                skill=skill,
+                name="solve right-triangle configurations",
+            )
+            subskill_two = Subskill(
+                skill=skill,
+                name="compute lengths and areas in plane figures",
+            )
+
+            problem = Problem(
+                subtopic=subtopic,
+                difficulty=difficulty,
+                condition="In a right triangle, the legs are 6 and 8. Find the area.",
+                solution="The area is 24.",
+                right_answer="24",
+                condition_images=[],
+                solution_images=[],
+            )
+            problem.answer_options = [
+                ProblemAnswerOption(text="10"),
+                ProblemAnswerOption(text="24"),
+                ProblemAnswerOption(text="14"),
+            ]
+            problem.subskill_links = [
+                ProblemSubskill(subskill=subskill_one, weight=0.6),
+                ProblemSubskill(subskill=subskill_two, weight=0.4),
+            ]
+
+            admin_user = User(
+                email="admin@example.org",
+                first_name="Admin",
+                last_name="User",
+                avatar_url=None,
+                hashed_password=PasswordTools.hash_password("Admin123!"),
+                role=UserRole.ADMIN,
+                is_active=True,
+            )
+
+            session.add_all([topic, difficulty, skill, problem, admin_user])
+            session.commit()
+    finally:
+        engine.dispose()
