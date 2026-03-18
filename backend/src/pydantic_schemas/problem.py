@@ -99,6 +99,26 @@ class StudentProgressResponse(AmlsSchema):
     failed_problem_ids: list[UUID]
 
 
+class ProblemSnapshot(AmlsSchema):
+    id: UUID
+    subtopic_id: UUID
+    difficulty_id: UUID
+    condition: str
+    solution: str
+    right_answer: str
+    condition_images: list[str]
+    solution_images: list[str]
+    answer_options: list[str]
+    subskills: list[tuple[UUID, float]]
+
+
+class SubmissionSnapshot(AmlsSchema):
+    user_id: UUID
+    problem_id: UUID
+    solved_exists: bool
+    failed_exists: bool
+
+
 def validate_answer_options(answer_options: list[str], right_answer: str | None) -> None:
     if not 3 <= len(answer_options) <= 8:
         raise ValueError("Problem must contain from 3 to 8 answer options")

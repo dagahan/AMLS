@@ -21,15 +21,13 @@ from src.pydantic_schemas import (
     AdminProblemResponse,
     ProblemAnswerOptionResponse,
     ProblemCreate,
-    ProblemSnapshot,
     ProblemResponse,
     ProblemSubmitResponse,
     ProblemUpdate,
     StudentProgressResponse,
-    SubmissionSnapshot,
 )
 from src.pydantic_schemas.difficulty import DifficultyResponse
-from src.pydantic_schemas.problem import ProblemSubskillResponse
+from src.pydantic_schemas.problem import ProblemSnapshot, ProblemSubskillResponse, SubmissionSnapshot
 from src.pydantic_schemas.topic import SubtopicResponse
 from src.transaction_manager.transaction_manager import execute_atomic_step, transactional
 

@@ -13,17 +13,18 @@ from src.pydantic_schemas.auth import (
 )
 from src.pydantic_schemas.common import AmlsSchema, HealthResponse, MessageResponse
 from src.pydantic_schemas.difficulty import DifficultyCreate, DifficultyResponse, DifficultyUpdate
-from src.pydantic_schemas.internal import AvatarSnapshot, ProblemSnapshot, StoredFile, SubmissionSnapshot
 from src.pydantic_schemas.problem import (
     AdminProblemResponse,
     ProblemAnswerOptionResponse,
     ProblemCreate,
+    ProblemSnapshot,
     ProblemResponse,
     ProblemSubskillPayload,
     ProblemSubskillResponse,
     ProblemSubmitRequest,
     ProblemSubmitResponse,
     ProblemUpdate,
+    SubmissionSnapshot,
     StudentProgressResponse,
 )
 from src.pydantic_schemas.skill import (
@@ -34,7 +35,7 @@ from src.pydantic_schemas.skill import (
     SubskillResponse,
     SubskillUpdate,
 )
-from src.pydantic_schemas.storage import UploadedImageResponse
+from src.pydantic_schemas.storage import StoredFile, UploadedImageResponse
 from src.pydantic_schemas.topic import (
     SubtopicCreate,
     SubtopicResponse,
@@ -43,7 +44,7 @@ from src.pydantic_schemas.topic import (
     TopicResponse,
     TopicUpdate,
 )
-from src.pydantic_schemas.user import UserResponse
+from src.pydantic_schemas.user import AvatarSnapshot, UserResponse
 
 __all__ = [
     "AccessPayload",

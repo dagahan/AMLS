@@ -12,3 +12,8 @@ class UserResponse(AmlsSchema):
     avatar_url: str | None
     role: UserRole
     is_active: bool
+
+
+class AvatarSnapshot(AmlsSchema):
+    user_id: UUID
+    avatar_url: str | None
