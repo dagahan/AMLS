@@ -29,7 +29,7 @@ class StoredFile:
     content_type: str | None
 
 
-class StorageService:
+class ImageUploader:
     def __init__(self, db: "DataBase") -> None:
         self.db = db
         self._s3_client: S3Client | None = None
@@ -97,6 +97,11 @@ class StorageService:
         return await self.get_user_or_404(user_id)
 
 
+    async def get_file(self, key: str) -> StoredFile:
+        content, content_type = await self.s3_client.download_bytes(key)
+        return StoredFile(content=content, content_type=content_type)
+
+
     async def _upload_single_file(
         self,
         prefix: str,
@@ -123,11 +128,6 @@ class StorageService:
 
     async def _delete_uploaded_image(self, key: str) -> None:
         await self.s3_client.delete_object(key)
-
-
-    async def get_file(self, key: str) -> StoredFile:
-        content, content_type = await self.s3_client.download_bytes(key)
-        return StoredFile(content=content, content_type=content_type)
 
 
     async def _set_user_avatar(self, user_id: uuid.UUID, avatar_url: str) -> AvatarSnapshot:

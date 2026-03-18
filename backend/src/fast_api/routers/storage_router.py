@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends, File, Form, Request, Response, UploadFil
 from src.fast_api.dependencies import build_current_admin_dependency, build_current_user_dependency
 from src.pydantic_schemas.storage import UploadedImageResponse
 from src.pydantic_schemas.user import UserResponse
-from src.services.storage_service import StorageService
+from src.storage.storage_manager import StorageManager
 
 if TYPE_CHECKING:
     from src.db.database import DataBase
@@ -18,7 +18,7 @@ def get_storage_router(db: "DataBase") -> APIRouter:
     router = APIRouter(tags=["storage"])
     current_admin = build_current_admin_dependency(db)
     current_user = build_current_user_dependency(db)
-    storage_service = StorageService(db)
+    storage_manager = StorageManager(db)
 
 
     def build_file_url(request: Request, storage_key: str) -> str:
@@ -36,7 +36,7 @@ def get_storage_router(db: "DataBase") -> APIRouter:
         files: list[UploadFile] = File(...),
         user: "User" = Depends(current_admin),
     ) -> list[UploadedImageResponse]:
-        return await storage_service.upload_problem_images(
+        return await storage_manager.upload_problem_images(
             user_id=str(user.id),
             kind=kind,
             files=files,
@@ -54,7 +54,7 @@ def get_storage_router(db: "DataBase") -> APIRouter:
         file: UploadFile = File(...),
         user: "User" = Depends(current_user),
     ) -> UserResponse:
-        updated_user = await storage_service.upload_profile_image(
+        updated_user = await storage_manager.upload_profile_image(
             user_id=user.id,
             file=file,
             url_factory=lambda storage_key: build_file_url(request, storage_key),
@@ -64,7 +64,7 @@ def get_storage_router(db: "DataBase") -> APIRouter:
 
     @router.get("/storage/files/{storage_key:path}", name="get_stored_file")
     async def get_stored_file(storage_key: str) -> Response:
-        stored_file = await storage_service.get_file(storage_key)
+        stored_file = await storage_manager.get_file(storage_key)
         return Response(content=stored_file.content, media_type=stored_file.content_type)
 
 
