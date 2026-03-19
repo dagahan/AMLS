@@ -3,7 +3,7 @@ from __future__ import annotations
 from src.models.alchemy import Problem
 from src.models.pydantic import AdminProblemResponse, ProblemAnswerOptionResponse, ProblemResponse
 from src.models.pydantic.difficulty import DifficultyResponse
-from src.models.pydantic.problem import ProblemSubskillResponse
+from src.models.pydantic.problem import ProblemSkillResponse
 from src.models.pydantic.topic import SubtopicResponse
 
 
@@ -29,9 +29,9 @@ def build_admin_problem_response(problem: Problem) -> AdminProblemResponse:
         solution_images=problem.solution_images,
         answer_options=_build_answer_option_responses(problem),
         right_answer=problem.right_answer,
-        subskills=[
-            ProblemSubskillResponse(subskill_id=link.subskill_id, weight=link.weight)
-            for link in problem.subskill_links
+        skills=[
+            ProblemSkillResponse(skill_id=link.skill_id, weight=link.weight)
+            for link in problem.skill_links
         ],
     )
 

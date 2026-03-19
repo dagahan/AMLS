@@ -28,10 +28,8 @@ from src.models.alchemy import (
     Difficulty,
     Problem,
     ProblemAnswerOption,
-    ProblemSubskill,
+    ProblemSkill,
     Skill,
-    SkillSubskill,
-    Subskill,
     Subtopic,
     Topic,
     TopicSubtopic,
@@ -153,17 +151,8 @@ def _create_schema_and_seed(sync_engine_config: str) -> None:
 
             difficulty = Difficulty(name="medium", coefficient=1.5)
 
-            skill = Skill(name="Planimetry")
-            subskill_one = Subskill(
-                skill=skill,
-                name="solve right-triangle configurations",
-            )
-            subskill_two = Subskill(
-                skill=skill,
-                name="compute lengths and areas in plane figures",
-            )
-            skill_link_one = SkillSubskill(skill=skill, subskill=subskill_one, weight=1.0)
-            skill_link_two = SkillSubskill(skill=skill, subskill=subskill_two, weight=1.0)
+            skill_one = Skill(name="solve right-triangle configurations")
+            skill_two = Skill(name="compute lengths and areas in plane figures")
 
             problem = Problem(
                 subtopic=subtopic,
@@ -179,9 +168,9 @@ def _create_schema_and_seed(sync_engine_config: str) -> None:
                 ProblemAnswerOption(text="24"),
                 ProblemAnswerOption(text="14"),
             ]
-            problem.subskill_links = [
-                ProblemSubskill(subskill=subskill_one, weight=0.6),
-                ProblemSubskill(subskill=subskill_two, weight=0.4),
+            problem.skill_links = [
+                ProblemSkill(skill=skill_one, weight=0.6),
+                ProblemSkill(skill=skill_two, weight=0.4),
             ]
 
             admin_user = User(
@@ -199,9 +188,8 @@ def _create_schema_and_seed(sync_engine_config: str) -> None:
                     topic,
                     topic_link,
                     difficulty,
-                    skill,
-                    skill_link_one,
-                    skill_link_two,
+                    skill_one,
+                    skill_two,
                     problem,
                     admin_user,
                 ]

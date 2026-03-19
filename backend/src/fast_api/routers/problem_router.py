@@ -43,7 +43,7 @@ def get_problem_router(db: "DataBase") -> APIRouter:
         topic_id: str | None = Query(default=None),
         subtopic_id: str | None = Query(default=None),
         difficulty_id: str | None = Query(default=None),
-        subskill_id: str | None = Query(default=None),
+        skill_id: str | None = Query(default=None),
         limit: int = Query(default=20, ge=1, le=100),
         offset: int = Query(default=0, ge=0),
     ) -> list[ProblemResponse]:
@@ -51,7 +51,7 @@ def get_problem_router(db: "DataBase") -> APIRouter:
             topic_id=parse_optional_uuid(topic_id, "topic_id"),
             subtopic_id=parse_optional_uuid(subtopic_id, "subtopic_id"),
             difficulty_id=parse_optional_uuid(difficulty_id, "difficulty_id"),
-            subskill_id=parse_optional_uuid(subskill_id, "subskill_id"),
+            skill_id=parse_optional_uuid(skill_id, "skill_id"),
             limit=limit,
             offset=offset,
         )
@@ -93,7 +93,7 @@ def get_problem_router(db: "DataBase") -> APIRouter:
         topic_id: str | None = Query(default=None),
         subtopic_id: str | None = Query(default=None),
         difficulty_id: str | None = Query(default=None),
-        subskill_id: str | None = Query(default=None),
+        skill_id: str | None = Query(default=None),
         limit: int = Query(default=20, ge=1, le=100),
         offset: int = Query(default=0, ge=0),
         _: "User" = Depends(current_admin),
@@ -102,7 +102,7 @@ def get_problem_router(db: "DataBase") -> APIRouter:
             topic_id=parse_optional_uuid(topic_id, "topic_id"),
             subtopic_id=parse_optional_uuid(subtopic_id, "subtopic_id"),
             difficulty_id=parse_optional_uuid(difficulty_id, "difficulty_id"),
-            subskill_id=parse_optional_uuid(subskill_id, "subskill_id"),
+            skill_id=parse_optional_uuid(skill_id, "skill_id"),
             limit=limit,
             offset=offset,
         )

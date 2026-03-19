@@ -11,7 +11,6 @@ class MasteryValueResponse(AmlsSchema):
 
 
 class MasteryOverviewResponse(AmlsSchema):
-    subskills: list[MasteryValueResponse]
     skills: list[MasteryValueResponse]
     subtopics: list[MasteryValueResponse]
     topics: list[MasteryValueResponse]
@@ -29,7 +28,6 @@ class ResponseCreateResponse(AmlsSchema):
     correct: bool
     solution: str
     solution_images: list[str]
-    subskills: list[MasteryValueResponse]
     skills: list[MasteryValueResponse]
     subtopics: list[MasteryValueResponse]
     topics: list[MasteryValueResponse]
@@ -42,7 +40,6 @@ class RecordedResponseState(AmlsSchema):
     correct: bool
     solution: str
     solution_images: list[str]
-    subskill_ids: list[UUID]
     skill_ids: list[UUID]
     subtopic_ids: list[UUID]
     topic_ids: list[UUID]

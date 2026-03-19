@@ -41,18 +41,6 @@ def get_mastery_router(db: "DataBase") -> APIRouter:
         return await mastery_service.get_mastery_overview(user.id)
 
 
-    @router.get(
-        "/mastery/subskills/{subskill_id}",
-        response_model=MasteryValueResponse,
-        status_code=200,
-    )
-    async def get_subskill_mastery(
-        subskill_id: uuid.UUID,
-        user: "User" = Depends(current_user),
-    ) -> MasteryValueResponse:
-        return await mastery_service.get_subskill_mastery(user.id, subskill_id)
-
-
     @router.get("/mastery/skills/{skill_id}", response_model=MasteryValueResponse, status_code=200)
     async def get_skill_mastery(
         skill_id: uuid.UUID,

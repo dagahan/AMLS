@@ -31,21 +31,21 @@ def build_mastery_map(items: list[dict[str, object]]) -> dict[str, float]:
 async def get_problem_ids_for_creation(client: AsyncClient) -> tuple[str, str, list[str]]:
     subtopics_response = await client.get("/subtopics")
     difficulties_response = await client.get("/difficulties")
-    subskills_response = await client.get("/subskills")
+    skills_response = await client.get("/skills")
 
     subtopics = subtopics_response.json()
     difficulties = difficulties_response.json()
-    subskills = subskills_response.json()
+    skills = skills_response.json()
 
     right_triangle_subtopic = next(item for item in subtopics if item["name"] == "right triangle")
     medium_difficulty = next(item for item in difficulties if item["name"] == "medium")
-    needed_subskills = [
+    needed_skills = [
         item["id"]
-        for item in subskills
+        for item in skills
         if item["name"] in {"solve right-triangle configurations", "compute lengths and areas in plane figures"}
     ]
 
-    return right_triangle_subtopic["id"], medium_difficulty["id"], needed_subskills
+    return right_triangle_subtopic["id"], medium_difficulty["id"], needed_skills
 
 
 async def get_problem_answer_ids(session: AsyncSession, problem_id: str) -> tuple[str, str]:
@@ -62,11 +62,11 @@ async def get_problem_answer_ids(session: AsyncSession, problem_id: str) -> tupl
 
 async def test_public_filters_accept_empty_uuid_values(client: AsyncClient) -> None:
     subtopics_response = await client.get("/subtopics?topic_id=")
-    subskills_response = await client.get("/subskills?skill_id=")
+    skills_response = await client.get("/skills")
     problems_response = await client.get("/problems?topic_id=")
 
     assert subtopics_response.status_code == 200
-    assert subskills_response.status_code == 200
+    assert skills_response.status_code == 200
     assert problems_response.status_code == 200
 
 
@@ -109,7 +109,7 @@ async def test_admin_problem_crud_and_public_shape(
     client: AsyncClient,
     admin_tokens: dict[str, str],
 ) -> None:
-    subtopic_id, difficulty_id, subskill_ids = await get_problem_ids_for_creation(client)
+    subtopic_id, difficulty_id, skill_ids = await get_problem_ids_for_creation(client)
     condition = f"Test condition {uuid.uuid4()}"
 
     create_response = await client.post(
@@ -123,9 +123,9 @@ async def test_admin_problem_crud_and_public_shape(
             "solution_images": [],
             "answer_options": ["10", "12", "14"],
             "right_answer": "12",
-            "subskills": [
-                {"subskill_id": subskill_ids[0], "weight": 0.6},
-                {"subskill_id": subskill_ids[1], "weight": 0.4},
+            "skills": [
+                {"skill_id": skill_ids[0], "weight": 0.6},
+                {"skill_id": skill_ids[1], "weight": 0.4},
             ],
         },
         headers=build_auth_headers(admin_tokens["access_token"]),
@@ -134,7 +134,7 @@ async def test_admin_problem_crud_and_public_shape(
     assert create_response.status_code == 201
     created_problem = create_response.json()
     problem_id = created_problem["id"]
-    assert all("subskill_id" in item and "weight" in item for item in created_problem["subskills"])
+    assert all("skill_id" in item and "weight" in item for item in created_problem["skills"])
     assert created_problem["right_answer"] == "12"
     assert all("text" in item for item in created_problem["answer_options"])
 
@@ -234,7 +234,6 @@ async def test_responses_and_mastery_endpoints(
     )
     assert overview_response.status_code == 200
     initial_overview = overview_response.json()
-    initial_subskill_mastery = build_mastery_map(initial_overview["subskills"])
     initial_skill_mastery = build_mastery_map(initial_overview["skills"])
     initial_subtopic_mastery = build_mastery_map(initial_overview["subtopics"])
     initial_topic_mastery = build_mastery_map(initial_overview["topics"])
@@ -250,18 +249,14 @@ async def test_responses_and_mastery_endpoints(
     assert response_create.status_code == 201
     response_payload = response_create.json()
     assert response_payload["correct"] is False
-    assert len(response_payload["subskills"]) == 2
-    assert len(response_payload["skills"]) == 1
+    assert len(response_payload["skills"]) == 2
     assert len(response_payload["subtopics"]) == 1
     assert len(response_payload["topics"]) == 1
 
-    updated_subskill_mastery = build_mastery_map(response_payload["subskills"])
     updated_skill_mastery = build_mastery_map(response_payload["skills"])
     updated_subtopic_mastery = build_mastery_map(response_payload["subtopics"])
     updated_topic_mastery = build_mastery_map(response_payload["topics"])
 
-    for mastery_value in updated_subskill_mastery.values():
-        assert mastery_value < 0.5
     for mastery_value in updated_skill_mastery.values():
         assert mastery_value < 0.5
     for mastery_value in updated_subtopic_mastery.values():
@@ -269,14 +264,9 @@ async def test_responses_and_mastery_endpoints(
     for mastery_value in updated_topic_mastery.values():
         assert mastery_value < 0.5
 
-    first_subskill_id = response_payload["subskills"][0]["id"]
     first_skill_id = response_payload["skills"][0]["id"]
     first_topic_id = response_payload["topics"][0]["id"]
 
-    subskill_response = await client.get(
-        f"/mastery/subskills/{first_subskill_id}",
-        headers=build_auth_headers(student_tokens["access_token"]),
-    )
     skill_response = await client.get(
         f"/mastery/skills/{first_skill_id}",
         headers=build_auth_headers(student_tokens["access_token"]),
@@ -290,7 +280,6 @@ async def test_responses_and_mastery_endpoints(
         headers=build_auth_headers(student_tokens["access_token"]),
     )
 
-    assert subskill_response.status_code == 200
     assert skill_response.status_code == 200
     assert subtopic_response.status_code == 200
     assert topic_response.status_code == 200
@@ -313,15 +302,9 @@ async def test_responses_and_mastery_endpoints(
     )
     assert final_overview_response.status_code == 200
     final_overview = final_overview_response.json()
-    final_subskill_mastery = build_mastery_map(final_overview["subskills"])
     final_skill_mastery = build_mastery_map(final_overview["skills"])
     final_subtopic_mastery = build_mastery_map(final_overview["subtopics"])
     final_topic_mastery = build_mastery_map(final_overview["topics"])
-
-    for subskill_id, mastery_value in updated_subskill_mastery.items():
-        assert initial_subskill_mastery[subskill_id] == 0.5
-        assert abs(final_subskill_mastery[subskill_id] - 0.5) < 1e-6
-        assert mastery_value != final_subskill_mastery[subskill_id]
 
     for skill_id, mastery_value in updated_skill_mastery.items():
         assert initial_skill_mastery[skill_id] == 0.5

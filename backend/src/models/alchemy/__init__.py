@@ -1,8 +1,8 @@
 from src.models.alchemy.common import Base, IdMixin, TimestampMixin
 from src.models.alchemy.difficulty import Difficulty
-from src.models.alchemy.problem import Problem, ProblemAnswerOption, ProblemSubskill
+from src.models.alchemy.problem import Problem, ProblemAnswerOption, ProblemSkill
 from src.models.alchemy.response import ResponseEvent
-from src.models.alchemy.skill import Skill, SkillSubskill, Subskill, SubskillPrerequisite
+from src.models.alchemy.skill import Skill, SkillPrerequisite
 from src.models.alchemy.topic import Subtopic, SubtopicPrerequisite, Topic, TopicSubtopic
 from src.models.alchemy.user import User, UserFailedProblem, UserSolvedProblem
 
@@ -12,12 +12,10 @@ __all__ = [
     "IdMixin",
     "Problem",
     "ProblemAnswerOption",
-    "ProblemSubskill",
+    "ProblemSkill",
     "ResponseEvent",
     "Skill",
-    "SkillSubskill",
-    "Subskill",
-    "SubskillPrerequisite",
+    "SkillPrerequisite",
     "Subtopic",
     "SubtopicPrerequisite",
     "TimestampMixin",

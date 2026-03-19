@@ -283,7 +283,7 @@ TOPIC_DATA: tuple[tuple[str, tuple[str, ...]], ...] = (
 )
 
 
-SKILL_DATA: tuple[tuple[str, tuple[str, ...]], ...] = (
+SKILL_GROUP_DATA: tuple[tuple[str, tuple[str, ...]], ...] = (
     (
         "Numbers and expressions",
         (
@@ -423,6 +423,13 @@ SKILL_DATA: tuple[tuple[str, tuple[str, ...]], ...] = (
             "solve sequence and progression problems",
         ),
     ),
+)
+
+
+SKILL_DATA: tuple[str, ...] = tuple(
+    skill_name
+    for _, skill_names in SKILL_GROUP_DATA
+    for skill_name in skill_names
 )
 
 

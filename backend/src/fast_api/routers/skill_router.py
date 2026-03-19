@@ -3,20 +3,12 @@ from __future__ import annotations
 import uuid
 from typing import TYPE_CHECKING
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy import delete, select
+from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy import select
 
-from src.models.alchemy import Skill, SkillSubskill, Subskill
-from src.fast_api.dependencies import build_current_admin_dependency, parse_optional_uuid
-from src.models.pydantic import (
-    MessageResponse,
-    SkillCreate,
-    SkillResponse,
-    SkillUpdate,
-    SubskillCreate,
-    SubskillResponse,
-    SubskillUpdate,
-)
+from src.fast_api.dependencies import build_current_admin_dependency
+from src.models.alchemy import Skill
+from src.models.pydantic import MessageResponse, SkillCreate, SkillResponse, SkillUpdate
 from src.services.mastery.mastery_cache_manager import MasteryCacheManager
 
 if TYPE_CHECKING:
@@ -40,14 +32,6 @@ def get_skill_router(db: "DataBase") -> APIRouter:
         return skill
 
 
-    async def get_subskill_or_404(session: "AsyncSession", subskill_id: uuid.UUID) -> Subskill:
-        result = await session.execute(select(Subskill).where(Subskill.id == subskill_id))
-        subskill = result.scalar_one_or_none()
-        if subskill is None:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Subskill not found")
-        return subskill
-
-
     async def ensure_skill_name_is_unique(
         session: "AsyncSession",
         name: str,
@@ -59,57 +43,19 @@ def get_skill_router(db: "DataBase") -> APIRouter:
             raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Skill name must be unique")
 
 
-    async def ensure_subskill_name_is_unique(
-        session: "AsyncSession",
-        skill_id: uuid.UUID,
-        name: str,
-        current_id: uuid.UUID | None = None,
-    ) -> None:
-        result = await session.execute(
-            select(Subskill).where(Subskill.skill_id == skill_id, Subskill.name == name)
-        )
-        subskill = result.scalar_one_or_none()
-        if subskill is not None and subskill.id != current_id:
-            raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT,
-                detail="Subskill name must be unique inside the skill",
-            )
-
-
     @router.get("/skills", response_model=list[SkillResponse], status_code=200)
     async def list_skills() -> list[SkillResponse]:
         async with db.session_ctx() as session:
             result = await session.execute(select(Skill).order_by(Skill.name))
             skills = result.scalars().all()
-            return [SkillResponse.model_validate(item) for item in skills]
+        return [SkillResponse.model_validate(item) for item in skills]
 
 
     @router.get("/skills/{skill_id}", response_model=SkillResponse, status_code=200)
     async def get_skill(skill_id: uuid.UUID) -> SkillResponse:
         async with db.session_ctx() as session:
             skill = await get_skill_or_404(session, skill_id)
-            return SkillResponse.model_validate(skill)
-
-
-    @router.get("/subskills", response_model=list[SubskillResponse], status_code=200)
-    async def list_subskills(
-        skill_id: str | None = Query(default=None),
-    ) -> list[SubskillResponse]:
-        parsed_skill_id = parse_optional_uuid(skill_id, "skill_id")
-        async with db.session_ctx() as session:
-            statement = select(Subskill).order_by(Subskill.name)
-            if parsed_skill_id is not None:
-                statement = statement.where(Subskill.skill_id == parsed_skill_id)
-            result = await session.execute(statement)
-            subskills = result.scalars().all()
-            return [SubskillResponse.model_validate(item) for item in subskills]
-
-
-    @router.get("/subskills/{subskill_id}", response_model=SubskillResponse, status_code=200)
-    async def get_subskill(subskill_id: uuid.UUID) -> SubskillResponse:
-        async with db.session_ctx() as session:
-            subskill = await get_subskill_or_404(session, subskill_id)
-            return SubskillResponse.model_validate(subskill)
+        return SkillResponse.model_validate(skill)
 
 
     @router.post("/admin/skills", response_model=SkillResponse, status_code=201)
@@ -124,9 +70,7 @@ def get_skill_router(db: "DataBase") -> APIRouter:
             await session.flush()
             await session.refresh(skill)
         await mastery_cache_manager.bump_taxonomy_version()
-        async with db.session_ctx() as session:
-            skill = await get_skill_or_404(session, skill.id)
-            return SkillResponse.model_validate(skill)
+        return SkillResponse.model_validate(skill)
 
 
     @router.get("/admin/skills", response_model=list[SkillResponse], status_code=200)
@@ -168,97 +112,6 @@ def get_skill_router(db: "DataBase") -> APIRouter:
             await session.delete(skill)
         await mastery_cache_manager.bump_taxonomy_version()
         return MessageResponse(message="Skill deleted")
-
-
-    @router.post("/admin/subskills", response_model=SubskillResponse, status_code=201)
-    async def create_subskill(
-        data: SubskillCreate,
-        _: "User" = Depends(current_admin),
-    ) -> SubskillResponse:
-        async with db.session_ctx() as session:
-            await get_skill_or_404(session, data.skill_id)
-            await ensure_subskill_name_is_unique(session, data.skill_id, data.name)
-            subskill = Subskill(skill_id=data.skill_id, name=data.name)
-            session.add(subskill)
-            await session.flush()
-            session.add(SkillSubskill(skill_id=data.skill_id, subskill_id=subskill.id, weight=1.0))
-            await session.refresh(subskill)
-        await mastery_cache_manager.bump_taxonomy_version()
-        async with db.session_ctx() as session:
-            subskill = await get_subskill_or_404(session, subskill.id)
-            return SubskillResponse.model_validate(subskill)
-
-
-    @router.get("/admin/subskills", response_model=list[SubskillResponse], status_code=200)
-    async def list_admin_subskills(
-        skill_id: str | None = Query(default=None),
-        _: "User" = Depends(current_admin),
-    ) -> list[SubskillResponse]:
-        return await list_subskills(skill_id)
-
-
-    @router.get("/admin/subskills/{subskill_id}", response_model=SubskillResponse, status_code=200)
-    async def get_admin_subskill(
-        subskill_id: uuid.UUID,
-        _: "User" = Depends(current_admin),
-    ) -> SubskillResponse:
-        return await get_subskill(subskill_id)
-
-
-    @router.patch("/admin/subskills/{subskill_id}", response_model=SubskillResponse, status_code=200)
-    async def update_subskill(
-        subskill_id: uuid.UUID,
-        data: SubskillUpdate,
-        _: "User" = Depends(current_admin),
-    ) -> SubskillResponse:
-        async with db.session_ctx() as session:
-            subskill = await get_subskill_or_404(session, subskill_id)
-            taxonomy_mapping_changed = False
-
-            if data.skill_id is not None:
-                await get_skill_or_404(session, data.skill_id)
-                subskill.skill_id = data.skill_id
-                taxonomy_mapping_changed = True
-                if data.name is None:
-                    await ensure_subskill_name_is_unique(
-                        session,
-                        data.skill_id,
-                        subskill.name,
-                        current_id=subskill.id,
-                    )
-
-            if data.name is not None:
-                await ensure_subskill_name_is_unique(
-                    session,
-                    data.skill_id or subskill.skill_id,
-                    data.name,
-                    current_id=subskill.id,
-                )
-                subskill.name = data.name
-
-            if taxonomy_mapping_changed:
-                await session.execute(
-                    delete(SkillSubskill).where(SkillSubskill.subskill_id == subskill.id)
-                )
-                session.add(SkillSubskill(skill_id=subskill.skill_id, subskill_id=subskill.id, weight=1.0))
-
-            await session.flush()
-            await session.refresh(subskill)
-        if taxonomy_mapping_changed:
-            await mastery_cache_manager.bump_taxonomy_version()
-        return SubskillResponse.model_validate(subskill)
-
-
-    @router.delete("/admin/subskills/{subskill_id}", response_model=MessageResponse, status_code=200)
-    async def delete_subskill(
-        subskill_id: uuid.UUID,
-        _: "User" = Depends(current_admin),
-    ) -> MessageResponse:
-        async with db.session_ctx() as session:
-            subskill = await get_subskill_or_404(session, subskill_id)
-            await session.delete(subskill)
-        await mastery_cache_manager.bump_taxonomy_version()
-        return MessageResponse(message="Subskill deleted")
 
 
     return router

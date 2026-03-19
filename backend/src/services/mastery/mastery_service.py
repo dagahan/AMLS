@@ -7,18 +7,7 @@ from typing import TYPE_CHECKING
 from fastapi import HTTPException, status
 from sqlalchemy import case, func, select
 
-from src.models.alchemy import (
-    Difficulty,
-    Problem,
-    ProblemSubskill,
-    ResponseEvent,
-    Skill,
-    SkillSubskill,
-    Subskill,
-    Subtopic,
-    Topic,
-    TopicSubtopic,
-)
+from src.models.alchemy import Difficulty, Problem, ProblemSkill, ResponseEvent, Skill, Subtopic, Topic, TopicSubtopic
 from src.models.pydantic.mastery import MasteryOverviewResponse, MasteryValueResponse
 from src.services.mastery.mastery_cache_manager import MasteryCacheManager
 
@@ -47,11 +36,6 @@ class MasteryService:
         return overview
 
 
-    async def get_subskill_mastery(self, user_id: uuid.UUID, subskill_id: uuid.UUID) -> MasteryValueResponse:
-        overview = await self.get_mastery_overview(user_id)
-        return self._find_mastery_value(overview.subskills, subskill_id, "Subskill")
-
-
     async def get_skill_mastery(self, user_id: uuid.UUID, skill_id: uuid.UUID) -> MasteryValueResponse:
         overview = await self.get_mastery_overview(user_id)
         return self._find_mastery_value(overview.skills, skill_id, "Skill")
@@ -69,25 +53,23 @@ class MasteryService:
 
     async def _compute_mastery_overview(self, user_id: uuid.UUID) -> MasteryOverviewResponse:
         async with self.db.session_ctx() as session:
-            subskill_masteries = await self._compute_subskill_masteries(session, user_id)
+            skill_masteries = await self._compute_skill_masteries(session, user_id)
             subtopic_masteries = await self._compute_subtopic_masteries(session, user_id)
-            skill_masteries = await self._compute_skill_masteries(session, subskill_masteries)
             topic_masteries = await self._compute_topic_masteries(session, subtopic_masteries)
 
         return MasteryOverviewResponse(
-            subskills=subskill_masteries,
             skills=skill_masteries,
             subtopics=subtopic_masteries,
             topics=topic_masteries,
         )
 
 
-    async def _compute_subskill_masteries(
+    async def _compute_skill_masteries(
         self,
         session: "AsyncSession",
         user_id: uuid.UUID,
     ) -> list[MasteryValueResponse]:
-        weighted_value = ProblemSubskill.weight * Difficulty.coefficient
+        weighted_value = ProblemSkill.weight * Difficulty.coefficient
         success_evidence = func.coalesce(
             func.sum(
                 case(
@@ -107,33 +89,33 @@ class MasteryService:
             0.0,
         )
 
-        all_subskills_result = await session.execute(select(Subskill.id))
-        mastery_by_subskill_id = {
-            subskill_id: self.default_mastery
-            for subskill_id in all_subskills_result.scalars().all()
+        all_skills_result = await session.execute(select(Skill.id))
+        mastery_by_skill_id = {
+            skill_id: self.default_mastery
+            for skill_id in all_skills_result.scalars().all()
         }
 
         result = await session.execute(
             select(
-                ProblemSubskill.subskill_id,
+                ProblemSkill.skill_id,
                 success_evidence.label("success_evidence"),
                 failure_evidence.label("failure_evidence"),
             )
             .select_from(ResponseEvent)
             .join(Problem, Problem.id == ResponseEvent.problem_id)
             .join(Difficulty, Difficulty.id == Problem.difficulty_id)
-            .join(ProblemSubskill, ProblemSubskill.problem_id == Problem.id)
+            .join(ProblemSkill, ProblemSkill.problem_id == Problem.id)
             .where(ResponseEvent.user_id == user_id)
-            .group_by(ProblemSubskill.subskill_id)
+            .group_by(ProblemSkill.skill_id)
         )
 
-        for subskill_id, success_value, failure_value in result.all():
-            mastery_by_subskill_id[subskill_id] = self._calculate_posterior_mean(
+        for skill_id, success_value, failure_value in result.all():
+            mastery_by_skill_id[skill_id] = self._calculate_posterior_mean(
                 success_value,
                 failure_value,
             )
 
-        return self._build_sorted_mastery_values(mastery_by_subskill_id)
+        return self._build_sorted_mastery_values(mastery_by_skill_id)
 
 
     async def _compute_subtopic_masteries(
@@ -186,40 +168,6 @@ class MasteryService:
             )
 
         return self._build_sorted_mastery_values(mastery_by_subtopic_id)
-
-
-    async def _compute_skill_masteries(
-        self,
-        session: "AsyncSession",
-        subskill_masteries: list[MasteryValueResponse],
-    ) -> list[MasteryValueResponse]:
-        mastery_by_subskill_id = {item.id: item.mastery for item in subskill_masteries}
-        skill_ids_result = await session.execute(select(Skill.id))
-        skill_ids = list(skill_ids_result.scalars().all())
-        explicit_links = await session.execute(
-            select(SkillSubskill.skill_id, SkillSubskill.subskill_id, SkillSubskill.weight)
-        )
-        fallback_links = await session.execute(select(Subskill.skill_id, Subskill.id))
-
-        explicit_links_by_skill_id: dict[uuid.UUID, list[tuple[uuid.UUID, float]]] = {}
-        for skill_id, subskill_id, weight in explicit_links.all():
-            explicit_links_by_skill_id.setdefault(skill_id, []).append((subskill_id, weight))
-
-        fallback_links_by_skill_id: dict[uuid.UUID, list[tuple[uuid.UUID, float]]] = {}
-        for skill_id, subskill_id in fallback_links.all():
-            fallback_links_by_skill_id.setdefault(skill_id, []).append((subskill_id, 1.0))
-
-        mastery_by_skill_id: dict[uuid.UUID, float] = {}
-        for skill_id in skill_ids:
-            links = explicit_links_by_skill_id.get(skill_id)
-            if not links:
-                links = fallback_links_by_skill_id.get(skill_id, [])
-            mastery_by_skill_id[skill_id] = self._calculate_weighted_average(
-                links,
-                mastery_by_subskill_id,
-            )
-
-        return self._build_sorted_mastery_values(mastery_by_skill_id)
 
 
     async def _compute_topic_masteries(

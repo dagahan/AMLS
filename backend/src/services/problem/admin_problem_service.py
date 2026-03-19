@@ -5,13 +5,13 @@ from typing import TYPE_CHECKING
 
 from fastapi import HTTPException, status
 
-from src.models.alchemy import Problem, ProblemAnswerOption, ProblemSubskill
+from src.models.alchemy import Problem, ProblemAnswerOption, ProblemSkill
 from src.models.pydantic import AdminProblemResponse, ProblemCreate, ProblemUpdate
-from src.models.pydantic.problem import ProblemSnapshot, ProblemSubskillPayload, validate_answer_options
+from src.models.pydantic.problem import ProblemSkillPayload, ProblemSnapshot, validate_answer_options
 from src.services.mastery.mastery_cache_manager import MasteryCacheManager
 from src.services.problem.loader import (
     ensure_difficulty_exists,
-    ensure_subskills_exist,
+    ensure_skills_exist,
     ensure_subtopic_exists,
     load_problem_or_404,
 )
@@ -68,7 +68,7 @@ class AdminProblemService:
         async with self.db.session_ctx() as session:
             await ensure_subtopic_exists(session, data.subtopic_id)
             await ensure_difficulty_exists(session, data.difficulty_id)
-            await ensure_subskills_exist(session, [item.subskill_id for item in data.subskills])
+            await ensure_skills_exist(session, [item.skill_id for item in data.skills])
 
             problem = Problem(
                 subtopic_id=data.subtopic_id,
@@ -80,7 +80,7 @@ class AdminProblemService:
                 solution_images=data.solution_images,
             )
             problem.answer_options = self._build_answer_options(data.answer_options)
-            problem.subskill_links = self._build_subskill_links(data.subskills)
+            problem.skill_links = self._build_skill_links(data.skills)
             session.add(problem)
             await session.flush()
             return problem.id
@@ -98,8 +98,8 @@ class AdminProblemService:
                 await ensure_difficulty_exists(session, data.difficulty_id)
                 problem.difficulty_id = data.difficulty_id
 
-            if data.subskills is not None:
-                await ensure_subskills_exist(session, [item.subskill_id for item in data.subskills])
+            if data.skills is not None:
+                await ensure_skills_exist(session, [item.skill_id for item in data.skills])
 
             self._validate_updated_answers(problem, data)
             self._apply_problem_update(problem, data)
@@ -128,7 +128,7 @@ class AdminProblemService:
             condition_images=list(problem.condition_images),
             solution_images=list(problem.solution_images),
             answer_options=[item.text for item in problem.answer_options],
-            subskills=[(item.subskill_id, item.weight) for item in problem.subskill_links],
+            skills=[(item.skill_id, item.weight) for item in problem.skill_links],
         )
 
 
@@ -157,9 +157,9 @@ class AdminProblemService:
                 problem.solution_images = snapshot.solution_images
 
             problem.answer_options = self._build_answer_options(snapshot.answer_options)
-            problem.subskill_links = [
-                ProblemSubskill(subskill_id=subskill_id, weight=weight)
-                for subskill_id, weight in snapshot.subskills
+            problem.skill_links = [
+                ProblemSkill(skill_id=skill_id, weight=weight)
+                for skill_id, weight in snapshot.skills
             ]
             await session.flush()
 
@@ -183,8 +183,8 @@ class AdminProblemService:
         if data.answer_options is not None:
             problem.answer_options = self._build_answer_options(data.answer_options)
 
-        if data.subskills is not None:
-            problem.subskill_links = self._build_subskill_links(data.subskills)
+        if data.skills is not None:
+            problem.skill_links = self._build_skill_links(data.skills)
 
 
     def _validate_updated_answers(self, problem: Problem, data: ProblemUpdate) -> None:
@@ -210,13 +210,13 @@ class AdminProblemService:
         return [ProblemAnswerOption(text=item) for item in answer_options]
 
 
-    def _build_subskill_links(
+    def _build_skill_links(
         self,
-        subskills: list[ProblemSubskillPayload],
-    ) -> list[ProblemSubskill]:
+        skills: list[ProblemSkillPayload],
+    ) -> list[ProblemSkill]:
         return [
-            ProblemSubskill(subskill_id=item.subskill_id, weight=item.weight)
-            for item in subskills
+            ProblemSkill(skill_id=item.skill_id, weight=item.weight)
+            for item in skills
         ]
 
 
@@ -224,5 +224,5 @@ class AdminProblemService:
         return (
             data.subtopic_id is not None
             or data.difficulty_id is not None
-            or data.subskills is not None
+            or data.skills is not None
         )

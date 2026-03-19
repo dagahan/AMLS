@@ -8,8 +8,6 @@ from sqlalchemy import delete, select
 
 from src.models.alchemy import (
     ResponseEvent,
-    SkillSubskill,
-    Subskill,
     Subtopic,
     TopicSubtopic,
     UserFailedProblem,
@@ -59,7 +57,6 @@ class ResponseService:
             correct=response_state.correct,
             solution=response_state.solution,
             solution_images=response_state.solution_images,
-            subskills=self._filter_mastery_values(overview.subskills, response_state.subskill_ids),
             skills=self._filter_mastery_values(overview.skills, response_state.skill_ids),
             subtopics=self._filter_mastery_values(overview.subtopics, response_state.subtopic_ids),
             topics=self._filter_mastery_values(overview.topics, response_state.topic_ids),
@@ -108,8 +105,7 @@ class ResponseService:
 
             await session.flush()
 
-            subskill_ids = [item.subskill_id for item in problem.subskill_links]
-            skill_ids = await self._load_affected_skill_ids(session, subskill_ids)
+            skill_ids = [item.skill_id for item in problem.skill_links]
             subtopic_ids = [problem.subtopic_id]
             topic_ids = await self._load_affected_topic_ids(session, problem.subtopic_id)
 
@@ -120,7 +116,6 @@ class ResponseService:
                 correct=is_correct,
                 solution=problem.solution,
                 solution_images=problem.solution_images,
-                subskill_ids=subskill_ids,
                 skill_ids=skill_ids,
                 subtopic_ids=subtopic_ids,
                 topic_ids=topic_ids,
@@ -186,25 +181,6 @@ class ResponseService:
             solved_exists=solved_result.scalar_one_or_none() is not None,
             failed_exists=failed_result.scalar_one_or_none() is not None,
         )
-
-
-    async def _load_affected_skill_ids(
-        self,
-        session: "AsyncSession",
-        subskill_ids: list[uuid.UUID],
-    ) -> list[uuid.UUID]:
-        if not subskill_ids:
-            return []
-
-        explicit_result = await session.execute(
-            select(SkillSubskill.skill_id).where(SkillSubskill.subskill_id.in_(subskill_ids))
-        )
-        fallback_result = await session.execute(
-            select(Subskill.skill_id).where(Subskill.id.in_(subskill_ids))
-        )
-        skill_ids = set(explicit_result.scalars().all())
-        skill_ids.update(fallback_result.scalars().all())
-        return sorted(skill_ids, key=str)
 
 
     async def _load_affected_topic_ids(

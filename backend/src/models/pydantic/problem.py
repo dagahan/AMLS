@@ -7,8 +7,8 @@ from src.models.pydantic.difficulty import DifficultyResponse
 from src.models.pydantic.topic import SubtopicResponse
 
 
-class ProblemSubskillPayload(AmlsSchema):
-    subskill_id: UUID
+class ProblemSkillPayload(AmlsSchema):
+    skill_id: UUID
     weight: float = Field(ge=0, le=1)
 
 
@@ -21,13 +21,13 @@ class ProblemCreate(AmlsSchema):
     solution_images: list[str] = Field(default_factory=list)
     answer_options: list[str]
     right_answer: str = Field(min_length=1)
-    subskills: list[ProblemSubskillPayload]
+    skills: list[ProblemSkillPayload]
 
 
     @model_validator(mode="after")
     def validate_payload(self) -> "ProblemCreate":
         validate_answer_options(self.answer_options, self.right_answer)
-        validate_subskills(self.subskills)
+        validate_skills(self.skills)
         return self
 
 
@@ -40,15 +40,15 @@ class ProblemUpdate(AmlsSchema):
     solution_images: list[str] | None = None
     answer_options: list[str] | None = None
     right_answer: str | None = Field(default=None, min_length=1)
-    subskills: list[ProblemSubskillPayload] | None = None
+    skills: list[ProblemSkillPayload] | None = None
 
 
     @model_validator(mode="after")
     def validate_payload(self) -> "ProblemUpdate":
         if self.answer_options is not None:
             validate_answer_options(self.answer_options, self.right_answer)
-        if self.subskills is not None:
-            validate_subskills(self.subskills)
+        if self.skills is not None:
+            validate_skills(self.skills)
         return self
 
 
@@ -57,8 +57,8 @@ class ProblemAnswerOptionResponse(AmlsSchema):
     text: str
 
 
-class ProblemSubskillResponse(AmlsSchema):
-    subskill_id: UUID
+class ProblemSkillResponse(AmlsSchema):
+    skill_id: UUID
     weight: float
 
 
@@ -81,7 +81,7 @@ class AdminProblemResponse(AmlsSchema):
     solution_images: list[str]
     answer_options: list[ProblemAnswerOptionResponse]
     right_answer: str
-    subskills: list[ProblemSubskillResponse]
+    skills: list[ProblemSkillResponse]
 
 
 class ProblemSubmitRequest(AmlsSchema):
@@ -109,7 +109,7 @@ class ProblemSnapshot(AmlsSchema):
     condition_images: list[str]
     solution_images: list[str]
     answer_options: list[str]
-    subskills: list[tuple[UUID, float]]
+    skills: list[tuple[UUID, float]]
 
 
 class SubmissionSnapshot(AmlsSchema):
@@ -134,14 +134,14 @@ def validate_answer_options(answer_options: list[str], right_answer: str | None)
         raise ValueError("Right answer must match one of the answer options")
 
 
-def validate_subskills(subskills: list[ProblemSubskillPayload]) -> None:
-    if not subskills:
-        raise ValueError("Problem must contain at least one related subskill")
+def validate_skills(skills: list[ProblemSkillPayload]) -> None:
+    if not skills:
+        raise ValueError("Problem must contain at least one related skill")
 
-    total_weight = sum(item.weight for item in subskills)
+    total_weight = sum(item.weight for item in skills)
     if abs(total_weight - 1.0) > 1e-6:
-        raise ValueError("Subskill weights must sum to 1")
+        raise ValueError("Skill weights must sum to 1")
 
-    subskill_ids = {item.subskill_id for item in subskills}
-    if len(subskill_ids) != len(subskills):
-        raise ValueError("Problem subskills must be unique")
+    skill_ids = {item.skill_id for item in skills}
+    if len(skill_ids) != len(skills):
+        raise ValueError("Problem skills must be unique")
