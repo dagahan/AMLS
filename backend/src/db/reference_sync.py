@@ -10,7 +10,7 @@ from src.core.utils import EnvTools
 from src.db.database import DataBase
 from src.db.reference_dataset import DIFFICULTY_DATA, SKILL_DATA, TOPIC_DATA
 from src.models.alchemy import Difficulty, Problem, ProblemSkill, Skill, Subtopic, Topic, TopicSubtopic
-from src.services.mastery.mastery_cache_manager import MasteryCacheManager
+from src.valkey.mastery_cache import MasteryCache
 
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
@@ -34,9 +34,9 @@ async def sync_reference_data(db: DataBase) -> None:
         await _delete_invalid_difficulties(session, difficulty_ids)
         await _delete_invalid_topic_links(session, topic_link_ids)
 
-    mastery_cache_manager = MasteryCacheManager()
-    await mastery_cache_manager.bump_taxonomy_version()
-    await mastery_cache_manager.bump_problem_mapping_version()
+    mastery_cache = MasteryCache()
+    await mastery_cache.bump_taxonomy_version()
+    await mastery_cache.bump_problem_mapping_version()
 
 
 async def _sync_topics(

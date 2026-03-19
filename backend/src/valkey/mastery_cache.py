@@ -9,7 +9,7 @@ if TYPE_CHECKING:
     from valkey.asyncio import Valkey as AsyncValkey
 
 
-class MasteryCacheManager:
+class MasteryCache:
     def __init__(self) -> None:
         self.cache_ttl_seconds = 3600
 

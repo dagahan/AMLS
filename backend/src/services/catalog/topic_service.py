@@ -15,7 +15,7 @@ from src.models.pydantic import (
     TopicResponse,
     TopicUpdate,
 )
-from src.services.mastery.mastery_cache_manager import MasteryCacheManager
+from src.valkey.mastery_cache import MasteryCache
 
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
@@ -26,7 +26,7 @@ if TYPE_CHECKING:
 class TopicService:
     def __init__(self, db: "DataBase") -> None:
         self.db = db
-        self.mastery_cache_manager = MasteryCacheManager()
+        self.mastery_cache = MasteryCache()
 
 
     async def list_topics(self) -> list[TopicResponse]:
@@ -66,7 +66,7 @@ class TopicService:
             await session.flush()
             await session.refresh(topic)
             response = TopicResponse.model_validate(topic)
-        await self.mastery_cache_manager.bump_taxonomy_version()
+        await self.mastery_cache.bump_taxonomy_version()
         return response
 
 
@@ -85,7 +85,7 @@ class TopicService:
         async with self.db.session_ctx() as session:
             topic = await self._get_topic_or_404(session, topic_id)
             await session.delete(topic)
-        await self.mastery_cache_manager.bump_taxonomy_version()
+        await self.mastery_cache.bump_taxonomy_version()
 
 
     async def create_subtopic(self, data: SubtopicCreate) -> SubtopicResponse:
@@ -98,7 +98,7 @@ class TopicService:
             session.add(TopicSubtopic(topic_id=data.topic_id, subtopic_id=subtopic.id, weight=1.0))
             await session.refresh(subtopic)
             response = SubtopicResponse.model_validate(subtopic)
-        await self.mastery_cache_manager.bump_taxonomy_version()
+        await self.mastery_cache.bump_taxonomy_version()
         return response
 
 
@@ -143,7 +143,7 @@ class TopicService:
             response = SubtopicResponse.model_validate(subtopic)
 
         if taxonomy_mapping_changed:
-            await self.mastery_cache_manager.bump_taxonomy_version()
+            await self.mastery_cache.bump_taxonomy_version()
 
         return response
 
@@ -152,7 +152,7 @@ class TopicService:
         async with self.db.session_ctx() as session:
             subtopic = await self._get_subtopic_or_404(session, subtopic_id)
             await session.delete(subtopic)
-        await self.mastery_cache_manager.bump_taxonomy_version()
+        await self.mastery_cache.bump_taxonomy_version()
 
 
     async def _get_topic_or_404(self, session: "AsyncSession", topic_id: uuid.UUID) -> Topic:

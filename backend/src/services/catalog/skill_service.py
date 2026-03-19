@@ -8,7 +8,7 @@ from sqlalchemy import select
 
 from src.models.alchemy import Skill
 from src.models.pydantic import SkillCreate, SkillResponse, SkillUpdate
-from src.services.mastery.mastery_cache_manager import MasteryCacheManager
+from src.valkey.mastery_cache import MasteryCache
 
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
@@ -19,7 +19,7 @@ if TYPE_CHECKING:
 class SkillService:
     def __init__(self, db: "DataBase") -> None:
         self.db = db
-        self.mastery_cache_manager = MasteryCacheManager()
+        self.mastery_cache = MasteryCache()
 
 
     async def list_skills(self) -> list[SkillResponse]:
@@ -43,7 +43,7 @@ class SkillService:
             await session.flush()
             await session.refresh(skill)
             response = SkillResponse.model_validate(skill)
-        await self.mastery_cache_manager.bump_taxonomy_version()
+        await self.mastery_cache.bump_taxonomy_version()
         return response
 
 
@@ -63,7 +63,7 @@ class SkillService:
         async with self.db.session_ctx() as session:
             skill = await self._get_skill_or_404(session, skill_id)
             await session.delete(skill)
-        await self.mastery_cache_manager.bump_taxonomy_version()
+        await self.mastery_cache.bump_taxonomy_version()
 
 
     async def _get_skill_or_404(

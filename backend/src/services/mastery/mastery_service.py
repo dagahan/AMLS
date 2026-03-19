@@ -14,7 +14,7 @@ from src.models.pydantic.mastery import (
     MasteryOverviewResponse,
     MasteryValueResponse,
 )
-from src.services.mastery.mastery_cache_manager import MasteryCacheManager
+from src.valkey.mastery_cache import MasteryCache
 
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
@@ -26,7 +26,7 @@ if TYPE_CHECKING:
 class MasteryService:
     def __init__(self, db: "DataBase") -> None:
         self.db = db
-        self.cache_manager = MasteryCacheManager()
+        self.mastery_cache = MasteryCache()
         self.alpha_0 = Decimal("2")
         self.beta_0 = Decimal("2")
         self.numeric_type = Numeric(18, 6)
@@ -59,12 +59,12 @@ class MasteryService:
 
 
     async def _get_mastery_overview_cache(self, user_id: uuid.UUID) -> MasteryOverviewCache:
-        cached_overview = await self.cache_manager.get_mastery_overview(str(user_id))
+        cached_overview = await self.mastery_cache.get_mastery_overview(str(user_id))
         if cached_overview is not None:
             return cached_overview
 
         overview_cache = await self._compute_mastery_overview_cache(user_id)
-        await self.cache_manager.set_mastery_overview(str(user_id), overview_cache)
+        await self.mastery_cache.set_mastery_overview(str(user_id), overview_cache)
         return overview_cache
 
 

@@ -8,7 +8,7 @@ from sqlalchemy import select
 
 from src.models.alchemy import Difficulty
 from src.models.pydantic import DifficultyCreate, DifficultyResponse, DifficultyUpdate
-from src.services.mastery.mastery_cache_manager import MasteryCacheManager
+from src.valkey.mastery_cache import MasteryCache
 
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
@@ -19,7 +19,7 @@ if TYPE_CHECKING:
 class DifficultyService:
     def __init__(self, db: "DataBase") -> None:
         self.db = db
-        self.mastery_cache_manager = MasteryCacheManager()
+        self.mastery_cache = MasteryCache()
 
 
     async def list_difficulties(self) -> list[DifficultyResponse]:
@@ -43,7 +43,7 @@ class DifficultyService:
             await session.flush()
             await session.refresh(difficulty)
             response = DifficultyResponse.model_validate(difficulty)
-        await self.mastery_cache_manager.bump_problem_mapping_version()
+        await self.mastery_cache.bump_problem_mapping_version()
         return response
 
 
@@ -65,7 +65,7 @@ class DifficultyService:
             await session.flush()
             await session.refresh(difficulty)
             response = DifficultyResponse.model_validate(difficulty)
-        await self.mastery_cache_manager.bump_problem_mapping_version()
+        await self.mastery_cache.bump_problem_mapping_version()
         return response
 
 
@@ -73,7 +73,7 @@ class DifficultyService:
         async with self.db.session_ctx() as session:
             difficulty = await self._get_difficulty_or_404(session, difficulty_id)
             await session.delete(difficulty)
-        await self.mastery_cache_manager.bump_problem_mapping_version()
+        await self.mastery_cache.bump_problem_mapping_version()
 
 
     async def _get_difficulty_or_404(

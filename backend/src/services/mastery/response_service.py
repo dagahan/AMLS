@@ -13,10 +13,10 @@ from src.models.pydantic.mastery import (
     ResponseCreate,
     ResponseCreateResponse,
 )
-from src.services.mastery.mastery_cache_manager import MasteryCacheManager
 from src.services.mastery.mastery_service import MasteryService
 from src.services.problem.loader import load_problem_or_404
 from src.transaction_manager.transaction_manager import execute_atomic_step, transactional
+from src.valkey.mastery_cache import MasteryCache
 
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
@@ -27,7 +27,7 @@ if TYPE_CHECKING:
 class ResponseService:
     def __init__(self, db: "DataBase") -> None:
         self.db = db
-        self.cache_manager = MasteryCacheManager()
+        self.mastery_cache = MasteryCache()
         self.mastery_service = MasteryService(db)
 
 
@@ -39,7 +39,7 @@ class ResponseService:
             step_name="store_response",
         )
 
-        await self.cache_manager.bump_user_answers_version(str(user_id))
+        await self.mastery_cache.bump_user_answers_version(str(user_id))
         overview = await self.mastery_service.get_mastery_overview(user_id)
 
         return ResponseCreateResponse(

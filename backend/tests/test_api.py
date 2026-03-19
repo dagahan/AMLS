@@ -10,8 +10,8 @@ from sqlalchemy import select
 
 from src.db.database import DataBase
 from src.models.alchemy import ProblemAnswerOption
-from src.services.mastery.mastery_cache_manager import MasteryCacheManager
 from src.s3.s3_connector import S3Client
+from src.valkey.mastery_cache import MasteryCache
 
 if TYPE_CHECKING:
     from httpx import AsyncClient
@@ -439,8 +439,8 @@ async def test_responses_and_mastery_endpoints(
         assert mastery_value != final_topic_mastery[topic_id]
 
     current_user_id = await get_current_user_id(client, student_tokens["access_token"])
-    mastery_cache_manager = MasteryCacheManager()
-    cached_overview = await mastery_cache_manager.get_mastery_overview(current_user_id)
+    mastery_cache = MasteryCache()
+    cached_overview = await mastery_cache.get_mastery_overview(current_user_id)
     assert cached_overview is not None
 
     cached_skill_values = sorted(float(item.mastery) for item in cached_overview.skills)
