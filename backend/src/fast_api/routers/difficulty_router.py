@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 
 from src.models.alchemy import Difficulty
-from src.fast_api.routers.auth_router import build_current_admin_dependency
+from src.fast_api.dependencies import build_current_admin_dependency
 from src.models.pydantic import DifficultyCreate, DifficultyResponse, DifficultyUpdate, MessageResponse
 from src.services.mastery.mastery_cache_manager import MasteryCacheManager
 

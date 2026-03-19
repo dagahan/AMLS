@@ -5,7 +5,7 @@ from typing import TYPE_CHECKING
 
 from fastapi import APIRouter, Depends, Query
 
-from src.fast_api.routers.auth_router import (
+from src.fast_api.dependencies import (
     build_current_admin_dependency,
     build_current_user_dependency,
     parse_optional_uuid,

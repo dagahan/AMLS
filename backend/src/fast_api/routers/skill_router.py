@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 
-from src.fast_api.routers.auth_router import build_current_admin_dependency
+from src.fast_api.dependencies import build_current_admin_dependency
 from src.models.alchemy import Skill
 from src.models.pydantic import MessageResponse, SkillCreate, SkillResponse, SkillUpdate
 from src.services.mastery.mastery_cache_manager import MasteryCacheManager
