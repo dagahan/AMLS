@@ -14,8 +14,6 @@ from src.models.alchemy import (
     Topic,
     TopicSubtopic,
     User,
-    UserFailedProblem,
-    UserSolvedProblem,
 )
 
 __all__ = [
@@ -33,7 +31,5 @@ __all__ = [
     "Topic",
     "TopicSubtopic",
     "User",
-    "UserFailedProblem",
     "UserRole",
-    "UserSolvedProblem",
 ]

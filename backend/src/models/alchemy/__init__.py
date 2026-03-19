@@ -4,7 +4,7 @@ from src.models.alchemy.problem import Problem, ProblemAnswerOption, ProblemSkil
 from src.models.alchemy.response import ResponseEvent
 from src.models.alchemy.skill import Skill, SkillPrerequisite
 from src.models.alchemy.topic import Subtopic, SubtopicPrerequisite, Topic, TopicSubtopic
-from src.models.alchemy.user import User, UserFailedProblem, UserSolvedProblem
+from src.models.alchemy.user import User
 
 __all__ = [
     "Base",
@@ -22,6 +22,4 @@ __all__ = [
     "Topic",
     "TopicSubtopic",
     "User",
-    "UserFailedProblem",
-    "UserSolvedProblem",
 ]
