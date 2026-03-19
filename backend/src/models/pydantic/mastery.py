@@ -13,6 +13,27 @@ class MasteryBetaValue(AmlsSchema):
     mastery: Decimal
 
 
+class MasteryEvidenceValue(AmlsSchema):
+    id: UUID
+    success_sum: Decimal
+    failure_sum: Decimal
+
+
+class TopicSubtopicWeightValue(AmlsSchema):
+    topic_id: UUID
+    subtopic_id: UUID
+    weight: Decimal
+
+
+class MasteryAggregationSnapshot(AmlsSchema):
+    skill_ids: list[UUID]
+    subtopic_ids: list[UUID]
+    topic_ids: list[UUID]
+    skill_evidence: list[MasteryEvidenceValue]
+    subtopic_evidence: list[MasteryEvidenceValue]
+    topic_links: list[TopicSubtopicWeightValue]
+
+
 class MasteryOverviewCache(AmlsSchema):
     skills: list[MasteryBetaValue]
     subtopics: list[MasteryBetaValue]

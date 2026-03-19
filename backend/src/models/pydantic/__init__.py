@@ -15,13 +15,16 @@ from src.models.pydantic.auth import (
 from src.models.pydantic.common import AmlsSchema, HealthResponse, MessageResponse
 from src.models.pydantic.difficulty import DifficultyCreate, DifficultyResponse, DifficultyUpdate
 from src.models.pydantic.mastery import (
+    MasteryAggregationSnapshot,
     MasteryBetaValue,
+    MasteryEvidenceValue,
     MasteryOverviewCache,
     MasteryOverviewResponse,
     MasteryValueResponse,
     RecordedResponseState,
     ResponseCreate,
     ResponseCreateResponse,
+    TopicSubtopicWeightValue,
 )
 from src.models.pydantic.problem import (
     AdminProblemAnswerOptionResponse,
@@ -70,7 +73,9 @@ __all__ = [
     "DifficultyUpdate",
     "HealthResponse",
     "LoginRequest",
+    "MasteryAggregationSnapshot",
     "MasteryBetaValue",
+    "MasteryEvidenceValue",
     "MasteryOverviewCache",
     "MasteryOverviewResponse",
     "MasteryValueResponse",
@@ -103,6 +108,7 @@ __all__ = [
     "SubmissionSnapshot",
     "TokenPairResponse",
     "TopicCreate",
+    "TopicSubtopicWeightValue",
     "TopicResponse",
     "TopicUpdate",
     "UploadedImageResponse",
