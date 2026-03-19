@@ -4,8 +4,8 @@ from typing import TYPE_CHECKING
 
 from fastapi import APIRouter
 
-from src.core.clients import get_valkey_client
 from src.models.pydantic import HealthResponse
+from src.valkey.valkey_client import get_valkey_client
 
 if TYPE_CHECKING:
     from src.db.database import DataBase

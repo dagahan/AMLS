@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from src.core.clients import get_async_valkey_client
 from src.models.pydantic.mastery import MasteryOverviewCache
+from src.valkey.valkey_client import get_async_valkey_client
 
 if TYPE_CHECKING:
     from valkey.asyncio import Valkey as AsyncValkey

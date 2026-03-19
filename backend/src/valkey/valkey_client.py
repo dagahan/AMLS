@@ -10,6 +10,8 @@ from valkey.asyncio import Valkey as AsyncValkey
 
 from src.core.utils import EnvTools
 
+_ASYNC_VALKEY_CLIENTS: WeakKeyDictionary[asyncio.AbstractEventLoop, AsyncValkey] = WeakKeyDictionary()
+
 
 @lru_cache(maxsize=1)
 def get_valkey_client() -> Any:
@@ -18,9 +20,6 @@ def get_valkey_client() -> Any:
         port=int(EnvTools.get_service_port("valkey")),
         decode_responses=True,
     )
-
-
-_ASYNC_VALKEY_CLIENTS: WeakKeyDictionary[asyncio.AbstractEventLoop, AsyncValkey] = WeakKeyDictionary()
 
 
 def get_async_valkey_client() -> AsyncValkey:

@@ -18,7 +18,6 @@ BACKEND_DIR = Path(__file__).resolve().parents[1]
 if str(BACKEND_DIR) not in sys.path:
     sys.path.insert(0, str(BACKEND_DIR))
 
-from src.core.clients import get_valkey_client
 from src.core.utils import EnvTools, PasswordTools
 from src.db.database import DataBase
 from src.db.enums import UserRole
@@ -36,6 +35,7 @@ from src.models.alchemy import (
     User,
 )
 from src.models.pydantic import TokenPairResponse
+from src.valkey.valkey_client import get_valkey_client
 
 
 @pytest.fixture(scope="session", autouse=True)

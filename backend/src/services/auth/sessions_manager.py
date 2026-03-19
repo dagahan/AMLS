@@ -6,9 +6,9 @@ from typing import Any
 
 from loguru import logger
 
-from src.core.clients import get_valkey_client
 from src.core.utils import EnvTools, StringTools, TimeTools
 from src.models.pydantic import ClientContext, SessionData
+from src.valkey.valkey_client import get_valkey_client
 
 
 class SessionsManager:
