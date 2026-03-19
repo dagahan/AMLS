@@ -7,7 +7,12 @@ from fastapi import HTTPException, status
 
 from src.models.alchemy import Problem, ProblemAnswerOption, ProblemSkill
 from src.models.pydantic import AdminProblemResponse, ProblemCreate, ProblemUpdate
-from src.models.pydantic.problem import ProblemSkillPayload, ProblemSnapshot, validate_answer_options
+from src.models.pydantic.problem import (
+    ProblemAnswerOptionPayload,
+    ProblemSkillPayload,
+    ProblemSnapshot,
+    validate_answer_options,
+)
 from src.services.mastery.mastery_cache_manager import MasteryCacheManager
 from src.services.problem.loader import (
     ensure_difficulty_exists,
@@ -75,7 +80,6 @@ class AdminProblemService:
                 difficulty_id=data.difficulty_id,
                 condition=data.condition,
                 solution=data.solution,
-                right_answer=data.right_answer,
                 condition_images=data.condition_images,
                 solution_images=data.solution_images,
             )
@@ -101,7 +105,7 @@ class AdminProblemService:
             if data.skills is not None:
                 await ensure_skills_exist(session, [item.skill_id for item in data.skills])
 
-            self._validate_updated_answers(problem, data)
+            self._validate_updated_answers(data)
             self._apply_problem_update(problem, data)
 
             await session.flush()
@@ -124,10 +128,12 @@ class AdminProblemService:
             difficulty_id=problem.difficulty_id,
             condition=problem.condition,
             solution=problem.solution,
-            right_answer=problem.right_answer,
             condition_images=list(problem.condition_images),
             solution_images=list(problem.solution_images),
-            answer_options=[item.text for item in problem.answer_options],
+            answer_options=[
+                ProblemAnswerOptionPayload(text=item.text, is_correct=item.is_correct)
+                for item in problem.answer_options
+            ],
             skills=[(item.skill_id, item.weight) for item in problem.skill_links],
         )
 
@@ -142,7 +148,6 @@ class AdminProblemService:
                     difficulty_id=snapshot.difficulty_id,
                     condition=snapshot.condition,
                     solution=snapshot.solution,
-                    right_answer=snapshot.right_answer,
                     condition_images=snapshot.condition_images,
                     solution_images=snapshot.solution_images,
                 )
@@ -152,7 +157,6 @@ class AdminProblemService:
                 problem.difficulty_id = snapshot.difficulty_id
                 problem.condition = snapshot.condition
                 problem.solution = snapshot.solution
-                problem.right_answer = snapshot.right_answer
                 problem.condition_images = snapshot.condition_images
                 problem.solution_images = snapshot.solution_images
 
@@ -171,9 +175,6 @@ class AdminProblemService:
         if data.solution is not None:
             problem.solution = data.solution
 
-        if data.right_answer is not None:
-            problem.right_answer = data.right_answer
-
         if data.condition_images is not None:
             problem.condition_images = data.condition_images
 
@@ -187,18 +188,12 @@ class AdminProblemService:
             problem.skill_links = self._build_skill_links(data.skills)
 
 
-    def _validate_updated_answers(self, problem: Problem, data: ProblemUpdate) -> None:
-        if data.answer_options is None and data.right_answer is None:
+    def _validate_updated_answers(self, data: ProblemUpdate) -> None:
+        if data.answer_options is None:
             return
 
-        answer_options = (
-            data.answer_options
-            if data.answer_options is not None
-            else [item.text for item in problem.answer_options]
-        )
-        right_answer = data.right_answer if data.right_answer is not None else problem.right_answer
         try:
-            validate_answer_options(answer_options, right_answer)
+            validate_answer_options(data.answer_options)
         except ValueError as error:
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
@@ -206,8 +201,14 @@ class AdminProblemService:
             ) from error
 
 
-    def _build_answer_options(self, answer_options: list[str]) -> list[ProblemAnswerOption]:
-        return [ProblemAnswerOption(text=item) for item in answer_options]
+    def _build_answer_options(
+        self,
+        answer_options: list[ProblemAnswerOptionPayload],
+    ) -> list[ProblemAnswerOption]:
+        return [
+            ProblemAnswerOption(text=item.text, is_correct=item.is_correct)
+            for item in answer_options
+        ]
 
 
     def _build_skill_links(

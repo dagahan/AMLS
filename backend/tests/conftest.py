@@ -161,14 +161,13 @@ def _create_schema_and_seed(sync_engine_config: str) -> None:
                 difficulty=difficulty,
                 condition="In a right triangle, the legs are 6 and 8. Find the area.",
                 solution="The area is 24.",
-                right_answer="24",
                 condition_images=[],
                 solution_images=[],
             )
             problem.answer_options = [
-                ProblemAnswerOption(text="10"),
-                ProblemAnswerOption(text="24"),
-                ProblemAnswerOption(text="14"),
+                ProblemAnswerOption(text="10", is_correct=False),
+                ProblemAnswerOption(text="24", is_correct=True),
+                ProblemAnswerOption(text="14", is_correct=False),
             ]
             problem.skill_links = [
                 ProblemSkill(skill=skill_one, weight=0.6),

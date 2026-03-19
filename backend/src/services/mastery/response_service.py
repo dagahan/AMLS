@@ -68,7 +68,7 @@ class ResponseService:
                     detail="Answer option not found for this problem",
                 )
 
-            is_correct = answer_option.text == problem.right_answer
+            is_correct = answer_option.is_correct
             response_event = ResponseEvent(
                 user_id=user_id,
                 problem_id=problem.id,

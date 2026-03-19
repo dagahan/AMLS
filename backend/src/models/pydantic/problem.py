@@ -7,6 +7,11 @@ from src.models.pydantic.difficulty import DifficultyResponse
 from src.models.pydantic.topic import SubtopicResponse
 
 
+class ProblemAnswerOptionPayload(AmlsSchema):
+    text: str = Field(min_length=1)
+    is_correct: bool
+
+
 class ProblemSkillPayload(AmlsSchema):
     skill_id: UUID
     weight: float = Field(ge=0, le=1)
@@ -19,14 +24,13 @@ class ProblemCreate(AmlsSchema):
     solution: str = Field(min_length=1)
     condition_images: list[str] = Field(default_factory=list)
     solution_images: list[str] = Field(default_factory=list)
-    answer_options: list[str]
-    right_answer: str = Field(min_length=1)
+    answer_options: list[ProblemAnswerOptionPayload]
     skills: list[ProblemSkillPayload]
 
 
     @model_validator(mode="after")
     def validate_payload(self) -> "ProblemCreate":
-        validate_answer_options(self.answer_options, self.right_answer)
+        validate_answer_options(self.answer_options)
         validate_skills(self.skills)
         return self
 
@@ -38,15 +42,14 @@ class ProblemUpdate(AmlsSchema):
     solution: str | None = Field(default=None, min_length=1)
     condition_images: list[str] | None = None
     solution_images: list[str] | None = None
-    answer_options: list[str] | None = None
-    right_answer: str | None = Field(default=None, min_length=1)
+    answer_options: list[ProblemAnswerOptionPayload] | None = None
     skills: list[ProblemSkillPayload] | None = None
 
 
     @model_validator(mode="after")
     def validate_payload(self) -> "ProblemUpdate":
         if self.answer_options is not None:
-            validate_answer_options(self.answer_options, self.right_answer)
+            validate_answer_options(self.answer_options)
         if self.skills is not None:
             validate_skills(self.skills)
         return self
@@ -55,6 +58,10 @@ class ProblemUpdate(AmlsSchema):
 class ProblemAnswerOptionResponse(AmlsSchema):
     id: UUID
     text: str
+
+
+class AdminProblemAnswerOptionResponse(ProblemAnswerOptionResponse):
+    is_correct: bool
 
 
 class ProblemSkillResponse(AmlsSchema):
@@ -79,8 +86,7 @@ class AdminProblemResponse(AmlsSchema):
     condition_images: list[str]
     solution: str
     solution_images: list[str]
-    answer_options: list[ProblemAnswerOptionResponse]
-    right_answer: str
+    answer_options: list[AdminProblemAnswerOptionResponse]
     skills: list[ProblemSkillResponse]
 
 
@@ -105,10 +111,9 @@ class ProblemSnapshot(AmlsSchema):
     difficulty_id: UUID
     condition: str
     solution: str
-    right_answer: str
     condition_images: list[str]
     solution_images: list[str]
-    answer_options: list[str]
+    answer_options: list[ProblemAnswerOptionPayload]
     skills: list[tuple[UUID, float]]
 
 
@@ -119,19 +124,20 @@ class SubmissionSnapshot(AmlsSchema):
     failed_exists: bool
 
 
-def validate_answer_options(answer_options: list[str], right_answer: str | None) -> None:
+def validate_answer_options(answer_options: list[ProblemAnswerOptionPayload]) -> None:
     if not 3 <= len(answer_options) <= 8:
         raise ValueError("Problem must contain from 3 to 8 answer options")
 
-    normalized_options = [item.strip() for item in answer_options if item.strip()]
+    normalized_options = [item.text.strip() for item in answer_options if item.text.strip()]
     if len(normalized_options) != len(answer_options):
         raise ValueError("Answer options must not be empty")
 
-    if len(set(answer_options)) != len(answer_options):
+    if len(set(normalized_options)) != len(answer_options):
         raise ValueError("Answer options must be unique")
 
-    if right_answer is not None and right_answer not in answer_options:
-        raise ValueError("Right answer must match one of the answer options")
+    correct_options_count = sum(1 for item in answer_options if item.is_correct)
+    if correct_options_count != 1:
+        raise ValueError("Problem must contain exactly one correct answer option")
 
 
 def validate_skills(skills: list[ProblemSkillPayload]) -> None:

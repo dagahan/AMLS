@@ -9,7 +9,7 @@ from typing import cast
 from sqlalchemy import select
 
 from src.db.database import DataBase
-from src.models.alchemy import Problem, ProblemAnswerOption
+from src.models.alchemy import ProblemAnswerOption
 from src.services.mastery.mastery_cache_manager import MasteryCacheManager
 from src.s3.s3_connector import S3Client
 
@@ -67,14 +67,12 @@ async def get_problem_ids_for_creation(client: AsyncClient, access_token: str) -
 
 
 async def get_problem_answer_ids(session: AsyncSession, problem_id: str) -> tuple[str, str]:
-    problem_result = await session.execute(select(Problem).where(Problem.id == uuid.UUID(problem_id)))
-    problem = problem_result.scalar_one()
     result = await session.execute(
         select(ProblemAnswerOption).where(ProblemAnswerOption.problem_id == uuid.UUID(problem_id))
     )
     answer_options = result.scalars().all()
-    correct_option = next(item for item in answer_options if item.text == problem.right_answer)
-    wrong_option = next(item for item in answer_options if item.text != problem.right_answer)
+    correct_option = next(item for item in answer_options if item.is_correct)
+    wrong_option = next(item for item in answer_options if not item.is_correct)
     return str(correct_option.id), str(wrong_option.id)
 
 
@@ -162,8 +160,11 @@ async def test_admin_problem_crud_and_public_shape(
             "solution": "Test solution",
             "condition_images": [],
             "solution_images": [],
-            "answer_options": ["10", "12", "14"],
-            "right_answer": "12",
+            "answer_options": [
+                {"text": "10", "is_correct": False},
+                {"text": "12", "is_correct": True},
+                {"text": "14", "is_correct": False},
+            ],
             "skills": [
                 {"skill_id": skill_ids[0], "weight": 0.6},
                 {"skill_id": skill_ids[1], "weight": 0.4},
@@ -176,8 +177,8 @@ async def test_admin_problem_crud_and_public_shape(
     created_problem = create_response.json()
     problem_id = created_problem["id"]
     assert all("skill_id" in item and "weight" in item for item in created_problem["skills"])
-    assert created_problem["right_answer"] == "12"
-    assert all("text" in item for item in created_problem["answer_options"])
+    assert len([item for item in created_problem["answer_options"] if item["is_correct"]]) == 1
+    assert all("text" in item and "is_correct" in item for item in created_problem["answer_options"])
 
     public_response = await client.get(
         f"/problems/{problem_id}",

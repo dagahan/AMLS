@@ -3,7 +3,7 @@ from __future__ import annotations
 import uuid
 from typing import TYPE_CHECKING
 
-from sqlalchemy import CheckConstraint, Float, ForeignKey, PrimaryKeyConstraint, Text
+from sqlalchemy import Boolean, CheckConstraint, Float, ForeignKey, PrimaryKeyConstraint, Text
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -30,7 +30,6 @@ class Problem(Base, IdMixin, TimestampMixin):
     )
     condition: Mapped[str] = mapped_column(Text, nullable=False)
     solution: Mapped[str] = mapped_column(Text, nullable=False)
-    right_answer: Mapped[str] = mapped_column(Text, nullable=False)
     condition_images: Mapped[list[str]] = mapped_column(JSONB, default=list, nullable=False)
     solution_images: Mapped[list[str]] = mapped_column(JSONB, default=list, nullable=False)
 
@@ -79,5 +78,6 @@ class ProblemAnswerOption(Base, IdMixin):
         nullable=False,
     )
     text: Mapped[str] = mapped_column(Text, nullable=False)
+    is_correct: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
 
     problem: Mapped["Problem"] = relationship(back_populates="answer_options")

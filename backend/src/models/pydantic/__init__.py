@@ -24,7 +24,9 @@ from src.models.pydantic.mastery import (
     ResponseCreateResponse,
 )
 from src.models.pydantic.problem import (
+    AdminProblemAnswerOptionResponse,
     AdminProblemResponse,
+    ProblemAnswerOptionPayload,
     ProblemAnswerOptionResponse,
     ProblemCreate,
     ProblemSkillPayload,
@@ -56,6 +58,7 @@ from src.models.pydantic.user import AvatarSnapshot, UserResponse
 __all__ = [
     "AccessPayload",
     "AccessValidationResponse",
+    "AdminProblemAnswerOptionResponse",
     "AdminProblemResponse",
     "AmlsSchema",
     "AuthContext",
@@ -72,6 +75,7 @@ __all__ = [
     "MasteryOverviewResponse",
     "MasteryValueResponse",
     "MessageResponse",
+    "ProblemAnswerOptionPayload",
     "ProblemAnswerOptionResponse",
     "ProblemCreate",
     "ProblemSkillPayload",
