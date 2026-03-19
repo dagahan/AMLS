@@ -9,6 +9,7 @@ from sqlalchemy import select
 from src.models.alchemy import Difficulty
 from src.fast_api.dependencies import build_current_admin_dependency
 from src.models.pydantic import DifficultyCreate, DifficultyResponse, DifficultyUpdate, MessageResponse
+from src.services.mastery.mastery_cache_manager import MasteryCacheManager
 
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
@@ -20,6 +21,7 @@ if TYPE_CHECKING:
 def get_difficulty_router(db: "DataBase") -> APIRouter:
     router = APIRouter()
     current_admin = build_current_admin_dependency(db)
+    mastery_cache_manager = MasteryCacheManager()
 
 
     async def get_difficulty_or_404(session: "AsyncSession", difficulty_id: uuid.UUID) -> Difficulty:
@@ -70,6 +72,9 @@ def get_difficulty_router(db: "DataBase") -> APIRouter:
             session.add(difficulty)
             await session.flush()
             await session.refresh(difficulty)
+        await mastery_cache_manager.bump_problem_mapping_version()
+        async with db.session_ctx() as session:
+            difficulty = await get_difficulty_or_404(session, difficulty.id)
             return DifficultyResponse.model_validate(difficulty)
 
 
@@ -104,6 +109,9 @@ def get_difficulty_router(db: "DataBase") -> APIRouter:
 
             await session.flush()
             await session.refresh(difficulty)
+        await mastery_cache_manager.bump_problem_mapping_version()
+        async with db.session_ctx() as session:
+            difficulty = await get_difficulty_or_404(session, difficulty_id)
             return DifficultyResponse.model_validate(difficulty)
 
 
@@ -115,7 +123,8 @@ def get_difficulty_router(db: "DataBase") -> APIRouter:
         async with db.session_ctx() as session:
             difficulty = await get_difficulty_or_404(session, difficulty_id)
             await session.delete(difficulty)
-            return MessageResponse(message="Difficulty deleted")
+        await mastery_cache_manager.bump_problem_mapping_version()
+        return MessageResponse(message="Difficulty deleted")
 
 
     return router

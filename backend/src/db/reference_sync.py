@@ -9,7 +9,18 @@ from sqlalchemy import delete, or_, select
 from src.core.utils import EnvTools
 from src.db.database import DataBase
 from src.db.reference_dataset import DIFFICULTY_DATA, SKILL_DATA, TOPIC_DATA
-from src.models.alchemy import Difficulty, Problem, ProblemSubskill, Skill, Subskill, Subtopic, Topic
+from src.models.alchemy import (
+    Difficulty,
+    Problem,
+    ProblemSubskill,
+    Skill,
+    SkillSubskill,
+    Subskill,
+    Subtopic,
+    Topic,
+    TopicSubtopic,
+)
+from src.services.mastery.mastery_cache_manager import MasteryCacheManager
 
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
@@ -17,8 +28,8 @@ if TYPE_CHECKING:
 
 async def sync_reference_data(db: DataBase) -> None:
     async with db.session_ctx() as session:
-        topic_ids, subtopic_ids = await _sync_topics(session)
-        skill_ids, subskill_ids = await _sync_skills(session)
+        topic_ids, subtopic_ids, topic_link_ids = await _sync_topics(session)
+        skill_ids, subskill_ids, skill_link_ids = await _sync_skills(session)
         difficulty_ids = await _sync_difficulties(session)
 
         await _delete_invalid_problems(
@@ -32,13 +43,22 @@ async def sync_reference_data(db: DataBase) -> None:
         await _delete_invalid_subskills(session, subskill_ids)
         await _delete_invalid_skills(session, skill_ids)
         await _delete_invalid_difficulties(session, difficulty_ids)
+        await _delete_invalid_topic_links(session, topic_link_ids)
+        await _delete_invalid_skill_links(session, skill_link_ids)
+
+    mastery_cache_manager = MasteryCacheManager()
+    await mastery_cache_manager.bump_taxonomy_version()
+    await mastery_cache_manager.bump_problem_mapping_version()
 
 
-async def _sync_topics(session: "AsyncSession") -> tuple[set[uuid.UUID], set[uuid.UUID]]:
+async def _sync_topics(
+    session: "AsyncSession",
+) -> tuple[set[uuid.UUID], set[uuid.UUID], set[tuple[uuid.UUID, uuid.UUID]]]:
     result = await session.execute(select(Topic))
     topics = {topic.name: topic for topic in result.scalars().all()}
     valid_topic_ids: set[uuid.UUID] = set()
     valid_subtopic_ids: set[uuid.UUID] = set()
+    valid_topic_link_ids: set[tuple[uuid.UUID, uuid.UUID]] = set()
 
     for topic_name, subtopic_names in TOPIC_DATA:
         topic = topics.get(topic_name)
@@ -60,15 +80,20 @@ async def _sync_topics(session: "AsyncSession") -> tuple[set[uuid.UUID], set[uui
                 session.add(subtopic)
                 await session.flush()
             valid_subtopic_ids.add(subtopic.id)
+            await _ensure_topic_link(session, topic.id, subtopic.id)
+            valid_topic_link_ids.add((topic.id, subtopic.id))
 
-    return valid_topic_ids, valid_subtopic_ids
+    return valid_topic_ids, valid_subtopic_ids, valid_topic_link_ids
 
 
-async def _sync_skills(session: "AsyncSession") -> tuple[set[uuid.UUID], set[uuid.UUID]]:
+async def _sync_skills(
+    session: "AsyncSession",
+) -> tuple[set[uuid.UUID], set[uuid.UUID], set[tuple[uuid.UUID, uuid.UUID]]]:
     result = await session.execute(select(Skill))
     skills = {skill.name: skill for skill in result.scalars().all()}
     valid_skill_ids: set[uuid.UUID] = set()
     valid_subskill_ids: set[uuid.UUID] = set()
+    valid_skill_link_ids: set[tuple[uuid.UUID, uuid.UUID]] = set()
 
     for skill_name, subskill_names in SKILL_DATA:
         skill = skills.get(skill_name)
@@ -90,8 +115,10 @@ async def _sync_skills(session: "AsyncSession") -> tuple[set[uuid.UUID], set[uui
                 session.add(subskill)
                 await session.flush()
             valid_subskill_ids.add(subskill.id)
+            await _ensure_skill_link(session, skill.id, subskill.id)
+            valid_skill_link_ids.add((skill.id, subskill.id))
 
-    return valid_skill_ids, valid_subskill_ids
+    return valid_skill_ids, valid_subskill_ids, valid_skill_link_ids
 
 
 async def _sync_difficulties(session: "AsyncSession") -> set[uuid.UUID]:
@@ -168,6 +195,66 @@ async def _delete_invalid_difficulties(
     valid_difficulty_ids: set[uuid.UUID],
 ) -> None:
     await session.execute(delete(Difficulty).where(~Difficulty.id.in_(valid_difficulty_ids)))
+
+
+async def _delete_invalid_topic_links(
+    session: "AsyncSession",
+    valid_topic_link_ids: set[tuple[uuid.UUID, uuid.UUID]],
+) -> None:
+    result = await session.execute(select(TopicSubtopic.topic_id, TopicSubtopic.subtopic_id))
+    for topic_id, subtopic_id in result.all():
+        if (topic_id, subtopic_id) not in valid_topic_link_ids:
+            await session.execute(
+                delete(TopicSubtopic).where(
+                    TopicSubtopic.topic_id == topic_id,
+                    TopicSubtopic.subtopic_id == subtopic_id,
+                )
+            )
+
+
+async def _delete_invalid_skill_links(
+    session: "AsyncSession",
+    valid_skill_link_ids: set[tuple[uuid.UUID, uuid.UUID]],
+) -> None:
+    result = await session.execute(select(SkillSubskill.skill_id, SkillSubskill.subskill_id))
+    for skill_id, subskill_id in result.all():
+        if (skill_id, subskill_id) not in valid_skill_link_ids:
+            await session.execute(
+                delete(SkillSubskill).where(
+                    SkillSubskill.skill_id == skill_id,
+                    SkillSubskill.subskill_id == subskill_id,
+                )
+            )
+
+
+async def _ensure_topic_link(
+    session: "AsyncSession",
+    topic_id: uuid.UUID,
+    subtopic_id: uuid.UUID,
+) -> None:
+    result = await session.execute(
+        select(TopicSubtopic).where(
+            TopicSubtopic.topic_id == topic_id,
+            TopicSubtopic.subtopic_id == subtopic_id,
+        )
+    )
+    if result.scalar_one_or_none() is None:
+        session.add(TopicSubtopic(topic_id=topic_id, subtopic_id=subtopic_id, weight=1.0))
+
+
+async def _ensure_skill_link(
+    session: "AsyncSession",
+    skill_id: uuid.UUID,
+    subskill_id: uuid.UUID,
+) -> None:
+    result = await session.execute(
+        select(SkillSubskill).where(
+            SkillSubskill.skill_id == skill_id,
+            SkillSubskill.subskill_id == subskill_id,
+        )
+    )
+    if result.scalar_one_or_none() is None:
+        session.add(SkillSubskill(skill_id=skill_id, subskill_id=subskill_id, weight=1.0))
 
 
 async def main() -> None:

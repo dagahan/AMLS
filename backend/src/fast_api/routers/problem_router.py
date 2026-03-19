@@ -20,7 +20,9 @@ from src.models.pydantic import (
     ProblemUpdate,
     StudentProgressResponse,
 )
-from src.services.problem import AdminProblemService, ProblemQueryService, ProblemSubmissionService
+from src.services.problem.admin_problem_service import AdminProblemService
+from src.services.problem.problem_query_service import ProblemQueryService
+from src.services.problem.problem_submission_service import ProblemSubmissionService
 
 if TYPE_CHECKING:
     from src.db.database import DataBase

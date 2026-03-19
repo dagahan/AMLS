@@ -8,6 +8,7 @@ from fastapi import HTTPException, status
 from src.models.alchemy import Problem, ProblemAnswerOption, ProblemSubskill
 from src.models.pydantic import AdminProblemResponse, ProblemCreate, ProblemUpdate
 from src.models.pydantic.problem import ProblemSnapshot, ProblemSubskillPayload, validate_answer_options
+from src.services.mastery.mastery_cache_manager import MasteryCacheManager
 from src.services.problem.loader import (
     ensure_difficulty_exists,
     ensure_subskills_exist,
@@ -24,6 +25,7 @@ if TYPE_CHECKING:
 class AdminProblemService:
     def __init__(self, db: "DataBase") -> None:
         self.db = db
+        self.mastery_cache_manager = MasteryCacheManager()
         self.problem_query_service = ProblemQueryService(db)
 
 
@@ -34,6 +36,7 @@ class AdminProblemService:
             rollback=lambda created_problem_id: self._delete_problem_record(created_problem_id),
             step_name="create_problem_record",
         )
+        await self.mastery_cache_manager.bump_problem_mapping_version()
         return await self.problem_query_service.get_admin_problem(problem_id)
 
 
@@ -45,6 +48,8 @@ class AdminProblemService:
             rollback=lambda _: self._restore_problem_snapshot(snapshot),
             step_name="update_problem_record",
         )
+        if self._is_mastery_mapping_update(data):
+            await self.mastery_cache_manager.bump_problem_mapping_version()
         return await self.problem_query_service.get_admin_problem(updated_problem_id)
 
 
@@ -56,6 +61,7 @@ class AdminProblemService:
             rollback=lambda _: self._restore_problem_snapshot(snapshot),
             step_name="delete_problem_record",
         )
+        await self.mastery_cache_manager.bump_problem_mapping_version()
 
 
     async def _create_problem_record(self, data: ProblemCreate) -> uuid.UUID:
@@ -212,3 +218,11 @@ class AdminProblemService:
             ProblemSubskill(subskill_id=item.subskill_id, weight=item.weight)
             for item in subskills
         ]
+
+
+    def _is_mastery_mapping_update(self, data: ProblemUpdate) -> bool:
+        return (
+            data.subtopic_id is not None
+            or data.difficulty_id is not None
+            or data.subskills is not None
+        )

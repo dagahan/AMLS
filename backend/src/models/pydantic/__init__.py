@@ -13,6 +13,13 @@ from src.models.pydantic.auth import (
 )
 from src.models.pydantic.common import AmlsSchema, HealthResponse, MessageResponse
 from src.models.pydantic.difficulty import DifficultyCreate, DifficultyResponse, DifficultyUpdate
+from src.models.pydantic.mastery import (
+    MasteryOverviewResponse,
+    MasteryValueResponse,
+    RecordedResponseState,
+    ResponseCreate,
+    ResponseCreateResponse,
+)
 from src.models.pydantic.problem import (
     AdminProblemResponse,
     ProblemAnswerOptionResponse,
@@ -59,6 +66,8 @@ __all__ = [
     "DifficultyUpdate",
     "HealthResponse",
     "LoginRequest",
+    "MasteryOverviewResponse",
+    "MasteryValueResponse",
     "MessageResponse",
     "ProblemAnswerOptionResponse",
     "ProblemCreate",
@@ -69,7 +78,10 @@ __all__ = [
     "ProblemSubmitRequest",
     "ProblemSubmitResponse",
     "ProblemUpdate",
+    "RecordedResponseState",
     "RegisterRequest",
+    "ResponseCreate",
+    "ResponseCreateResponse",
     "RefreshPayload",
     "RefreshRequest",
     "SessionData",

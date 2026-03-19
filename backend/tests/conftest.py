@@ -30,9 +30,11 @@ from src.models.alchemy import (
     ProblemAnswerOption,
     ProblemSubskill,
     Skill,
+    SkillSubskill,
     Subskill,
     Subtopic,
     Topic,
+    TopicSubtopic,
     User,
 )
 from src.models.pydantic import TokenPairResponse
@@ -147,6 +149,7 @@ def _create_schema_and_seed(sync_engine_config: str) -> None:
         with Session(engine) as session:
             topic = Topic(name="Planimetry")
             subtopic = Subtopic(topic=topic, name="right triangle")
+            topic_link = TopicSubtopic(topic=topic, subtopic=subtopic, weight=1.0)
 
             difficulty = Difficulty(name="medium", coefficient=1.5)
 
@@ -159,6 +162,8 @@ def _create_schema_and_seed(sync_engine_config: str) -> None:
                 skill=skill,
                 name="compute lengths and areas in plane figures",
             )
+            skill_link_one = SkillSubskill(skill=skill, subskill=subskill_one, weight=1.0)
+            skill_link_two = SkillSubskill(skill=skill, subskill=subskill_two, weight=1.0)
 
             problem = Problem(
                 subtopic=subtopic,
@@ -189,7 +194,18 @@ def _create_schema_and_seed(sync_engine_config: str) -> None:
                 is_active=True,
             )
 
-            session.add_all([topic, difficulty, skill, problem, admin_user])
+            session.add_all(
+                [
+                    topic,
+                    topic_link,
+                    difficulty,
+                    skill,
+                    skill_link_one,
+                    skill_link_two,
+                    problem,
+                    admin_user,
+                ]
+            )
             session.commit()
     finally:
         engine.dispose()

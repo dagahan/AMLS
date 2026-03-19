@@ -4,9 +4,9 @@ import uuid
 from typing import TYPE_CHECKING
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy import select
+from sqlalchemy import delete, select
 
-from src.models.alchemy import Skill, Subskill
+from src.models.alchemy import Skill, SkillSubskill, Subskill
 from src.fast_api.dependencies import build_current_admin_dependency, parse_optional_uuid
 from src.models.pydantic import (
     MessageResponse,
@@ -17,6 +17,7 @@ from src.models.pydantic import (
     SubskillResponse,
     SubskillUpdate,
 )
+from src.services.mastery.mastery_cache_manager import MasteryCacheManager
 
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
@@ -28,6 +29,7 @@ if TYPE_CHECKING:
 def get_skill_router(db: "DataBase") -> APIRouter:
     router = APIRouter()
     current_admin = build_current_admin_dependency(db)
+    mastery_cache_manager = MasteryCacheManager()
 
 
     async def get_skill_or_404(session: "AsyncSession", skill_id: uuid.UUID) -> Skill:
@@ -121,6 +123,9 @@ def get_skill_router(db: "DataBase") -> APIRouter:
             session.add(skill)
             await session.flush()
             await session.refresh(skill)
+        await mastery_cache_manager.bump_taxonomy_version()
+        async with db.session_ctx() as session:
+            skill = await get_skill_or_404(session, skill.id)
             return SkillResponse.model_validate(skill)
 
 
@@ -150,7 +155,7 @@ def get_skill_router(db: "DataBase") -> APIRouter:
                 skill.name = data.name
             await session.flush()
             await session.refresh(skill)
-            return SkillResponse.model_validate(skill)
+        return SkillResponse.model_validate(skill)
 
 
     @router.delete("/admin/skills/{skill_id}", response_model=MessageResponse, status_code=200)
@@ -161,7 +166,8 @@ def get_skill_router(db: "DataBase") -> APIRouter:
         async with db.session_ctx() as session:
             skill = await get_skill_or_404(session, skill_id)
             await session.delete(skill)
-            return MessageResponse(message="Skill deleted")
+        await mastery_cache_manager.bump_taxonomy_version()
+        return MessageResponse(message="Skill deleted")
 
 
     @router.post("/admin/subskills", response_model=SubskillResponse, status_code=201)
@@ -175,7 +181,11 @@ def get_skill_router(db: "DataBase") -> APIRouter:
             subskill = Subskill(skill_id=data.skill_id, name=data.name)
             session.add(subskill)
             await session.flush()
+            session.add(SkillSubskill(skill_id=data.skill_id, subskill_id=subskill.id, weight=1.0))
             await session.refresh(subskill)
+        await mastery_cache_manager.bump_taxonomy_version()
+        async with db.session_ctx() as session:
+            subskill = await get_subskill_or_404(session, subskill.id)
             return SubskillResponse.model_validate(subskill)
 
 
@@ -203,10 +213,12 @@ def get_skill_router(db: "DataBase") -> APIRouter:
     ) -> SubskillResponse:
         async with db.session_ctx() as session:
             subskill = await get_subskill_or_404(session, subskill_id)
+            taxonomy_mapping_changed = False
 
             if data.skill_id is not None:
                 await get_skill_or_404(session, data.skill_id)
                 subskill.skill_id = data.skill_id
+                taxonomy_mapping_changed = True
                 if data.name is None:
                     await ensure_subskill_name_is_unique(
                         session,
@@ -224,9 +236,17 @@ def get_skill_router(db: "DataBase") -> APIRouter:
                 )
                 subskill.name = data.name
 
+            if taxonomy_mapping_changed:
+                await session.execute(
+                    delete(SkillSubskill).where(SkillSubskill.subskill_id == subskill.id)
+                )
+                session.add(SkillSubskill(skill_id=subskill.skill_id, subskill_id=subskill.id, weight=1.0))
+
             await session.flush()
             await session.refresh(subskill)
-            return SubskillResponse.model_validate(subskill)
+        if taxonomy_mapping_changed:
+            await mastery_cache_manager.bump_taxonomy_version()
+        return SubskillResponse.model_validate(subskill)
 
 
     @router.delete("/admin/subskills/{subskill_id}", response_model=MessageResponse, status_code=200)
@@ -237,7 +257,8 @@ def get_skill_router(db: "DataBase") -> APIRouter:
         async with db.session_ctx() as session:
             subskill = await get_subskill_or_404(session, subskill_id)
             await session.delete(subskill)
-            return MessageResponse(message="Subskill deleted")
+        await mastery_cache_manager.bump_taxonomy_version()
+        return MessageResponse(message="Subskill deleted")
 
 
     return router

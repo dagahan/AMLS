@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 import uuid
 from typing import TYPE_CHECKING
+from typing import cast
 
 from sqlalchemy import select
 
@@ -18,6 +19,13 @@ if TYPE_CHECKING:
 
 def build_auth_headers(access_token: str) -> dict[str, str]:
     return {"Authorization": f"Bearer {access_token}"}
+
+
+def build_mastery_map(items: list[dict[str, object]]) -> dict[str, float]:
+    return {
+        str(item["id"]): float(cast("float", item["mastery"]))
+        for item in items
+    }
 
 
 async def get_problem_ids_for_creation(client: AsyncClient) -> tuple[str, str, list[str]]:
@@ -201,6 +209,134 @@ async def test_student_submission_updates_progress(
     solved_payload = solved_progress.json()
     assert problem_id in solved_payload["solved_problem_ids"]
     assert problem_id not in solved_payload["failed_problem_ids"]
+
+
+async def test_responses_and_mastery_endpoints(
+    client: AsyncClient,
+    database: DataBase,
+    student_tokens: dict[str, str],
+) -> None:
+    list_response = await client.get("/problems")
+    assert list_response.status_code == 200
+    problem_payload = list_response.json()[0]
+    problem_id = problem_payload["id"]
+    subtopic_id = problem_payload["subtopic"]["id"]
+
+    if database.async_session is None:
+        raise RuntimeError("Database session factory is not initialized")
+
+    async with database.async_session() as session:
+        correct_answer_id, wrong_answer_id = await get_problem_answer_ids(session, problem_id)
+
+    overview_response = await client.get(
+        "/mastery/overview",
+        headers=build_auth_headers(student_tokens["access_token"]),
+    )
+    assert overview_response.status_code == 200
+    initial_overview = overview_response.json()
+    initial_subskill_mastery = build_mastery_map(initial_overview["subskills"])
+    initial_skill_mastery = build_mastery_map(initial_overview["skills"])
+    initial_subtopic_mastery = build_mastery_map(initial_overview["subtopics"])
+    initial_topic_mastery = build_mastery_map(initial_overview["topics"])
+
+    response_create = await client.post(
+        "/responses",
+        json={
+            "problem_id": problem_id,
+            "answer_option_id": wrong_answer_id,
+        },
+        headers=build_auth_headers(student_tokens["access_token"]),
+    )
+    assert response_create.status_code == 201
+    response_payload = response_create.json()
+    assert response_payload["correct"] is False
+    assert len(response_payload["subskills"]) == 2
+    assert len(response_payload["skills"]) == 1
+    assert len(response_payload["subtopics"]) == 1
+    assert len(response_payload["topics"]) == 1
+
+    updated_subskill_mastery = build_mastery_map(response_payload["subskills"])
+    updated_skill_mastery = build_mastery_map(response_payload["skills"])
+    updated_subtopic_mastery = build_mastery_map(response_payload["subtopics"])
+    updated_topic_mastery = build_mastery_map(response_payload["topics"])
+
+    for mastery_value in updated_subskill_mastery.values():
+        assert mastery_value < 0.5
+    for mastery_value in updated_skill_mastery.values():
+        assert mastery_value < 0.5
+    for mastery_value in updated_subtopic_mastery.values():
+        assert mastery_value < 0.5
+    for mastery_value in updated_topic_mastery.values():
+        assert mastery_value < 0.5
+
+    first_subskill_id = response_payload["subskills"][0]["id"]
+    first_skill_id = response_payload["skills"][0]["id"]
+    first_topic_id = response_payload["topics"][0]["id"]
+
+    subskill_response = await client.get(
+        f"/mastery/subskills/{first_subskill_id}",
+        headers=build_auth_headers(student_tokens["access_token"]),
+    )
+    skill_response = await client.get(
+        f"/mastery/skills/{first_skill_id}",
+        headers=build_auth_headers(student_tokens["access_token"]),
+    )
+    subtopic_response = await client.get(
+        f"/mastery/subtopics/{subtopic_id}",
+        headers=build_auth_headers(student_tokens["access_token"]),
+    )
+    topic_response = await client.get(
+        f"/mastery/topics/{first_topic_id}",
+        headers=build_auth_headers(student_tokens["access_token"]),
+    )
+
+    assert subskill_response.status_code == 200
+    assert skill_response.status_code == 200
+    assert subtopic_response.status_code == 200
+    assert topic_response.status_code == 200
+
+    follow_up_response = await client.post(
+        "/responses",
+        json={
+            "problem_id": problem_id,
+            "answer_option_id": correct_answer_id,
+        },
+        headers=build_auth_headers(student_tokens["access_token"]),
+    )
+    assert follow_up_response.status_code == 201
+    follow_up_payload = follow_up_response.json()
+    assert follow_up_payload["correct"] is True
+
+    final_overview_response = await client.get(
+        "/mastery/overview",
+        headers=build_auth_headers(student_tokens["access_token"]),
+    )
+    assert final_overview_response.status_code == 200
+    final_overview = final_overview_response.json()
+    final_subskill_mastery = build_mastery_map(final_overview["subskills"])
+    final_skill_mastery = build_mastery_map(final_overview["skills"])
+    final_subtopic_mastery = build_mastery_map(final_overview["subtopics"])
+    final_topic_mastery = build_mastery_map(final_overview["topics"])
+
+    for subskill_id, mastery_value in updated_subskill_mastery.items():
+        assert initial_subskill_mastery[subskill_id] == 0.5
+        assert abs(final_subskill_mastery[subskill_id] - 0.5) < 1e-6
+        assert mastery_value != final_subskill_mastery[subskill_id]
+
+    for skill_id, mastery_value in updated_skill_mastery.items():
+        assert initial_skill_mastery[skill_id] == 0.5
+        assert abs(final_skill_mastery[skill_id] - 0.5) < 1e-6
+        assert mastery_value != final_skill_mastery[skill_id]
+
+    for current_subtopic_id, mastery_value in updated_subtopic_mastery.items():
+        assert initial_subtopic_mastery[current_subtopic_id] == 0.5
+        assert abs(final_subtopic_mastery[current_subtopic_id] - 0.5) < 1e-6
+        assert mastery_value != final_subtopic_mastery[current_subtopic_id]
+
+    for topic_id, mastery_value in updated_topic_mastery.items():
+        assert initial_topic_mastery[topic_id] == 0.5
+        assert abs(final_topic_mastery[topic_id] - 0.5) < 1e-6
+        assert mastery_value != final_topic_mastery[topic_id]
 
 
 async def test_storage_uploads_update_problem_and_profile_urls(

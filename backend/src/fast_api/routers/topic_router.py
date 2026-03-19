@@ -4,9 +4,9 @@ import uuid
 from typing import TYPE_CHECKING
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy import select
+from sqlalchemy import delete, select
 
-from src.models.alchemy import Subtopic, Topic
+from src.models.alchemy import Subtopic, Topic, TopicSubtopic
 from src.fast_api.dependencies import build_current_admin_dependency, parse_optional_uuid
 from src.models.pydantic import (
     MessageResponse,
@@ -17,6 +17,7 @@ from src.models.pydantic import (
     TopicResponse,
     TopicUpdate,
 )
+from src.services.mastery.mastery_cache_manager import MasteryCacheManager
 
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
@@ -28,6 +29,7 @@ if TYPE_CHECKING:
 def get_topic_router(db: "DataBase") -> APIRouter:
     router = APIRouter()
     current_admin = build_current_admin_dependency(db)
+    mastery_cache_manager = MasteryCacheManager()
 
 
     async def get_topic_or_404(session: "AsyncSession", topic_id: uuid.UUID) -> Topic:
@@ -121,6 +123,9 @@ def get_topic_router(db: "DataBase") -> APIRouter:
             session.add(topic)
             await session.flush()
             await session.refresh(topic)
+        await mastery_cache_manager.bump_taxonomy_version()
+        async with db.session_ctx() as session:
+            topic = await get_topic_or_404(session, topic.id)
             return TopicResponse.model_validate(topic)
 
 
@@ -150,7 +155,7 @@ def get_topic_router(db: "DataBase") -> APIRouter:
                 topic.name = data.name
             await session.flush()
             await session.refresh(topic)
-            return TopicResponse.model_validate(topic)
+        return TopicResponse.model_validate(topic)
 
 
     @router.delete("/admin/topics/{topic_id}", response_model=MessageResponse, status_code=200)
@@ -161,7 +166,8 @@ def get_topic_router(db: "DataBase") -> APIRouter:
         async with db.session_ctx() as session:
             topic = await get_topic_or_404(session, topic_id)
             await session.delete(topic)
-            return MessageResponse(message="Topic deleted")
+        await mastery_cache_manager.bump_taxonomy_version()
+        return MessageResponse(message="Topic deleted")
 
 
     @router.post("/admin/subtopics", response_model=SubtopicResponse, status_code=201)
@@ -175,7 +181,11 @@ def get_topic_router(db: "DataBase") -> APIRouter:
             subtopic = Subtopic(topic_id=data.topic_id, name=data.name)
             session.add(subtopic)
             await session.flush()
+            session.add(TopicSubtopic(topic_id=data.topic_id, subtopic_id=subtopic.id, weight=1.0))
             await session.refresh(subtopic)
+        await mastery_cache_manager.bump_taxonomy_version()
+        async with db.session_ctx() as session:
+            subtopic = await get_subtopic_or_404(session, subtopic.id)
             return SubtopicResponse.model_validate(subtopic)
 
 
@@ -203,10 +213,12 @@ def get_topic_router(db: "DataBase") -> APIRouter:
     ) -> SubtopicResponse:
         async with db.session_ctx() as session:
             subtopic = await get_subtopic_or_404(session, subtopic_id)
+            taxonomy_mapping_changed = False
 
             if data.topic_id is not None:
                 await get_topic_or_404(session, data.topic_id)
                 subtopic.topic_id = data.topic_id
+                taxonomy_mapping_changed = True
                 if data.name is None:
                     await ensure_subtopic_name_is_unique(
                         session,
@@ -224,9 +236,17 @@ def get_topic_router(db: "DataBase") -> APIRouter:
                 )
                 subtopic.name = data.name
 
+            if taxonomy_mapping_changed:
+                await session.execute(
+                    delete(TopicSubtopic).where(TopicSubtopic.subtopic_id == subtopic.id)
+                )
+                session.add(TopicSubtopic(topic_id=subtopic.topic_id, subtopic_id=subtopic.id, weight=1.0))
+
             await session.flush()
             await session.refresh(subtopic)
-            return SubtopicResponse.model_validate(subtopic)
+        if taxonomy_mapping_changed:
+            await mastery_cache_manager.bump_taxonomy_version()
+        return SubtopicResponse.model_validate(subtopic)
 
 
     @router.delete("/admin/subtopics/{subtopic_id}", response_model=MessageResponse, status_code=200)
@@ -237,7 +257,8 @@ def get_topic_router(db: "DataBase") -> APIRouter:
         async with db.session_ctx() as session:
             subtopic = await get_subtopic_or_404(session, subtopic_id)
             await session.delete(subtopic)
-            return MessageResponse(message="Subtopic deleted")
+        await mastery_cache_manager.bump_taxonomy_version()
+        return MessageResponse(message="Subtopic deleted")
 
 
     return router

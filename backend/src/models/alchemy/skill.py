@@ -3,7 +3,7 @@ from __future__ import annotations
 import uuid
 from typing import TYPE_CHECKING
 
-from sqlalchemy import CheckConstraint, Float, ForeignKey, String, UniqueConstraint
+from sqlalchemy import CheckConstraint, Float, ForeignKey, PrimaryKeyConstraint, String, UniqueConstraint
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -22,6 +22,10 @@ class Skill(Base, IdMixin, TimestampMixin):
         back_populates="skill",
         cascade="all, delete-orphan",
     )
+    subskill_links: Mapped[list["SkillSubskill"]] = relationship(
+        back_populates="skill",
+        cascade="all, delete-orphan",
+    )
 
 
 class Subskill(Base, IdMixin, TimestampMixin):
@@ -37,6 +41,33 @@ class Subskill(Base, IdMixin, TimestampMixin):
 
     skill: Mapped["Skill"] = relationship(back_populates="subskills")
     problem_links: Mapped[list["ProblemSubskill"]] = relationship(back_populates="subskill")
+    skill_links: Mapped[list["SkillSubskill"]] = relationship(
+        back_populates="subskill",
+        cascade="all, delete-orphan",
+    )
+
+
+class SkillSubskill(Base):
+    __tablename__ = "skill_subskills"
+    __table_args__ = (
+        PrimaryKeyConstraint("skill_id", "subskill_id", name="pk_skill_subskills"),
+        CheckConstraint("weight >= 0 AND weight <= 1", name="ck_skill_subskill_weight"),
+    )
+
+    skill_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("skills.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    subskill_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("subskills.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    weight: Mapped[float] = mapped_column(Float, nullable=False, default=1.0)
+
+    skill: Mapped["Skill"] = relationship(back_populates="subskill_links")
+    subskill: Mapped["Subskill"] = relationship(back_populates="skill_links")
 
 
 class SubskillPrerequisite(Base, IdMixin):
