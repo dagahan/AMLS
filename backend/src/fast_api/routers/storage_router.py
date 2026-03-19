@@ -4,7 +4,7 @@ from typing import TYPE_CHECKING, Literal
 
 from fastapi import APIRouter, Depends, File, Form, Request, Response, UploadFile
 
-from src.fast_api.dependencies import build_current_admin_dependency, build_current_user_dependency
+from src.fast_api.dependencies import ensure_admin_user, get_current_user
 from src.models.pydantic.storage import UploadedImageResponse
 from src.models.pydantic.user import UserResponse
 from src.storage.storage_manager import StorageManager
@@ -16,8 +16,6 @@ if TYPE_CHECKING:
 
 def get_storage_router(db: "DataBase") -> APIRouter:
     router = APIRouter(tags=["storage"])
-    current_admin = build_current_admin_dependency(db)
-    current_user = build_current_user_dependency(db)
     storage_manager = StorageManager(db)
 
 
@@ -34,8 +32,9 @@ def get_storage_router(db: "DataBase") -> APIRouter:
         request: Request,
         kind: Literal["condition", "solution"] = Form(...),
         files: list[UploadFile] = File(...),
-        user: "User" = Depends(current_admin),
+        user: "User" = Depends(get_current_user),
     ) -> list[UploadedImageResponse]:
+        ensure_admin_user(user)
         return await storage_manager.upload_problem_images(
             user_id=str(user.id),
             kind=kind,
@@ -52,7 +51,7 @@ def get_storage_router(db: "DataBase") -> APIRouter:
     async def upload_profile_image(
         request: Request,
         file: UploadFile = File(...),
-        user: "User" = Depends(current_user),
+        user: "User" = Depends(get_current_user),
     ) -> UserResponse:
         updated_user = await storage_manager.upload_profile_image(
             user_id=user.id,

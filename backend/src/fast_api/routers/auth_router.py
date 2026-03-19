@@ -4,7 +4,7 @@ from typing import TYPE_CHECKING
 
 from fastapi import APIRouter, Depends, Request
 
-from src.fast_api.dependencies import build_current_user_dependency
+from src.fast_api.dependencies import get_current_user
 from src.models.pydantic import (
     AccessValidationResponse,
     AuthUserResponse,
@@ -26,7 +26,6 @@ if TYPE_CHECKING:
 def get_auth_router(db: "DataBase") -> APIRouter:
     router = APIRouter(prefix="/auth", tags=["auth"])
     auth_service = AuthService(db)
-    current_user = build_current_user_dependency(db)
 
 
     def build_client_context(request: Request) -> ClientContext:
@@ -67,7 +66,7 @@ def get_auth_router(db: "DataBase") -> APIRouter:
 
 
     @router.get("/me", response_model=AuthUserResponse, status_code=200)
-    async def get_me(user: "User" = Depends(current_user)) -> AuthUserResponse:
+    async def get_me(user: "User" = Depends(get_current_user)) -> AuthUserResponse:
         return AuthUserResponse(user=UserResponse.model_validate(user))
 
 

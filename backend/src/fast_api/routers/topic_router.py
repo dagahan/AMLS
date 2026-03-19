@@ -6,8 +6,8 @@ from typing import TYPE_CHECKING
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import delete, select
 
+from src.fast_api.dependencies import ensure_admin_user, get_current_user, parse_optional_uuid
 from src.models.alchemy import Subtopic, Topic, TopicSubtopic
-from src.fast_api.dependencies import build_current_admin_dependency, parse_optional_uuid
 from src.models.pydantic import (
     MessageResponse,
     SubtopicCreate,
@@ -28,7 +28,6 @@ if TYPE_CHECKING:
 
 def get_topic_router(db: "DataBase") -> APIRouter:
     router = APIRouter()
-    current_admin = build_current_admin_dependency(db)
     mastery_cache_manager = MasteryCacheManager()
 
 
@@ -115,8 +114,9 @@ def get_topic_router(db: "DataBase") -> APIRouter:
     @router.post("/admin/topics", response_model=TopicResponse, status_code=201)
     async def create_topic(
         data: TopicCreate,
-        _: "User" = Depends(current_admin),
+        user: "User" = Depends(get_current_user),
     ) -> TopicResponse:
+        ensure_admin_user(user)
         async with db.session_ctx() as session:
             await ensure_topic_name_is_unique(session, data.name)
             topic = Topic(name=data.name)
@@ -130,15 +130,17 @@ def get_topic_router(db: "DataBase") -> APIRouter:
 
 
     @router.get("/admin/topics", response_model=list[TopicResponse], status_code=200)
-    async def list_admin_topics(_: "User" = Depends(current_admin)) -> list[TopicResponse]:
+    async def list_admin_topics(user: "User" = Depends(get_current_user)) -> list[TopicResponse]:
+        ensure_admin_user(user)
         return await list_topics()
 
 
     @router.get("/admin/topics/{topic_id}", response_model=TopicResponse, status_code=200)
     async def get_admin_topic(
         topic_id: uuid.UUID,
-        _: "User" = Depends(current_admin),
+        user: "User" = Depends(get_current_user),
     ) -> TopicResponse:
+        ensure_admin_user(user)
         return await get_topic(topic_id)
 
 
@@ -146,8 +148,9 @@ def get_topic_router(db: "DataBase") -> APIRouter:
     async def update_topic(
         topic_id: uuid.UUID,
         data: TopicUpdate,
-        _: "User" = Depends(current_admin),
+        user: "User" = Depends(get_current_user),
     ) -> TopicResponse:
+        ensure_admin_user(user)
         async with db.session_ctx() as session:
             topic = await get_topic_or_404(session, topic_id)
             if data.name is not None:
@@ -161,8 +164,9 @@ def get_topic_router(db: "DataBase") -> APIRouter:
     @router.delete("/admin/topics/{topic_id}", response_model=MessageResponse, status_code=200)
     async def delete_topic(
         topic_id: uuid.UUID,
-        _: "User" = Depends(current_admin),
+        user: "User" = Depends(get_current_user),
     ) -> MessageResponse:
+        ensure_admin_user(user)
         async with db.session_ctx() as session:
             topic = await get_topic_or_404(session, topic_id)
             await session.delete(topic)
@@ -173,8 +177,9 @@ def get_topic_router(db: "DataBase") -> APIRouter:
     @router.post("/admin/subtopics", response_model=SubtopicResponse, status_code=201)
     async def create_subtopic(
         data: SubtopicCreate,
-        _: "User" = Depends(current_admin),
+        user: "User" = Depends(get_current_user),
     ) -> SubtopicResponse:
+        ensure_admin_user(user)
         async with db.session_ctx() as session:
             await get_topic_or_404(session, data.topic_id)
             await ensure_subtopic_name_is_unique(session, data.topic_id, data.name)
@@ -192,16 +197,18 @@ def get_topic_router(db: "DataBase") -> APIRouter:
     @router.get("/admin/subtopics", response_model=list[SubtopicResponse], status_code=200)
     async def list_admin_subtopics(
         topic_id: str | None = Query(default=None),
-        _: "User" = Depends(current_admin),
+        user: "User" = Depends(get_current_user),
     ) -> list[SubtopicResponse]:
+        ensure_admin_user(user)
         return await list_subtopics(topic_id)
 
 
     @router.get("/admin/subtopics/{subtopic_id}", response_model=SubtopicResponse, status_code=200)
     async def get_admin_subtopic(
         subtopic_id: uuid.UUID,
-        _: "User" = Depends(current_admin),
+        user: "User" = Depends(get_current_user),
     ) -> SubtopicResponse:
+        ensure_admin_user(user)
         return await get_subtopic(subtopic_id)
 
 
@@ -209,8 +216,9 @@ def get_topic_router(db: "DataBase") -> APIRouter:
     async def update_subtopic(
         subtopic_id: uuid.UUID,
         data: SubtopicUpdate,
-        _: "User" = Depends(current_admin),
+        user: "User" = Depends(get_current_user),
     ) -> SubtopicResponse:
+        ensure_admin_user(user)
         async with db.session_ctx() as session:
             subtopic = await get_subtopic_or_404(session, subtopic_id)
             taxonomy_mapping_changed = False
@@ -252,8 +260,9 @@ def get_topic_router(db: "DataBase") -> APIRouter:
     @router.delete("/admin/subtopics/{subtopic_id}", response_model=MessageResponse, status_code=200)
     async def delete_subtopic(
         subtopic_id: uuid.UUID,
-        _: "User" = Depends(current_admin),
+        user: "User" = Depends(get_current_user),
     ) -> MessageResponse:
+        ensure_admin_user(user)
         async with db.session_ctx() as session:
             subtopic = await get_subtopic_or_404(session, subtopic_id)
             await session.delete(subtopic)

@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 
-from src.fast_api.dependencies import build_current_admin_dependency
+from src.fast_api.dependencies import ensure_admin_user, get_current_user
 from src.models.alchemy import Skill
 from src.models.pydantic import MessageResponse, SkillCreate, SkillResponse, SkillUpdate
 from src.services.mastery.mastery_cache_manager import MasteryCacheManager
@@ -20,7 +20,6 @@ if TYPE_CHECKING:
 
 def get_skill_router(db: "DataBase") -> APIRouter:
     router = APIRouter()
-    current_admin = build_current_admin_dependency(db)
     mastery_cache_manager = MasteryCacheManager()
 
 
@@ -61,8 +60,9 @@ def get_skill_router(db: "DataBase") -> APIRouter:
     @router.post("/admin/skills", response_model=SkillResponse, status_code=201)
     async def create_skill(
         data: SkillCreate,
-        _: "User" = Depends(current_admin),
+        user: "User" = Depends(get_current_user),
     ) -> SkillResponse:
+        ensure_admin_user(user)
         async with db.session_ctx() as session:
             await ensure_skill_name_is_unique(session, data.name)
             skill = Skill(name=data.name)
@@ -74,15 +74,17 @@ def get_skill_router(db: "DataBase") -> APIRouter:
 
 
     @router.get("/admin/skills", response_model=list[SkillResponse], status_code=200)
-    async def list_admin_skills(_: "User" = Depends(current_admin)) -> list[SkillResponse]:
+    async def list_admin_skills(user: "User" = Depends(get_current_user)) -> list[SkillResponse]:
+        ensure_admin_user(user)
         return await list_skills()
 
 
     @router.get("/admin/skills/{skill_id}", response_model=SkillResponse, status_code=200)
     async def get_admin_skill(
         skill_id: uuid.UUID,
-        _: "User" = Depends(current_admin),
+        user: "User" = Depends(get_current_user),
     ) -> SkillResponse:
+        ensure_admin_user(user)
         return await get_skill(skill_id)
 
 
@@ -90,8 +92,9 @@ def get_skill_router(db: "DataBase") -> APIRouter:
     async def update_skill(
         skill_id: uuid.UUID,
         data: SkillUpdate,
-        _: "User" = Depends(current_admin),
+        user: "User" = Depends(get_current_user),
     ) -> SkillResponse:
+        ensure_admin_user(user)
         async with db.session_ctx() as session:
             skill = await get_skill_or_404(session, skill_id)
             if data.name is not None:
@@ -105,8 +108,9 @@ def get_skill_router(db: "DataBase") -> APIRouter:
     @router.delete("/admin/skills/{skill_id}", response_model=MessageResponse, status_code=200)
     async def delete_skill(
         skill_id: uuid.UUID,
-        _: "User" = Depends(current_admin),
+        user: "User" = Depends(get_current_user),
     ) -> MessageResponse:
+        ensure_admin_user(user)
         async with db.session_ctx() as session:
             skill = await get_skill_or_404(session, skill_id)
             await session.delete(skill)

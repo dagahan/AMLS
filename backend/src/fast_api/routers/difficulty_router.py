@@ -6,8 +6,8 @@ from typing import TYPE_CHECKING
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 
+from src.fast_api.dependencies import ensure_admin_user, get_current_user
 from src.models.alchemy import Difficulty
-from src.fast_api.dependencies import build_current_admin_dependency
 from src.models.pydantic import DifficultyCreate, DifficultyResponse, DifficultyUpdate, MessageResponse
 from src.services.mastery.mastery_cache_manager import MasteryCacheManager
 
@@ -20,7 +20,6 @@ if TYPE_CHECKING:
 
 def get_difficulty_router(db: "DataBase") -> APIRouter:
     router = APIRouter()
-    current_admin = build_current_admin_dependency(db)
     mastery_cache_manager = MasteryCacheManager()
 
 
@@ -64,8 +63,9 @@ def get_difficulty_router(db: "DataBase") -> APIRouter:
     @router.post("/admin/difficulties", response_model=DifficultyResponse, status_code=201)
     async def create_difficulty(
         data: DifficultyCreate,
-        _: "User" = Depends(current_admin),
+        user: "User" = Depends(get_current_user),
     ) -> DifficultyResponse:
+        ensure_admin_user(user)
         async with db.session_ctx() as session:
             await ensure_name_is_unique(session, data.name)
             difficulty = Difficulty(name=data.name, coefficient=data.coefficient)
@@ -79,15 +79,17 @@ def get_difficulty_router(db: "DataBase") -> APIRouter:
 
 
     @router.get("/admin/difficulties", response_model=list[DifficultyResponse], status_code=200)
-    async def list_admin_difficulties(_: "User" = Depends(current_admin)) -> list[DifficultyResponse]:
+    async def list_admin_difficulties(user: "User" = Depends(get_current_user)) -> list[DifficultyResponse]:
+        ensure_admin_user(user)
         return await list_difficulties()
 
 
     @router.get("/admin/difficulties/{difficulty_id}", response_model=DifficultyResponse, status_code=200)
     async def get_admin_difficulty(
         difficulty_id: uuid.UUID,
-        _: "User" = Depends(current_admin),
+        user: "User" = Depends(get_current_user),
     ) -> DifficultyResponse:
+        ensure_admin_user(user)
         return await get_difficulty(difficulty_id)
 
 
@@ -95,8 +97,9 @@ def get_difficulty_router(db: "DataBase") -> APIRouter:
     async def update_difficulty(
         difficulty_id: uuid.UUID,
         data: DifficultyUpdate,
-        _: "User" = Depends(current_admin),
+        user: "User" = Depends(get_current_user),
     ) -> DifficultyResponse:
+        ensure_admin_user(user)
         async with db.session_ctx() as session:
             difficulty = await get_difficulty_or_404(session, difficulty_id)
 
@@ -118,8 +121,9 @@ def get_difficulty_router(db: "DataBase") -> APIRouter:
     @router.delete("/admin/difficulties/{difficulty_id}", response_model=MessageResponse, status_code=200)
     async def delete_difficulty(
         difficulty_id: uuid.UUID,
-        _: "User" = Depends(current_admin),
+        user: "User" = Depends(get_current_user),
     ) -> MessageResponse:
+        ensure_admin_user(user)
         async with db.session_ctx() as session:
             difficulty = await get_difficulty_or_404(session, difficulty_id)
             await session.delete(difficulty)

@@ -6,8 +6,8 @@ from typing import TYPE_CHECKING
 from fastapi import APIRouter, Depends, Query
 
 from src.fast_api.dependencies import (
-    build_current_admin_dependency,
-    build_current_user_dependency,
+    ensure_admin_user,
+    get_current_user,
     parse_optional_uuid,
 )
 from src.models.pydantic import (
@@ -31,8 +31,6 @@ if TYPE_CHECKING:
 
 def get_problem_router(db: "DataBase") -> APIRouter:
     router = APIRouter()
-    current_admin = build_current_admin_dependency(db)
-    current_user = build_current_user_dependency(db)
     admin_problem_service = AdminProblemService(db)
     problem_query_service = ProblemQueryService(db)
     problem_submission_service = ProblemSubmissionService(db)
@@ -63,7 +61,7 @@ def get_problem_router(db: "DataBase") -> APIRouter:
 
 
     @router.get("/student/progress", response_model=StudentProgressResponse, status_code=200)
-    async def get_student_progress(user: "User" = Depends(current_user)) -> StudentProgressResponse:
+    async def get_student_progress(user: "User" = Depends(get_current_user)) -> StudentProgressResponse:
         return await problem_submission_service.get_student_progress(user.id)
 
 
@@ -75,7 +73,7 @@ def get_problem_router(db: "DataBase") -> APIRouter:
     async def submit_problem(
         problem_id: uuid.UUID,
         data: ProblemSubmitRequest,
-        user: "User" = Depends(current_user),
+        user: "User" = Depends(get_current_user),
     ) -> ProblemSubmitResponse:
         return await problem_submission_service.submit_problem(user.id, problem_id, data.answer_option_id)
 
@@ -83,8 +81,9 @@ def get_problem_router(db: "DataBase") -> APIRouter:
     @router.post("/admin/problems", response_model=AdminProblemResponse, status_code=201)
     async def create_problem(
         data: ProblemCreate,
-        _: "User" = Depends(current_admin),
+        user: "User" = Depends(get_current_user),
     ) -> AdminProblemResponse:
+        ensure_admin_user(user)
         return await admin_problem_service.create_problem(data)
 
 
@@ -96,8 +95,9 @@ def get_problem_router(db: "DataBase") -> APIRouter:
         skill_id: str | None = Query(default=None),
         limit: int = Query(default=20, ge=1, le=100),
         offset: int = Query(default=0, ge=0),
-        _: "User" = Depends(current_admin),
+        user: "User" = Depends(get_current_user),
     ) -> list[AdminProblemResponse]:
+        ensure_admin_user(user)
         return await problem_query_service.list_admin_problems(
             topic_id=parse_optional_uuid(topic_id, "topic_id"),
             subtopic_id=parse_optional_uuid(subtopic_id, "subtopic_id"),
@@ -111,8 +111,9 @@ def get_problem_router(db: "DataBase") -> APIRouter:
     @router.get("/admin/problems/{problem_id}", response_model=AdminProblemResponse, status_code=200)
     async def get_admin_problem(
         problem_id: uuid.UUID,
-        _: "User" = Depends(current_admin),
+        user: "User" = Depends(get_current_user),
     ) -> AdminProblemResponse:
+        ensure_admin_user(user)
         return await problem_query_service.get_admin_problem(problem_id)
 
 
@@ -120,16 +121,18 @@ def get_problem_router(db: "DataBase") -> APIRouter:
     async def update_problem(
         problem_id: uuid.UUID,
         data: ProblemUpdate,
-        _: "User" = Depends(current_admin),
+        user: "User" = Depends(get_current_user),
     ) -> AdminProblemResponse:
+        ensure_admin_user(user)
         return await admin_problem_service.update_problem(problem_id, data)
 
 
     @router.delete("/admin/problems/{problem_id}", response_model=MessageResponse, status_code=200)
     async def delete_problem(
         problem_id: uuid.UUID,
-        _: "User" = Depends(current_admin),
+        user: "User" = Depends(get_current_user),
     ) -> MessageResponse:
+        ensure_admin_user(user)
         await admin_problem_service.delete_problem(problem_id)
         return MessageResponse(message="Problem deleted")
 
