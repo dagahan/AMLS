@@ -5,13 +5,11 @@ from typing import TYPE_CHECKING
 
 from fastapi import APIRouter, Depends, Query
 
-from src.fast_api.dependencies import (
-    ensure_admin_user,
-    get_current_user,
-    parse_optional_uuid,
-)
+from src.db.enums import UserRole
+from src.fast_api.dependencies import parse_optional_uuid, require_role
 from src.models.pydantic import (
     AdminProblemResponse,
+    AuthContext,
     MessageResponse,
     ProblemCreate,
     ProblemResponse,
@@ -26,7 +24,6 @@ from src.services.problem.problem_submission_service import ProblemSubmissionSer
 
 if TYPE_CHECKING:
     from src.db.database import DataBase
-    from src.models.alchemy import User
 
 
 def get_problem_router(db: "DataBase") -> APIRouter:
@@ -44,6 +41,7 @@ def get_problem_router(db: "DataBase") -> APIRouter:
         skill_id: str | None = Query(default=None),
         limit: int = Query(default=20, ge=1, le=100),
         offset: int = Query(default=0, ge=0),
+        auth: AuthContext = Depends(require_role()),
     ) -> list[ProblemResponse]:
         return await problem_query_service.list_problems(
             topic_id=parse_optional_uuid(topic_id, "topic_id"),
@@ -56,13 +54,18 @@ def get_problem_router(db: "DataBase") -> APIRouter:
 
 
     @router.get("/problems/{problem_id}", response_model=ProblemResponse, status_code=200)
-    async def get_problem(problem_id: uuid.UUID) -> ProblemResponse:
+    async def get_problem(
+        problem_id: uuid.UUID,
+        auth: AuthContext = Depends(require_role()),
+    ) -> ProblemResponse:
         return await problem_query_service.get_problem(problem_id)
 
 
     @router.get("/student/progress", response_model=StudentProgressResponse, status_code=200)
-    async def get_student_progress(user: "User" = Depends(get_current_user)) -> StudentProgressResponse:
-        return await problem_submission_service.get_student_progress(user.id)
+    async def get_student_progress(
+        auth: AuthContext = Depends(require_role()),
+    ) -> StudentProgressResponse:
+        return await problem_submission_service.get_student_progress(auth.user.id)
 
 
     @router.post(
@@ -73,17 +76,20 @@ def get_problem_router(db: "DataBase") -> APIRouter:
     async def submit_problem(
         problem_id: uuid.UUID,
         data: ProblemSubmitRequest,
-        user: "User" = Depends(get_current_user),
+        auth: AuthContext = Depends(require_role()),
     ) -> ProblemSubmitResponse:
-        return await problem_submission_service.submit_problem(user.id, problem_id, data.answer_option_id)
+        return await problem_submission_service.submit_problem(
+            auth.user.id,
+            problem_id,
+            data.answer_option_id,
+        )
 
 
     @router.post("/admin/problems", response_model=AdminProblemResponse, status_code=201)
     async def create_problem(
         data: ProblemCreate,
-        user: "User" = Depends(get_current_user),
+        auth: AuthContext = Depends(require_role(role=UserRole.ADMIN)),
     ) -> AdminProblemResponse:
-        ensure_admin_user(user)
         return await admin_problem_service.create_problem(data)
 
 
@@ -95,9 +101,8 @@ def get_problem_router(db: "DataBase") -> APIRouter:
         skill_id: str | None = Query(default=None),
         limit: int = Query(default=20, ge=1, le=100),
         offset: int = Query(default=0, ge=0),
-        user: "User" = Depends(get_current_user),
+        auth: AuthContext = Depends(require_role(role=UserRole.ADMIN)),
     ) -> list[AdminProblemResponse]:
-        ensure_admin_user(user)
         return await problem_query_service.list_admin_problems(
             topic_id=parse_optional_uuid(topic_id, "topic_id"),
             subtopic_id=parse_optional_uuid(subtopic_id, "subtopic_id"),
@@ -111,9 +116,8 @@ def get_problem_router(db: "DataBase") -> APIRouter:
     @router.get("/admin/problems/{problem_id}", response_model=AdminProblemResponse, status_code=200)
     async def get_admin_problem(
         problem_id: uuid.UUID,
-        user: "User" = Depends(get_current_user),
+        auth: AuthContext = Depends(require_role(role=UserRole.ADMIN)),
     ) -> AdminProblemResponse:
-        ensure_admin_user(user)
         return await problem_query_service.get_admin_problem(problem_id)
 
 
@@ -121,18 +125,16 @@ def get_problem_router(db: "DataBase") -> APIRouter:
     async def update_problem(
         problem_id: uuid.UUID,
         data: ProblemUpdate,
-        user: "User" = Depends(get_current_user),
+        auth: AuthContext = Depends(require_role(role=UserRole.ADMIN)),
     ) -> AdminProblemResponse:
-        ensure_admin_user(user)
         return await admin_problem_service.update_problem(problem_id, data)
 
 
     @router.delete("/admin/problems/{problem_id}", response_model=MessageResponse, status_code=200)
     async def delete_problem(
         problem_id: uuid.UUID,
-        user: "User" = Depends(get_current_user),
+        auth: AuthContext = Depends(require_role(role=UserRole.ADMIN)),
     ) -> MessageResponse:
-        ensure_admin_user(user)
         await admin_problem_service.delete_problem(problem_id)
         return MessageResponse(message="Problem deleted")
 

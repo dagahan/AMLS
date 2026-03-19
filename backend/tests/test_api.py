@@ -45,10 +45,11 @@ async def get_current_user_id(client: AsyncClient, access_token: str) -> str:
     return str(response.json()["user"]["id"])
 
 
-async def get_problem_ids_for_creation(client: AsyncClient) -> tuple[str, str, list[str]]:
-    subtopics_response = await client.get("/subtopics")
-    difficulties_response = await client.get("/difficulties")
-    skills_response = await client.get("/skills")
+async def get_problem_ids_for_creation(client: AsyncClient, access_token: str) -> tuple[str, str, list[str]]:
+    headers = build_auth_headers(access_token)
+    subtopics_response = await client.get("/subtopics", headers=headers)
+    difficulties_response = await client.get("/difficulties", headers=headers)
+    skills_response = await client.get("/skills", headers=headers)
 
     subtopics = subtopics_response.json()
     difficulties = difficulties_response.json()
@@ -77,18 +78,38 @@ async def get_problem_answer_ids(session: AsyncSession, problem_id: str) -> tupl
     return str(correct_option.id), str(wrong_option.id)
 
 
-async def test_public_filters_accept_empty_uuid_values(client: AsyncClient) -> None:
+async def test_protected_routes_require_authentication(client: AsyncClient) -> None:
     subtopics_response = await client.get("/subtopics?topic_id=")
     skills_response = await client.get("/skills")
     problems_response = await client.get("/problems?topic_id=")
+
+    assert subtopics_response.status_code == 401
+    assert skills_response.status_code == 401
+    assert problems_response.status_code == 401
+
+
+async def test_filters_accept_empty_uuid_values(
+    client: AsyncClient,
+    student_tokens: dict[str, str],
+) -> None:
+    headers = build_auth_headers(student_tokens["access_token"])
+    subtopics_response = await client.get("/subtopics?topic_id=", headers=headers)
+    skills_response = await client.get("/skills", headers=headers)
+    problems_response = await client.get("/problems?topic_id=", headers=headers)
 
     assert subtopics_response.status_code == 200
     assert skills_response.status_code == 200
     assert problems_response.status_code == 200
 
 
-async def test_public_problem_list_can_return_zero_results(client: AsyncClient) -> None:
-    response = await client.get(f"/problems?topic_id={uuid.uuid4()}")
+async def test_problem_list_can_return_zero_results(
+    client: AsyncClient,
+    student_tokens: dict[str, str],
+) -> None:
+    response = await client.get(
+        f"/problems?topic_id={uuid.uuid4()}",
+        headers=build_auth_headers(student_tokens["access_token"]),
+    )
 
     assert response.status_code == 200
     assert response.json() == []
@@ -126,7 +147,10 @@ async def test_admin_problem_crud_and_public_shape(
     client: AsyncClient,
     admin_tokens: dict[str, str],
 ) -> None:
-    subtopic_id, difficulty_id, skill_ids = await get_problem_ids_for_creation(client)
+    subtopic_id, difficulty_id, skill_ids = await get_problem_ids_for_creation(
+        client,
+        admin_tokens["access_token"],
+    )
     condition = f"Test condition {uuid.uuid4()}"
 
     create_response = await client.post(
@@ -155,7 +179,10 @@ async def test_admin_problem_crud_and_public_shape(
     assert created_problem["right_answer"] == "12"
     assert all("text" in item for item in created_problem["answer_options"])
 
-    public_response = await client.get(f"/problems/{problem_id}")
+    public_response = await client.get(
+        f"/problems/{problem_id}",
+        headers=build_auth_headers(admin_tokens["access_token"]),
+    )
     assert public_response.status_code == 200
     public_problem = public_response.json()
     assert public_problem["condition"] == condition
@@ -176,7 +203,10 @@ async def test_admin_problem_crud_and_public_shape(
     )
     assert delete_response.status_code == 200
 
-    missing_response = await client.get(f"/problems/{problem_id}")
+    missing_response = await client.get(
+        f"/problems/{problem_id}",
+        headers=build_auth_headers(admin_tokens["access_token"]),
+    )
     assert missing_response.status_code == 404
 
 
@@ -185,7 +215,10 @@ async def test_student_submission_updates_progress(
     database: DataBase,
     student_tokens: dict[str, str],
 ) -> None:
-    list_response = await client.get("/problems")
+    list_response = await client.get(
+        "/problems",
+        headers=build_auth_headers(student_tokens["access_token"]),
+    )
     assert list_response.status_code == 200
     problem_id = list_response.json()[0]["id"]
 
@@ -233,7 +266,10 @@ async def test_responses_and_mastery_endpoints(
     database: DataBase,
     student_tokens: dict[str, str],
 ) -> None:
-    list_response = await client.get("/problems")
+    list_response = await client.get(
+        "/problems",
+        headers=build_auth_headers(student_tokens["access_token"]),
+    )
     assert list_response.status_code == 200
     problem_payload = list_response.json()[0]
     problem_id = problem_payload["id"]

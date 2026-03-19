@@ -1,6 +1,7 @@
 from src.models.pydantic.auth import (
     AccessPayload,
     AccessValidationResponse,
+    AuthContext,
     AuthUserResponse,
     ClientContext,
     LoginRequest,
@@ -57,6 +58,7 @@ __all__ = [
     "AccessValidationResponse",
     "AdminProblemResponse",
     "AmlsSchema",
+    "AuthContext",
     "AuthUserResponse",
     "AvatarSnapshot",
     "ClientContext",

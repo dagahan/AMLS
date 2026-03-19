@@ -5,8 +5,9 @@ from typing import TYPE_CHECKING
 
 from fastapi import APIRouter, Depends
 
-from src.fast_api.dependencies import get_current_user
+from src.fast_api.dependencies import require_role
 from src.models.pydantic import (
+    AuthContext,
     MasteryOverviewResponse,
     MasteryValueResponse,
     ResponseCreate,
@@ -16,7 +17,6 @@ from src.services.mastery import MasteryService, ResponseService
 
 if TYPE_CHECKING:
     from src.db.database import DataBase
-    from src.models.alchemy import User
 
 
 def get_mastery_router(db: "DataBase") -> APIRouter:
@@ -28,24 +28,24 @@ def get_mastery_router(db: "DataBase") -> APIRouter:
     @router.post("/responses", response_model=ResponseCreateResponse, status_code=201)
     async def create_response(
         data: ResponseCreate,
-        user: "User" = Depends(get_current_user),
+        auth: AuthContext = Depends(require_role()),
     ) -> ResponseCreateResponse:
-        return await response_service.create_response(user.id, data)
+        return await response_service.create_response(auth.user.id, data)
 
 
     @router.get("/mastery/overview", response_model=MasteryOverviewResponse, status_code=200)
     async def get_mastery_overview(
-        user: "User" = Depends(get_current_user),
+        auth: AuthContext = Depends(require_role()),
     ) -> MasteryOverviewResponse:
-        return await mastery_service.get_mastery_overview(user.id)
+        return await mastery_service.get_mastery_overview(auth.user.id)
 
 
     @router.get("/mastery/skills/{skill_id}", response_model=MasteryValueResponse, status_code=200)
     async def get_skill_mastery(
         skill_id: uuid.UUID,
-        user: "User" = Depends(get_current_user),
+        auth: AuthContext = Depends(require_role()),
     ) -> MasteryValueResponse:
-        return await mastery_service.get_skill_mastery(user.id, skill_id)
+        return await mastery_service.get_skill_mastery(auth.user.id, skill_id)
 
 
     @router.get(
@@ -55,17 +55,17 @@ def get_mastery_router(db: "DataBase") -> APIRouter:
     )
     async def get_subtopic_mastery(
         subtopic_id: uuid.UUID,
-        user: "User" = Depends(get_current_user),
+        auth: AuthContext = Depends(require_role()),
     ) -> MasteryValueResponse:
-        return await mastery_service.get_subtopic_mastery(user.id, subtopic_id)
+        return await mastery_service.get_subtopic_mastery(auth.user.id, subtopic_id)
 
 
     @router.get("/mastery/topics/{topic_id}", response_model=MasteryValueResponse, status_code=200)
     async def get_topic_mastery(
         topic_id: uuid.UUID,
-        user: "User" = Depends(get_current_user),
+        auth: AuthContext = Depends(require_role()),
     ) -> MasteryValueResponse:
-        return await mastery_service.get_topic_mastery(user.id, topic_id)
+        return await mastery_service.get_topic_mastery(auth.user.id, topic_id)
 
 
     return router

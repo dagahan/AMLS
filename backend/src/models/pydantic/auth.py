@@ -60,5 +60,10 @@ class TokenPairResponse(AmlsSchema):
     refresh_token: str
 
 
+class AuthContext(AmlsSchema):
+    user: UserResponse
+    payload: AccessPayload
+
+
 class AuthUserResponse(AmlsSchema):
     user: UserResponse

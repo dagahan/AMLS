@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import uuid
+from collections.abc import Awaitable, Callable
 from typing import TYPE_CHECKING, cast
 
 from fastapi import Depends, HTTPException, Request, status
@@ -9,61 +10,69 @@ from sqlalchemy import select
 
 from src.db.enums import UserRole
 from src.models.alchemy import User
+from src.models.pydantic import AuthContext, UserResponse
 from src.services.auth.auth_service import AuthService
-from src.services.jwt.jwt_parser import JwtParser
 
 if TYPE_CHECKING:
     from src.db.database import DataBase
 
 
-bearer_scheme = HTTPBearer()
+bearer_scheme = HTTPBearer(auto_error=False)
 
 
-async def get_current_user(
-    request: Request,
-    credentials: HTTPAuthorizationCredentials = Depends(bearer_scheme),
-) -> User:
-    db = cast("DataBase", request.app.state.database)
-    auth_service = AuthService(db)
-    jwt_parser = JwtParser()
+def require_role(role: UserRole | None = None) -> Callable[..., Awaitable[AuthContext]]:
 
-    await auth_service.validate_access_token(credentials.credentials)
-    payload = jwt_parser.decode_token(credentials.credentials)
+    async def resolve_auth_context(
+        request: Request,
+        credentials: HTTPAuthorizationCredentials | None = Depends(bearer_scheme),
+    ) -> AuthContext:
+        if credentials is None:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Authorization required",
+            )
 
-    user_id = payload.get("sub")
-    if not isinstance(user_id, str):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid token payload",
+        db = cast("DataBase", request.app.state.database)
+        auth_service = AuthService(db)
+        payload = await auth_service.validate_access_token(credentials.credentials)
+
+        try:
+            user_id = uuid.UUID(payload.sub)
+        except ValueError as error:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid token subject",
+            ) from error
+
+        async with db.session_ctx() as session:
+            result = await session.execute(select(User).where(User.id == user_id))
+            user = result.scalar_one_or_none()
+
+        if user is None:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="User not found",
+            )
+
+        if not user.is_active:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="User is inactive",
+            )
+
+        if role is not None and user.role != role:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=f"{role.value.capitalize()} role required",
+            )
+
+        return AuthContext(
+            user=UserResponse.model_validate(user),
+            payload=payload,
         )
 
-    try:
-        parsed_user_id = uuid.UUID(user_id)
-    except ValueError as error:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid token subject",
-        ) from error
 
-    async with db.session_ctx() as session:
-        result = await session.execute(select(User).where(User.id == parsed_user_id))
-        user = result.scalar_one_or_none()
-
-    if user is None:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found")
-
-    if not user.is_active:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="User is inactive")
-
-    return user
-
-
-def ensure_admin_user(user: User) -> None:
-    if user.role != UserRole.ADMIN:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Admin rights required",
-        )
+    return resolve_auth_context
 
 
 def parse_optional_uuid(raw_value: str | None, field_name: str) -> uuid.UUID | None:

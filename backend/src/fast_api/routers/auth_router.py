@@ -4,7 +4,8 @@ from typing import TYPE_CHECKING
 
 from fastapi import APIRouter, Depends, Request
 
-from src.fast_api.dependencies import get_current_user
+from src.fast_api.dependencies import require_role
+from src.models.pydantic import AuthContext
 from src.models.pydantic import (
     AccessValidationResponse,
     AuthUserResponse,
@@ -20,7 +21,6 @@ from src.services.auth.auth_service import AuthService
 
 if TYPE_CHECKING:
     from src.db.database import DataBase
-    from src.models.alchemy import User
 
 
 def get_auth_router(db: "DataBase") -> APIRouter:
@@ -61,13 +61,13 @@ def get_auth_router(db: "DataBase") -> APIRouter:
 
     @router.post("/access/validate", response_model=AccessValidationResponse, status_code=200)
     async def validate_access(data: ValidateAccessRequest) -> AccessValidationResponse:
-        is_valid = await auth_service.validate_access_token(data.access_token)
-        return AccessValidationResponse(valid=is_valid)
+        await auth_service.validate_access_token(data.access_token)
+        return AccessValidationResponse(valid=True)
 
 
     @router.get("/me", response_model=AuthUserResponse, status_code=200)
-    async def get_me(user: "User" = Depends(get_current_user)) -> AuthUserResponse:
-        return AuthUserResponse(user=UserResponse.model_validate(user))
+    async def get_me(auth: AuthContext = Depends(require_role())) -> AuthUserResponse:
+        return AuthUserResponse(user=auth.user)
 
 
     return router

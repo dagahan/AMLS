@@ -6,16 +6,16 @@ from typing import TYPE_CHECKING
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 
-from src.fast_api.dependencies import ensure_admin_user, get_current_user
+from src.db.enums import UserRole
+from src.fast_api.dependencies import require_role
 from src.models.alchemy import Skill
-from src.models.pydantic import MessageResponse, SkillCreate, SkillResponse, SkillUpdate
+from src.models.pydantic import AuthContext, MessageResponse, SkillCreate, SkillResponse, SkillUpdate
 from src.services.mastery.mastery_cache_manager import MasteryCacheManager
 
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
 
     from src.db.database import DataBase
-    from src.models.alchemy import User
 
 
 def get_skill_router(db: "DataBase") -> APIRouter:
@@ -43,7 +43,9 @@ def get_skill_router(db: "DataBase") -> APIRouter:
 
 
     @router.get("/skills", response_model=list[SkillResponse], status_code=200)
-    async def list_skills() -> list[SkillResponse]:
+    async def list_skills(
+        auth: AuthContext = Depends(require_role()),
+    ) -> list[SkillResponse]:
         async with db.session_ctx() as session:
             result = await session.execute(select(Skill).order_by(Skill.name))
             skills = result.scalars().all()
@@ -51,7 +53,10 @@ def get_skill_router(db: "DataBase") -> APIRouter:
 
 
     @router.get("/skills/{skill_id}", response_model=SkillResponse, status_code=200)
-    async def get_skill(skill_id: uuid.UUID) -> SkillResponse:
+    async def get_skill(
+        skill_id: uuid.UUID,
+        auth: AuthContext = Depends(require_role()),
+    ) -> SkillResponse:
         async with db.session_ctx() as session:
             skill = await get_skill_or_404(session, skill_id)
         return SkillResponse.model_validate(skill)
@@ -60,9 +65,8 @@ def get_skill_router(db: "DataBase") -> APIRouter:
     @router.post("/admin/skills", response_model=SkillResponse, status_code=201)
     async def create_skill(
         data: SkillCreate,
-        user: "User" = Depends(get_current_user),
+        auth: AuthContext = Depends(require_role(role=UserRole.ADMIN)),
     ) -> SkillResponse:
-        ensure_admin_user(user)
         async with db.session_ctx() as session:
             await ensure_skill_name_is_unique(session, data.name)
             skill = Skill(name=data.name)
@@ -74,27 +78,26 @@ def get_skill_router(db: "DataBase") -> APIRouter:
 
 
     @router.get("/admin/skills", response_model=list[SkillResponse], status_code=200)
-    async def list_admin_skills(user: "User" = Depends(get_current_user)) -> list[SkillResponse]:
-        ensure_admin_user(user)
-        return await list_skills()
+    async def list_admin_skills(
+        auth: AuthContext = Depends(require_role(role=UserRole.ADMIN)),
+    ) -> list[SkillResponse]:
+        return await list_skills(auth)
 
 
     @router.get("/admin/skills/{skill_id}", response_model=SkillResponse, status_code=200)
     async def get_admin_skill(
         skill_id: uuid.UUID,
-        user: "User" = Depends(get_current_user),
+        auth: AuthContext = Depends(require_role(role=UserRole.ADMIN)),
     ) -> SkillResponse:
-        ensure_admin_user(user)
-        return await get_skill(skill_id)
+        return await get_skill(skill_id, auth)
 
 
     @router.patch("/admin/skills/{skill_id}", response_model=SkillResponse, status_code=200)
     async def update_skill(
         skill_id: uuid.UUID,
         data: SkillUpdate,
-        user: "User" = Depends(get_current_user),
+        auth: AuthContext = Depends(require_role(role=UserRole.ADMIN)),
     ) -> SkillResponse:
-        ensure_admin_user(user)
         async with db.session_ctx() as session:
             skill = await get_skill_or_404(session, skill_id)
             if data.name is not None:
@@ -108,9 +111,8 @@ def get_skill_router(db: "DataBase") -> APIRouter:
     @router.delete("/admin/skills/{skill_id}", response_model=MessageResponse, status_code=200)
     async def delete_skill(
         skill_id: uuid.UUID,
-        user: "User" = Depends(get_current_user),
+        auth: AuthContext = Depends(require_role(role=UserRole.ADMIN)),
     ) -> MessageResponse:
-        ensure_admin_user(user)
         async with db.session_ctx() as session:
             skill = await get_skill_or_404(session, skill_id)
             await session.delete(skill)

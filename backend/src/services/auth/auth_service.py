@@ -8,7 +8,7 @@ from sqlalchemy import select
 from src.core.utils import PasswordTools
 from src.db.enums import UserRole
 from src.models.alchemy import User
-from src.models.pydantic import ClientContext, RegisterRequest, TokenPairResponse
+from src.models.pydantic import AccessPayload, ClientContext, RegisterRequest, TokenPairResponse
 from src.services.auth.sessions_manager import SessionsManager
 from src.services.jwt.jwt_parser import JwtParser
 from src.transaction_manager.transaction_manager import execute_atomic_step, transactional
@@ -109,39 +109,37 @@ class AuthService:
         return TokenPairResponse(access_token=access_token, refresh_token=refresh_token)
 
 
-    async def validate_access_token(self, access_token: str) -> bool:
-        payload: dict[str, Any] = self.jwt_parser.decode_token(access_token)
+    async def validate_access_token(self, access_token: str) -> AccessPayload:
+        raw_payload: dict[str, Any] = self.jwt_parser.decode_token(access_token)
 
-        user_id = payload.get("sub")
-        session_id = payload.get("sid")
-        expires_at = payload.get("exp")
-
-        if not isinstance(user_id, str) or not isinstance(session_id, str) or not expires_at:
+        try:
+            payload = AccessPayload.model_validate(raw_payload)
+        except ValueError as error:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Invalid token payload",
-            )
+            ) from error
 
-        session = self.sessions_manager.get_session(session_id)
+        session = self.sessions_manager.get_session(payload.sid)
         if session is None:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Session expired",
             )
 
-        if session.sub != user_id:
+        if session.sub != payload.sub:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Token does not match session user",
             )
 
-        if not self.sessions_manager.touch_session(session_id):
+        if not self.sessions_manager.touch_session(payload.sid):
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Session expired",
             )
 
-        return True
+        return payload
 
 
     async def refresh_tokens(self, refresh_token: str) -> TokenPairResponse:
