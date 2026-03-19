@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 import uuid
+from decimal import Decimal
 from typing import TYPE_CHECKING
 from typing import cast
 
@@ -9,6 +10,7 @@ from sqlalchemy import select
 
 from src.db.database import DataBase
 from src.models.alchemy import Problem, ProblemAnswerOption
+from src.services.mastery.mastery_cache_manager import MasteryCacheManager
 from src.s3.s3_connector import S3Client
 
 if TYPE_CHECKING:
@@ -26,6 +28,21 @@ def build_mastery_map(items: list[dict[str, object]]) -> dict[str, float]:
         str(item["id"]): float(cast("float", item["mastery"]))
         for item in items
     }
+
+
+def calculate_expected_mastery(success_sum: str, failure_sum: str) -> float:
+    alpha = Decimal("2") + Decimal(success_sum)
+    beta = Decimal("2") + Decimal(failure_sum)
+    return float(alpha / (alpha + beta))
+
+
+async def get_current_user_id(client: AsyncClient, access_token: str) -> str:
+    response = await client.get(
+        "/auth/me",
+        headers=build_auth_headers(access_token),
+    )
+    assert response.status_code == 200
+    return str(response.json()["user"]["id"])
 
 
 async def get_problem_ids_for_creation(client: AsyncClient) -> tuple[str, str, list[str]]:
@@ -257,12 +274,25 @@ async def test_responses_and_mastery_endpoints(
     updated_subtopic_mastery = build_mastery_map(response_payload["subtopics"])
     updated_topic_mastery = build_mastery_map(response_payload["topics"])
 
-    for mastery_value in updated_skill_mastery.values():
-        assert mastery_value < 0.5
+    expected_wrong_skill_values = sorted(
+        [
+            calculate_expected_mastery("0", "0.9"),
+            calculate_expected_mastery("0", "0.6"),
+        ]
+    )
+    observed_wrong_skill_values = sorted(updated_skill_mastery.values())
+    assert all(
+        abs(observed - expected) < 1e-6
+        for observed, expected in zip(observed_wrong_skill_values, expected_wrong_skill_values, strict=True)
+    )
+
+    expected_wrong_subtopic_mastery = calculate_expected_mastery("0", "1.5")
+    expected_wrong_topic_mastery = calculate_expected_mastery("0", "1.5")
+
     for mastery_value in updated_subtopic_mastery.values():
-        assert mastery_value < 0.5
+        assert abs(mastery_value - expected_wrong_subtopic_mastery) < 1e-6
     for mastery_value in updated_topic_mastery.values():
-        assert mastery_value < 0.5
+        assert abs(mastery_value - expected_wrong_topic_mastery) < 1e-6
 
     first_skill_id = response_payload["skills"][0]["id"]
     first_topic_id = response_payload["topics"][0]["id"]
@@ -306,20 +336,54 @@ async def test_responses_and_mastery_endpoints(
     final_subtopic_mastery = build_mastery_map(final_overview["subtopics"])
     final_topic_mastery = build_mastery_map(final_overview["topics"])
 
+    expected_correct_skill_values = sorted(
+        [
+            calculate_expected_mastery("0.9", "0"),
+            calculate_expected_mastery("0.6", "0"),
+        ]
+    )
+    observed_correct_skill_values = sorted(final_skill_mastery.values())
+    assert all(
+        abs(observed - expected) < 1e-6
+        for observed, expected in zip(observed_correct_skill_values, expected_correct_skill_values, strict=True)
+    )
+
+    expected_correct_subtopic_mastery = calculate_expected_mastery("1.5", "0")
+    expected_correct_topic_mastery = calculate_expected_mastery("1.5", "0")
+
     for skill_id, mastery_value in updated_skill_mastery.items():
         assert initial_skill_mastery[skill_id] == 0.5
-        assert abs(final_skill_mastery[skill_id] - 0.5) < 1e-6
+        assert final_skill_mastery[skill_id] > 0.5
         assert mastery_value != final_skill_mastery[skill_id]
 
     for current_subtopic_id, mastery_value in updated_subtopic_mastery.items():
         assert initial_subtopic_mastery[current_subtopic_id] == 0.5
-        assert abs(final_subtopic_mastery[current_subtopic_id] - 0.5) < 1e-6
+        assert abs(final_subtopic_mastery[current_subtopic_id] - expected_correct_subtopic_mastery) < 1e-6
         assert mastery_value != final_subtopic_mastery[current_subtopic_id]
 
     for topic_id, mastery_value in updated_topic_mastery.items():
         assert initial_topic_mastery[topic_id] == 0.5
-        assert abs(final_topic_mastery[topic_id] - 0.5) < 1e-6
+        assert abs(final_topic_mastery[topic_id] - expected_correct_topic_mastery) < 1e-6
         assert mastery_value != final_topic_mastery[topic_id]
+
+    current_user_id = await get_current_user_id(client, student_tokens["access_token"])
+    mastery_cache_manager = MasteryCacheManager()
+    cached_overview = await mastery_cache_manager.get_mastery_overview(current_user_id)
+    assert cached_overview is not None
+
+    cached_skill_values = sorted(float(item.mastery) for item in cached_overview.skills)
+    cached_subtopic_values = sorted(float(item.mastery) for item in cached_overview.subtopics)
+    cached_topic_values = sorted(float(item.mastery) for item in cached_overview.topics)
+    assert all(
+        abs(observed - expected) < 1e-6
+        for observed, expected in zip(cached_skill_values, observed_correct_skill_values, strict=True)
+    )
+    assert cached_subtopic_values == sorted([expected_correct_subtopic_mastery, 0.5])
+    assert cached_topic_values == [expected_correct_topic_mastery]
+
+    touched_topic = cached_overview.topics[0]
+    assert touched_topic.alpha == Decimal("3.5")
+    assert touched_topic.beta == Decimal("2")
 
 
 async def test_storage_uploads_update_problem_and_profile_urls(

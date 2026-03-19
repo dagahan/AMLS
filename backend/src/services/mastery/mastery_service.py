@@ -2,17 +2,23 @@ from __future__ import annotations
 
 import uuid
 from decimal import Decimal
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from fastapi import HTTPException, status
-from sqlalchemy import case, func, select
+from sqlalchemy import Numeric, case, cast, func, literal, select
 
 from src.models.alchemy import Difficulty, Problem, ProblemSkill, ResponseEvent, Skill, Subtopic, Topic, TopicSubtopic
-from src.models.pydantic.mastery import MasteryOverviewResponse, MasteryValueResponse
+from src.models.pydantic.mastery import (
+    MasteryBetaValue,
+    MasteryOverviewCache,
+    MasteryOverviewResponse,
+    MasteryValueResponse,
+)
 from src.services.mastery.mastery_cache_manager import MasteryCacheManager
 
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
+    from sqlalchemy.sql.selectable import CTE
 
     from src.db.database import DataBase
 
@@ -23,245 +29,334 @@ class MasteryService:
         self.cache_manager = MasteryCacheManager()
         self.alpha_0 = Decimal("2")
         self.beta_0 = Decimal("2")
-        self.default_mastery = 0.5
+        self.numeric_type = Numeric(18, 6)
 
 
     async def get_mastery_overview(self, user_id: uuid.UUID) -> MasteryOverviewResponse:
+        overview_cache = await self._get_mastery_overview_cache(user_id)
+        return self._build_mastery_overview(overview_cache)
+
+
+    async def get_skill_mastery(self, user_id: uuid.UUID, skill_id: uuid.UUID) -> MasteryValueResponse:
+        overview_cache = await self._get_mastery_overview_cache(user_id)
+        return self._build_mastery_value_response(
+            self._find_beta_value(overview_cache.skills, skill_id, "Skill")
+        )
+
+
+    async def get_subtopic_mastery(self, user_id: uuid.UUID, subtopic_id: uuid.UUID) -> MasteryValueResponse:
+        overview_cache = await self._get_mastery_overview_cache(user_id)
+        return self._build_mastery_value_response(
+            self._find_beta_value(overview_cache.subtopics, subtopic_id, "Subtopic")
+        )
+
+
+    async def get_topic_mastery(self, user_id: uuid.UUID, topic_id: uuid.UUID) -> MasteryValueResponse:
+        overview_cache = await self._get_mastery_overview_cache(user_id)
+        return self._build_mastery_value_response(
+            self._find_beta_value(overview_cache.topics, topic_id, "Topic")
+        )
+
+
+    async def _get_mastery_overview_cache(self, user_id: uuid.UUID) -> MasteryOverviewCache:
         cached_overview = await self.cache_manager.get_mastery_overview(str(user_id))
         if cached_overview is not None:
             return cached_overview
 
-        overview = await self._compute_mastery_overview(user_id)
-        await self.cache_manager.set_mastery_overview(str(user_id), overview)
-        return overview
+        overview_cache = await self._compute_mastery_overview_cache(user_id)
+        await self.cache_manager.set_mastery_overview(str(user_id), overview_cache)
+        return overview_cache
 
 
-    async def get_skill_mastery(self, user_id: uuid.UUID, skill_id: uuid.UUID) -> MasteryValueResponse:
-        overview = await self.get_mastery_overview(user_id)
-        return self._find_mastery_value(overview.skills, skill_id, "Skill")
-
-
-    async def get_subtopic_mastery(self, user_id: uuid.UUID, subtopic_id: uuid.UUID) -> MasteryValueResponse:
-        overview = await self.get_mastery_overview(user_id)
-        return self._find_mastery_value(overview.subtopics, subtopic_id, "Subtopic")
-
-
-    async def get_topic_mastery(self, user_id: uuid.UUID, topic_id: uuid.UUID) -> MasteryValueResponse:
-        overview = await self.get_mastery_overview(user_id)
-        return self._find_mastery_value(overview.topics, topic_id, "Topic")
-
-
-    async def _compute_mastery_overview(self, user_id: uuid.UUID) -> MasteryOverviewResponse:
+    async def _compute_mastery_overview_cache(self, user_id: uuid.UUID) -> MasteryOverviewCache:
         async with self.db.session_ctx() as session:
-            skill_masteries = await self._compute_skill_masteries(session, user_id)
-            subtopic_masteries = await self._compute_subtopic_masteries(session, user_id)
-            topic_masteries = await self._compute_topic_masteries(session, subtopic_masteries)
+            latest_responses = self._build_latest_responses_cte(user_id)
+            skill_betas = await self._compute_skill_betas(session, latest_responses)
+            subtopic_betas = await self._compute_subtopic_betas(session, latest_responses)
+            topic_betas = await self._compute_topic_betas(session, subtopic_betas)
 
-        return MasteryOverviewResponse(
-            skills=skill_masteries,
-            subtopics=subtopic_masteries,
-            topics=topic_masteries,
+        return MasteryOverviewCache(
+            skills=skill_betas,
+            subtopics=subtopic_betas,
+            topics=topic_betas,
         )
 
 
-    async def _compute_skill_masteries(
+    def _build_latest_responses_cte(self, user_id: uuid.UUID) -> "CTE":
+        response_rank = func.row_number().over(
+            partition_by=(ResponseEvent.user_id, ResponseEvent.problem_id),
+            order_by=(ResponseEvent.created_at.desc(), ResponseEvent.id.desc()),
+        )
+
+        ranked_responses = (
+            select(
+                ResponseEvent.problem_id.label("problem_id"),
+                ResponseEvent.is_correct.label("is_correct"),
+                response_rank.label("response_rank"),
+            )
+            .where(ResponseEvent.user_id == user_id)
+            .cte("ranked_responses")
+        )
+
+        return (
+            select(
+                ranked_responses.c.problem_id,
+                ranked_responses.c.is_correct,
+            )
+            .where(ranked_responses.c.response_rank == 1)
+            .cte("latest_responses")
+        )
+
+
+    async def _compute_skill_betas(
         self,
         session: "AsyncSession",
-        user_id: uuid.UUID,
-    ) -> list[MasteryValueResponse]:
-        weighted_value = ProblemSkill.weight * Difficulty.coefficient
-        success_evidence = func.coalesce(
-            func.sum(
-                case(
-                    (ResponseEvent.is_correct.is_(True), weighted_value),
-                    else_=0.0,
-                )
-            ),
-            0.0,
+        latest_responses: "CTE",
+    ) -> list[MasteryBetaValue]:
+        weighted_value = cast(ProblemSkill.weight, self.numeric_type) * cast(
+            Difficulty.coefficient,
+            self.numeric_type,
         )
-        failure_evidence = func.coalesce(
+        success_sum = func.coalesce(
             func.sum(
                 case(
-                    (ResponseEvent.is_correct.is_(False), weighted_value),
-                    else_=0.0,
+                    (latest_responses.c.is_correct.is_(True), weighted_value),
+                    else_=cast(literal(0), self.numeric_type),
                 )
             ),
-            0.0,
+            cast(literal(0), self.numeric_type),
+        )
+        failure_sum = func.coalesce(
+            func.sum(
+                case(
+                    (latest_responses.c.is_correct.is_(False), weighted_value),
+                    else_=cast(literal(0), self.numeric_type),
+                )
+            ),
+            cast(literal(0), self.numeric_type),
         )
 
-        all_skills_result = await session.execute(select(Skill.id))
-        mastery_by_skill_id = {
-            skill_id: self.default_mastery
-            for skill_id in all_skills_result.scalars().all()
+        skill_ids_result = await session.execute(select(Skill.id))
+        betas_by_skill_id = {
+            skill_id: self._build_prior_beta_value(skill_id)
+            for skill_id in skill_ids_result.scalars().all()
         }
 
         result = await session.execute(
             select(
                 ProblemSkill.skill_id,
-                success_evidence.label("success_evidence"),
-                failure_evidence.label("failure_evidence"),
+                success_sum.label("success_sum"),
+                failure_sum.label("failure_sum"),
             )
-            .select_from(ResponseEvent)
-            .join(Problem, Problem.id == ResponseEvent.problem_id)
+            .select_from(latest_responses)
+            .join(Problem, Problem.id == latest_responses.c.problem_id)
             .join(Difficulty, Difficulty.id == Problem.difficulty_id)
             .join(ProblemSkill, ProblemSkill.problem_id == Problem.id)
-            .where(ResponseEvent.user_id == user_id)
             .group_by(ProblemSkill.skill_id)
         )
 
         for skill_id, success_value, failure_value in result.all():
-            mastery_by_skill_id[skill_id] = self._calculate_posterior_mean(
-                success_value,
-                failure_value,
+            betas_by_skill_id[skill_id] = self._build_beta_value(
+                entity_id=skill_id,
+                success_sum=self._to_decimal(success_value),
+                failure_sum=self._to_decimal(failure_value),
             )
 
-        return self._build_sorted_mastery_values(mastery_by_skill_id)
+        return self._sort_beta_values(betas_by_skill_id)
 
 
-    async def _compute_subtopic_masteries(
+    async def _compute_subtopic_betas(
         self,
         session: "AsyncSession",
-        user_id: uuid.UUID,
-    ) -> list[MasteryValueResponse]:
-        success_evidence = func.coalesce(
+        latest_responses: "CTE",
+    ) -> list[MasteryBetaValue]:
+        difficulty_value = cast(Difficulty.coefficient, self.numeric_type)
+        success_sum = func.coalesce(
             func.sum(
                 case(
-                    (ResponseEvent.is_correct.is_(True), Difficulty.coefficient),
-                    else_=0.0,
+                    (latest_responses.c.is_correct.is_(True), difficulty_value),
+                    else_=cast(literal(0), self.numeric_type),
                 )
             ),
-            0.0,
+            cast(literal(0), self.numeric_type),
         )
-        failure_evidence = func.coalesce(
+        failure_sum = func.coalesce(
             func.sum(
                 case(
-                    (ResponseEvent.is_correct.is_(False), Difficulty.coefficient),
-                    else_=0.0,
+                    (latest_responses.c.is_correct.is_(False), difficulty_value),
+                    else_=cast(literal(0), self.numeric_type),
                 )
             ),
-            0.0,
+            cast(literal(0), self.numeric_type),
         )
 
-        all_subtopics_result = await session.execute(select(Subtopic.id))
-        mastery_by_subtopic_id = {
-            subtopic_id: self.default_mastery
-            for subtopic_id in all_subtopics_result.scalars().all()
+        subtopic_ids_result = await session.execute(select(Subtopic.id))
+        betas_by_subtopic_id = {
+            subtopic_id: self._build_prior_beta_value(subtopic_id)
+            for subtopic_id in subtopic_ids_result.scalars().all()
         }
 
         result = await session.execute(
             select(
                 Problem.subtopic_id,
-                success_evidence.label("success_evidence"),
-                failure_evidence.label("failure_evidence"),
+                success_sum.label("success_sum"),
+                failure_sum.label("failure_sum"),
             )
-            .select_from(ResponseEvent)
-            .join(Problem, Problem.id == ResponseEvent.problem_id)
+            .select_from(latest_responses)
+            .join(Problem, Problem.id == latest_responses.c.problem_id)
             .join(Difficulty, Difficulty.id == Problem.difficulty_id)
-            .where(ResponseEvent.user_id == user_id)
             .group_by(Problem.subtopic_id)
         )
 
         for subtopic_id, success_value, failure_value in result.all():
-            mastery_by_subtopic_id[subtopic_id] = self._calculate_posterior_mean(
-                success_value,
-                failure_value,
+            betas_by_subtopic_id[subtopic_id] = self._build_beta_value(
+                entity_id=subtopic_id,
+                success_sum=self._to_decimal(success_value),
+                failure_sum=self._to_decimal(failure_value),
             )
 
-        return self._build_sorted_mastery_values(mastery_by_subtopic_id)
+        return self._sort_beta_values(betas_by_subtopic_id)
 
 
-    async def _compute_topic_masteries(
+    async def _compute_topic_betas(
         self,
         session: "AsyncSession",
-        subtopic_masteries: list[MasteryValueResponse],
-    ) -> list[MasteryValueResponse]:
-        mastery_by_subtopic_id = {item.id: item.mastery for item in subtopic_masteries}
+        subtopic_betas: list[MasteryBetaValue],
+    ) -> list[MasteryBetaValue]:
+        subtopic_beta_by_id = {item.id: item for item in subtopic_betas}
+
         topic_ids_result = await session.execute(select(Topic.id))
         topic_ids = list(topic_ids_result.scalars().all())
-        explicit_links = await session.execute(
+        explicit_links_result = await session.execute(
             select(TopicSubtopic.topic_id, TopicSubtopic.subtopic_id, TopicSubtopic.weight)
         )
-        fallback_links = await session.execute(select(Subtopic.topic_id, Subtopic.id))
+        fallback_links_result = await session.execute(select(Subtopic.topic_id, Subtopic.id))
 
-        explicit_links_by_topic_id: dict[uuid.UUID, list[tuple[uuid.UUID, float]]] = {}
-        for topic_id, subtopic_id, weight in explicit_links.all():
-            explicit_links_by_topic_id.setdefault(topic_id, []).append((subtopic_id, weight))
+        explicit_links_by_topic_id: dict[uuid.UUID, list[tuple[uuid.UUID, Decimal]]] = {}
+        for topic_id, subtopic_id, weight in explicit_links_result.all():
+            explicit_links_by_topic_id.setdefault(topic_id, []).append(
+                (subtopic_id, self._to_decimal(weight))
+            )
 
-        fallback_links_by_topic_id: dict[uuid.UUID, list[tuple[uuid.UUID, float]]] = {}
-        for topic_id, subtopic_id in fallback_links.all():
-            fallback_links_by_topic_id.setdefault(topic_id, []).append((subtopic_id, 1.0))
+        fallback_links_by_topic_id: dict[uuid.UUID, list[tuple[uuid.UUID, Decimal]]] = {}
+        for topic_id, subtopic_id in fallback_links_result.all():
+            fallback_links_by_topic_id.setdefault(topic_id, []).append(
+                (subtopic_id, Decimal("1"))
+            )
 
-        mastery_by_topic_id: dict[uuid.UUID, float] = {}
+        betas_by_topic_id: dict[uuid.UUID, MasteryBetaValue] = {}
         for topic_id in topic_ids:
             links = explicit_links_by_topic_id.get(topic_id)
             if not links:
                 links = fallback_links_by_topic_id.get(topic_id, [])
-            mastery_by_topic_id[topic_id] = self._calculate_weighted_average(
-                links,
-                mastery_by_subtopic_id,
+
+            pooled_success = Decimal("0")
+            pooled_failure = Decimal("0")
+
+            for subtopic_id, weight in links:
+                subtopic_beta = subtopic_beta_by_id.get(subtopic_id)
+                if subtopic_beta is None:
+                    subtopic_beta = self._build_prior_beta_value(subtopic_id)
+
+                child_success = max(subtopic_beta.alpha - self.alpha_0, Decimal("0"))
+                child_failure = max(subtopic_beta.beta - self.beta_0, Decimal("0"))
+
+                pooled_success += weight * child_success
+                pooled_failure += weight * child_failure
+
+            betas_by_topic_id[topic_id] = self._build_beta_value(
+                entity_id=topic_id,
+                success_sum=pooled_success,
+                failure_sum=pooled_failure,
             )
 
-        return self._build_sorted_mastery_values(mastery_by_topic_id)
+        return self._sort_beta_values(betas_by_topic_id)
 
 
-    def _calculate_posterior_mean(
+    def _build_prior_beta_value(self, entity_id: uuid.UUID) -> MasteryBetaValue:
+        return MasteryBetaValue(
+            id=entity_id,
+            alpha=self.alpha_0,
+            beta=self.beta_0,
+            mastery=self._posterior_mean(self.alpha_0, self.beta_0),
+        )
+
+
+    def _build_beta_value(
         self,
-        success_evidence: float,
-        failure_evidence: float,
-    ) -> float:
-        alpha = self.alpha_0 + Decimal(str(success_evidence))
-        beta = self.beta_0 + Decimal(str(failure_evidence))
-        return self._clamp_mastery(alpha / (alpha + beta))
+        entity_id: uuid.UUID,
+        success_sum: Decimal,
+        failure_sum: Decimal,
+    ) -> MasteryBetaValue:
+        alpha = self.alpha_0 + success_sum
+        beta = self.beta_0 + failure_sum
+        return MasteryBetaValue(
+            id=entity_id,
+            alpha=alpha,
+            beta=beta,
+            mastery=self._posterior_mean(alpha, beta),
+        )
 
 
-    def _calculate_weighted_average(
+    def _build_mastery_overview(self, overview_cache: MasteryOverviewCache) -> MasteryOverviewResponse:
+        return MasteryOverviewResponse(
+            skills=self._build_mastery_value_responses(overview_cache.skills),
+            subtopics=self._build_mastery_value_responses(overview_cache.subtopics),
+            topics=self._build_mastery_value_responses(overview_cache.topics),
+        )
+
+
+    def _build_mastery_value_responses(
         self,
-        links: list[tuple[uuid.UUID, float]],
-        mastery_by_child_id: dict[uuid.UUID, float],
-    ) -> float:
-        if not links:
-            return self.default_mastery
-
-        weighted_sum = Decimal("0")
-        total_weight = Decimal("0")
-
-        for child_id, weight in links:
-            decimal_weight = Decimal(str(weight))
-            weighted_sum += decimal_weight * Decimal(str(mastery_by_child_id.get(child_id, self.default_mastery)))
-            total_weight += decimal_weight
-
-        if total_weight == 0:
-            return self.default_mastery
-
-        return self._clamp_mastery(weighted_sum / total_weight)
-
-
-    def _clamp_mastery(self, value: Decimal) -> float:
-        clamped_value = min(max(value, Decimal("0")), Decimal("1"))
-        return float(clamped_value)
-
-
-    def _build_sorted_mastery_values(
-        self,
-        mastery_by_entity_id: dict[uuid.UUID, float],
+        beta_values: list[MasteryBetaValue],
     ) -> list[MasteryValueResponse]:
         return [
-            MasteryValueResponse(id=entity_id, mastery=mastery_by_entity_id[entity_id])
-            for entity_id in sorted(mastery_by_entity_id, key=str)
+            self._build_mastery_value_response(beta_value)
+            for beta_value in beta_values
         ]
 
 
-    def _find_mastery_value(
+    def _build_mastery_value_response(self, beta_value: MasteryBetaValue) -> MasteryValueResponse:
+        return MasteryValueResponse(
+            id=beta_value.id,
+            mastery=float(beta_value.mastery),
+        )
+
+
+    def _posterior_mean(self, alpha: Decimal, beta: Decimal) -> Decimal:
+        mastery = alpha / (alpha + beta)
+        return min(max(mastery, Decimal("0")), Decimal("1"))
+
+
+    def _find_beta_value(
         self,
-        mastery_values: list[MasteryValueResponse],
+        beta_values: list[MasteryBetaValue],
         entity_id: uuid.UUID,
         entity_name: str,
-    ) -> MasteryValueResponse:
-        for mastery_value in mastery_values:
-            if mastery_value.id == entity_id:
-                return mastery_value
+    ) -> MasteryBetaValue:
+        for beta_value in beta_values:
+            if beta_value.id == entity_id:
+                return beta_value
 
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"{entity_name} mastery not found",
         )
+
+
+    def _sort_beta_values(
+        self,
+        beta_values_by_id: dict[uuid.UUID, MasteryBetaValue],
+    ) -> list[MasteryBetaValue]:
+        return [
+            beta_values_by_id[entity_id]
+            for entity_id in sorted(beta_values_by_id, key=str)
+        ]
+
+
+    def _to_decimal(self, value: Any) -> Decimal:
+        if value is None:
+            return Decimal("0")
+        if isinstance(value, Decimal):
+            return value
+        return Decimal(str(value))

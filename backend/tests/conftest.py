@@ -147,7 +147,9 @@ def _create_schema_and_seed(sync_engine_config: str) -> None:
         with Session(engine) as session:
             topic = Topic(name="Planimetry")
             subtopic = Subtopic(topic=topic, name="right triangle")
+            untouched_subtopic = Subtopic(topic=topic, name="isosceles triangle")
             topic_link = TopicSubtopic(topic=topic, subtopic=subtopic, weight=1.0)
+            untouched_topic_link = TopicSubtopic(topic=topic, subtopic=untouched_subtopic, weight=1.0)
 
             difficulty = Difficulty(name="medium", coefficient=1.5)
 
@@ -187,6 +189,8 @@ def _create_schema_and_seed(sync_engine_config: str) -> None:
                 [
                     topic,
                     topic_link,
+                    untouched_subtopic,
+                    untouched_topic_link,
                     difficulty,
                     skill_one,
                     skill_two,

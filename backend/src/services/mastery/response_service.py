@@ -4,22 +4,15 @@ import uuid
 from typing import TYPE_CHECKING
 
 from fastapi import HTTPException, status
-from sqlalchemy import delete, select
+from sqlalchemy import select
 
-from src.models.alchemy import (
-    ResponseEvent,
-    Subtopic,
-    TopicSubtopic,
-    UserFailedProblem,
-    UserSolvedProblem,
-)
+from src.models.alchemy import ResponseEvent, Subtopic, TopicSubtopic
 from src.models.pydantic.mastery import (
     MasteryValueResponse,
     RecordedResponseState,
     ResponseCreate,
     ResponseCreateResponse,
 )
-from src.models.pydantic.problem import SubmissionSnapshot
 from src.services.mastery.mastery_cache_manager import MasteryCacheManager
 from src.services.mastery.mastery_service import MasteryService
 from src.services.problem.loader import load_problem_or_404
@@ -40,10 +33,9 @@ class ResponseService:
 
     @transactional
     async def create_response(self, user_id: uuid.UUID, data: ResponseCreate) -> ResponseCreateResponse:
-        snapshot = await self._get_submission_snapshot(user_id, data.problem_id)
         response_state = await execute_atomic_step(
             action=lambda: self._store_response(user_id, data),
-            rollback=lambda stored_state: self._rollback_response(stored_state, snapshot),
+            rollback=self._rollback_response,
             step_name="store_response",
         )
 
@@ -84,25 +76,6 @@ class ResponseService:
                 is_correct=is_correct,
             )
             session.add(response_event)
-
-            await session.execute(
-                delete(UserSolvedProblem).where(
-                    UserSolvedProblem.user_id == user_id,
-                    UserSolvedProblem.problem_id == problem.id,
-                )
-            )
-            await session.execute(
-                delete(UserFailedProblem).where(
-                    UserFailedProblem.user_id == user_id,
-                    UserFailedProblem.problem_id == problem.id,
-                )
-            )
-
-            if is_correct:
-                session.add(UserSolvedProblem(user_id=user_id, problem_id=problem.id))
-            else:
-                session.add(UserFailedProblem(user_id=user_id, problem_id=problem.id))
-
             await session.flush()
 
             skill_ids = [item.skill_id for item in problem.skill_links]
@@ -122,65 +95,11 @@ class ResponseService:
             )
 
 
-    async def _rollback_response(
-        self,
-        stored_state: RecordedResponseState,
-        snapshot: SubmissionSnapshot,
-    ) -> None:
+    async def _rollback_response(self, stored_state: RecordedResponseState) -> None:
         async with self.db.session_ctx() as session:
             response_event = await session.get(ResponseEvent, stored_state.response_id)
             if response_event is not None:
                 await session.delete(response_event)
-
-            await session.execute(
-                delete(UserSolvedProblem).where(
-                    UserSolvedProblem.user_id == snapshot.user_id,
-                    UserSolvedProblem.problem_id == snapshot.problem_id,
-                )
-            )
-            await session.execute(
-                delete(UserFailedProblem).where(
-                    UserFailedProblem.user_id == snapshot.user_id,
-                    UserFailedProblem.problem_id == snapshot.problem_id,
-                )
-            )
-
-            if snapshot.solved_exists:
-                session.add(
-                    UserSolvedProblem(user_id=snapshot.user_id, problem_id=snapshot.problem_id)
-                )
-
-            if snapshot.failed_exists:
-                session.add(
-                    UserFailedProblem(user_id=snapshot.user_id, problem_id=snapshot.problem_id)
-                )
-
-
-    async def _get_submission_snapshot(
-        self,
-        user_id: uuid.UUID,
-        problem_id: uuid.UUID,
-    ) -> SubmissionSnapshot:
-        async with self.db.session_ctx() as session:
-            solved_result = await session.execute(
-                select(UserSolvedProblem).where(
-                    UserSolvedProblem.user_id == user_id,
-                    UserSolvedProblem.problem_id == problem_id,
-                )
-            )
-            failed_result = await session.execute(
-                select(UserFailedProblem).where(
-                    UserFailedProblem.user_id == user_id,
-                    UserFailedProblem.problem_id == problem_id,
-                )
-            )
-
-        return SubmissionSnapshot(
-            user_id=user_id,
-            problem_id=problem_id,
-            solved_exists=solved_result.scalar_one_or_none() is not None,
-            failed_exists=failed_result.scalar_one_or_none() is not None,
-        )
 
 
     async def _load_affected_topic_ids(

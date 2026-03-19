@@ -22,23 +22,22 @@ class ProblemSubmissionService:
 
     async def get_student_progress(self, user_id: uuid.UUID) -> StudentProgressResponse:
         async with self.db.session_ctx() as session:
-            latest_response_subquery = (
+            ranked_responses = (
                 select(
                     ResponseEvent.problem_id.label("problem_id"),
-                    func.max(ResponseEvent.created_at).label("created_at"),
+                    ResponseEvent.is_correct.label("is_correct"),
+                    func.row_number().over(
+                        partition_by=(ResponseEvent.user_id, ResponseEvent.problem_id),
+                        order_by=(ResponseEvent.created_at.desc(), ResponseEvent.id.desc()),
+                    ).label("response_rank"),
                 )
                 .where(ResponseEvent.user_id == user_id)
-                .group_by(ResponseEvent.problem_id)
-                .subquery()
+                .cte("ranked_responses")
             )
             latest_responses_result = await session.execute(
-                select(ResponseEvent.problem_id, ResponseEvent.is_correct)
-                .join(
-                    latest_response_subquery,
-                    (ResponseEvent.problem_id == latest_response_subquery.c.problem_id)
-                    & (ResponseEvent.created_at == latest_response_subquery.c.created_at),
+                select(ranked_responses.c.problem_id, ranked_responses.c.is_correct).where(
+                    ranked_responses.c.response_rank == 1
                 )
-                .where(ResponseEvent.user_id == user_id)
             )
 
         solved_problem_ids: list[uuid.UUID] = []

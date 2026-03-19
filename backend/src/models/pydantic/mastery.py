@@ -1,8 +1,22 @@
 from __future__ import annotations
 
+from decimal import Decimal
 from uuid import UUID
 
 from src.models.pydantic.common import AmlsSchema
+
+
+class MasteryBetaValue(AmlsSchema):
+    id: UUID
+    alpha: Decimal
+    beta: Decimal
+    mastery: Decimal
+
+
+class MasteryOverviewCache(AmlsSchema):
+    skills: list[MasteryBetaValue]
+    subtopics: list[MasteryBetaValue]
+    topics: list[MasteryBetaValue]
 
 
 class MasteryValueResponse(AmlsSchema):

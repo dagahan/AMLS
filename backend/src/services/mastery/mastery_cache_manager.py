@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from src.core.clients import get_async_valkey_client
-from src.models.pydantic.mastery import MasteryOverviewResponse
+from src.models.pydantic.mastery import MasteryOverviewCache
 
 if TYPE_CHECKING:
     from valkey.asyncio import Valkey as AsyncValkey
@@ -14,15 +14,15 @@ class MasteryCacheManager:
         self.cache_ttl_seconds = 3600
 
 
-    async def get_mastery_overview(self, user_id: str) -> MasteryOverviewResponse | None:
+    async def get_mastery_overview(self, user_id: str) -> MasteryOverviewCache | None:
         cache_key = await self._build_overview_cache_key(user_id)
         cached_value = await self._get_valkey_client().get(cache_key)
         if cached_value is None:
             return None
-        return MasteryOverviewResponse.model_validate_json(cached_value)
+        return MasteryOverviewCache.model_validate_json(cached_value)
 
 
-    async def set_mastery_overview(self, user_id: str, overview: MasteryOverviewResponse) -> None:
+    async def set_mastery_overview(self, user_id: str, overview: MasteryOverviewCache) -> None:
         cache_key = await self._build_overview_cache_key(user_id)
         await self._get_valkey_client().set(
             cache_key,

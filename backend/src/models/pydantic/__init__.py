@@ -14,6 +14,8 @@ from src.models.pydantic.auth import (
 from src.models.pydantic.common import AmlsSchema, HealthResponse, MessageResponse
 from src.models.pydantic.difficulty import DifficultyCreate, DifficultyResponse, DifficultyUpdate
 from src.models.pydantic.mastery import (
+    MasteryBetaValue,
+    MasteryOverviewCache,
     MasteryOverviewResponse,
     MasteryValueResponse,
     RecordedResponseState,
@@ -63,6 +65,8 @@ __all__ = [
     "DifficultyUpdate",
     "HealthResponse",
     "LoginRequest",
+    "MasteryBetaValue",
+    "MasteryOverviewCache",
     "MasteryOverviewResponse",
     "MasteryValueResponse",
     "MessageResponse",
