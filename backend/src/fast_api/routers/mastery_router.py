@@ -5,7 +5,7 @@ from typing import TYPE_CHECKING
 
 from fastapi import APIRouter, Depends
 
-from src.fast_api.dependencies import build_current_user_dependency
+from src.fast_api.routers.auth_router import build_current_user_dependency
 from src.models.pydantic import (
     MasteryOverviewResponse,
     MasteryValueResponse,

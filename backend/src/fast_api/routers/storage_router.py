@@ -4,7 +4,7 @@ from typing import TYPE_CHECKING, Literal
 
 from fastapi import APIRouter, Depends, File, Form, Request, Response, UploadFile
 
-from src.fast_api.dependencies import build_current_admin_dependency, build_current_user_dependency
+from src.fast_api.routers.auth_router import build_current_admin_dependency, build_current_user_dependency
 from src.models.pydantic.storage import UploadedImageResponse
 from src.models.pydantic.user import UserResponse
 from src.storage.storage_manager import StorageManager

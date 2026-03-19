@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import delete, select
 
 from src.models.alchemy import Subtopic, Topic, TopicSubtopic
-from src.fast_api.dependencies import build_current_admin_dependency, parse_optional_uuid
+from src.fast_api.routers.auth_router import build_current_admin_dependency, parse_optional_uuid
 from src.models.pydantic import (
     MessageResponse,
     SubtopicCreate,
