@@ -211,6 +211,41 @@ async def test_admin_problem_crud_and_public_shape(
     assert missing_response.status_code == 404
 
 
+async def test_admin_problem_rejects_invalid_latex(
+    client: AsyncClient,
+    admin_tokens: dict[str, str],
+) -> None:
+    subtopic_id, difficulty_id, skill_ids = await get_problem_ids_for_creation(
+        client,
+        admin_tokens["access_token"],
+    )
+
+    response = await client.post(
+        "/admin/problems",
+        json={
+            "subtopic_id": subtopic_id,
+            "difficulty_id": difficulty_id,
+            "condition": "\\frac{1}{",
+            "solution": "x = 1",
+            "condition_images": [],
+            "solution_images": [],
+            "answer_options": [
+                {"text": "1", "is_correct": True},
+                {"text": "2", "is_correct": False},
+                {"text": "3", "is_correct": False},
+            ],
+            "skills": [
+                {"skill_id": skill_ids[0], "weight": 0.6},
+                {"skill_id": skill_ids[1], "weight": 0.4},
+            ],
+        },
+        headers=build_auth_headers(admin_tokens["access_token"]),
+    )
+
+    assert response.status_code == 422
+    assert response.json()["detail"] == "Invalid LaTeX in condition: Missing close brace"
+
+
 async def test_student_submission_updates_progress(
     client: AsyncClient,
     database: DataBase,

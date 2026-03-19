@@ -5,6 +5,7 @@ from typing import TYPE_CHECKING
 
 from fastapi import HTTPException, status
 
+from src.latex import LatexValidationError, MathJaxValidator
 from src.models.alchemy import Problem, ProblemAnswerOption, ProblemSkill
 from src.models.pydantic import AdminProblemResponse, ProblemCreate, ProblemUpdate
 from src.models.pydantic.problem import (
@@ -30,6 +31,7 @@ if TYPE_CHECKING:
 class AdminProblemService:
     def __init__(self, db: "DataBase") -> None:
         self.db = db
+        self.mathjax_validator = MathJaxValidator()
         self.mastery_cache_manager = MasteryCacheManager()
         self.problem_query_service = ProblemQueryService(db)
 
@@ -70,6 +72,12 @@ class AdminProblemService:
 
 
     async def _create_problem_record(self, data: ProblemCreate) -> uuid.UUID:
+        await self._validate_problem_latex(
+            condition=data.condition,
+            solution=data.solution,
+            answer_options=data.answer_options,
+        )
+
         async with self.db.session_ctx() as session:
             await ensure_subtopic_exists(session, data.subtopic_id)
             await ensure_difficulty_exists(session, data.difficulty_id)
@@ -91,6 +99,12 @@ class AdminProblemService:
 
 
     async def _update_problem_record(self, problem_id: uuid.UUID, data: ProblemUpdate) -> uuid.UUID:
+        await self._validate_problem_latex(
+            condition=data.condition,
+            solution=data.solution,
+            answer_options=data.answer_options,
+        )
+
         async with self.db.session_ctx() as session:
             problem = await load_problem_or_404(session, problem_id)
 
@@ -227,3 +241,22 @@ class AdminProblemService:
             or data.difficulty_id is not None
             or data.skills is not None
         )
+
+
+    async def _validate_problem_latex(
+        self,
+        condition: str | None,
+        solution: str | None,
+        answer_options: list[ProblemAnswerOptionPayload] | None,
+    ) -> None:
+        try:
+            await self.mathjax_validator.validate_problem_content(
+                condition=condition,
+                solution=solution,
+                answer_options=answer_options,
+            )
+        except LatexValidationError as error:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=str(error),
+            ) from error

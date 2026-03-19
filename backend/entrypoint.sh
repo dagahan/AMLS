@@ -14,6 +14,11 @@ if [[ "${RUNNING_INSIDE_DOCKER:-0}" != "1" ]]; then
   echo "📦 Installing dev dependencies (extras)…"
   uv sync --extra dev >/dev/null
 
+  if [[ -f package-lock.json && ! -d node_modules/mathjax-full ]]; then
+    echo "📐 Installing MathJax runtime…"
+    npm ci >/dev/null
+  fi
+
   echo "🔎 Ruff (rules: $RUFF_RULES; ignore: ${RUFF_IGNORES:-<none>})…"
   read -r -a check_paths <<< "$CHECK_PATH"
   ruff_args=(check "${check_paths[@]}" --select "$RUFF_RULES")

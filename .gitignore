@@ -154,4 +154,6 @@ debug.*.json.zip
 # Temporary test files
 test_*.json
 
+# Node
+node_modules/
 

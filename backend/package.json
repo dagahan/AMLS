@@ -1,0 +1,8 @@
+{
+  "name": "amls-backend-mathjax",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "mathjax-full": "3.2.2"
+  }
+}
