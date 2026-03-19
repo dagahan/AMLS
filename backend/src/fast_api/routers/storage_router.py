@@ -5,7 +5,7 @@ from typing import TYPE_CHECKING, Literal
 from fastapi import APIRouter, Depends, File, Form, Request, Response, UploadFile
 
 from src.db.enums import UserRole
-from src.fast_api.dependencies import require_role
+from src.fast_api.dependencies import build_storage_file_url, require_role
 from src.models.pydantic import AuthContext
 from src.models.pydantic.storage import UploadedImageResponse
 from src.models.pydantic.user import UserResponse
@@ -18,10 +18,6 @@ if TYPE_CHECKING:
 def get_storage_router(db: "DataBase") -> APIRouter:
     router = APIRouter(tags=["storage"])
     storage_manager = StorageManager(db)
-
-
-    def build_file_url(request: Request, storage_key: str) -> str:
-        return str(request.url_for("get_stored_file", storage_key=storage_key))
 
 
     @router.post(
@@ -39,7 +35,7 @@ def get_storage_router(db: "DataBase") -> APIRouter:
             user_id=str(auth.user.id),
             kind=kind,
             files=files,
-            url_factory=lambda storage_key: build_file_url(request, storage_key),
+            url_factory=lambda storage_key: build_storage_file_url(request, storage_key),
         )
 
 
@@ -56,7 +52,7 @@ def get_storage_router(db: "DataBase") -> APIRouter:
         updated_user = await storage_manager.upload_profile_image(
             user_id=auth.user.id,
             file=file,
-            url_factory=lambda storage_key: build_file_url(request, storage_key),
+            url_factory=lambda storage_key: build_storage_file_url(request, storage_key),
         )
         return UserResponse.model_validate(updated_user)
 

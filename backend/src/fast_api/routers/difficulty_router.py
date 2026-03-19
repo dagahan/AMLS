@@ -3,12 +3,10 @@ from __future__ import annotations
 import uuid
 from typing import TYPE_CHECKING
 
-from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import select
+from fastapi import APIRouter, Depends
 
 from src.db.enums import UserRole
 from src.fast_api.dependencies import require_role
-from src.models.alchemy import Difficulty
 from src.models.pydantic import (
     AuthContext,
     DifficultyCreate,
@@ -16,49 +14,22 @@ from src.models.pydantic import (
     DifficultyUpdate,
     MessageResponse,
 )
-from src.services.mastery.mastery_cache_manager import MasteryCacheManager
+from src.services.catalog import DifficultyService
 
 if TYPE_CHECKING:
-    from sqlalchemy.ext.asyncio import AsyncSession
-
     from src.db.database import DataBase
 
 
 def get_difficulty_router(db: "DataBase") -> APIRouter:
     router = APIRouter()
-    mastery_cache_manager = MasteryCacheManager()
-
-
-    async def get_difficulty_or_404(session: "AsyncSession", difficulty_id: uuid.UUID) -> Difficulty:
-        result = await session.execute(select(Difficulty).where(Difficulty.id == difficulty_id))
-        difficulty = result.scalar_one_or_none()
-        if difficulty is None:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Difficulty not found")
-        return difficulty
-
-
-    async def ensure_name_is_unique(
-        session: "AsyncSession",
-        name: str,
-        current_id: uuid.UUID | None = None,
-    ) -> None:
-        result = await session.execute(select(Difficulty).where(Difficulty.name == name))
-        difficulty = result.scalar_one_or_none()
-        if difficulty is not None and difficulty.id != current_id:
-            raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT,
-                detail="Difficulty name must be unique",
-            )
+    difficulty_service = DifficultyService(db)
 
 
     @router.get("/difficulties", response_model=list[DifficultyResponse], status_code=200)
     async def list_difficulties(
         auth: AuthContext = Depends(require_role()),
     ) -> list[DifficultyResponse]:
-        async with db.session_ctx() as session:
-            result = await session.execute(select(Difficulty).order_by(Difficulty.coefficient))
-            difficulties = result.scalars().all()
-            return [DifficultyResponse.model_validate(item) for item in difficulties]
+        return await difficulty_service.list_difficulties()
 
 
     @router.get("/difficulties/{difficulty_id}", response_model=DifficultyResponse, status_code=200)
@@ -66,9 +37,7 @@ def get_difficulty_router(db: "DataBase") -> APIRouter:
         difficulty_id: uuid.UUID,
         auth: AuthContext = Depends(require_role()),
     ) -> DifficultyResponse:
-        async with db.session_ctx() as session:
-            difficulty = await get_difficulty_or_404(session, difficulty_id)
-            return DifficultyResponse.model_validate(difficulty)
+        return await difficulty_service.get_difficulty(difficulty_id)
 
 
     @router.post("/admin/difficulties", response_model=DifficultyResponse, status_code=201)
@@ -76,23 +45,14 @@ def get_difficulty_router(db: "DataBase") -> APIRouter:
         data: DifficultyCreate,
         auth: AuthContext = Depends(require_role(role=UserRole.ADMIN)),
     ) -> DifficultyResponse:
-        async with db.session_ctx() as session:
-            await ensure_name_is_unique(session, data.name)
-            difficulty = Difficulty(name=data.name, coefficient=data.coefficient)
-            session.add(difficulty)
-            await session.flush()
-            await session.refresh(difficulty)
-        await mastery_cache_manager.bump_problem_mapping_version()
-        async with db.session_ctx() as session:
-            difficulty = await get_difficulty_or_404(session, difficulty.id)
-            return DifficultyResponse.model_validate(difficulty)
+        return await difficulty_service.create_difficulty(data)
 
 
     @router.get("/admin/difficulties", response_model=list[DifficultyResponse], status_code=200)
     async def list_admin_difficulties(
         auth: AuthContext = Depends(require_role(role=UserRole.ADMIN)),
     ) -> list[DifficultyResponse]:
-        return await list_difficulties(auth)
+        return await difficulty_service.list_difficulties()
 
 
     @router.get("/admin/difficulties/{difficulty_id}", response_model=DifficultyResponse, status_code=200)
@@ -100,7 +60,7 @@ def get_difficulty_router(db: "DataBase") -> APIRouter:
         difficulty_id: uuid.UUID,
         auth: AuthContext = Depends(require_role(role=UserRole.ADMIN)),
     ) -> DifficultyResponse:
-        return await get_difficulty(difficulty_id, auth)
+        return await difficulty_service.get_difficulty(difficulty_id)
 
 
     @router.patch("/admin/difficulties/{difficulty_id}", response_model=DifficultyResponse, status_code=200)
@@ -109,22 +69,7 @@ def get_difficulty_router(db: "DataBase") -> APIRouter:
         data: DifficultyUpdate,
         auth: AuthContext = Depends(require_role(role=UserRole.ADMIN)),
     ) -> DifficultyResponse:
-        async with db.session_ctx() as session:
-            difficulty = await get_difficulty_or_404(session, difficulty_id)
-
-            if data.name is not None:
-                await ensure_name_is_unique(session, data.name, current_id=difficulty.id)
-                difficulty.name = data.name
-
-            if data.coefficient is not None:
-                difficulty.coefficient = data.coefficient
-
-            await session.flush()
-            await session.refresh(difficulty)
-        await mastery_cache_manager.bump_problem_mapping_version()
-        async with db.session_ctx() as session:
-            difficulty = await get_difficulty_or_404(session, difficulty_id)
-            return DifficultyResponse.model_validate(difficulty)
+        return await difficulty_service.update_difficulty(difficulty_id, data)
 
 
     @router.delete("/admin/difficulties/{difficulty_id}", response_model=MessageResponse, status_code=200)
@@ -132,10 +77,7 @@ def get_difficulty_router(db: "DataBase") -> APIRouter:
         difficulty_id: uuid.UUID,
         auth: AuthContext = Depends(require_role(role=UserRole.ADMIN)),
     ) -> MessageResponse:
-        async with db.session_ctx() as session:
-            difficulty = await get_difficulty_or_404(session, difficulty_id)
-            await session.delete(difficulty)
-        await mastery_cache_manager.bump_problem_mapping_version()
+        await difficulty_service.delete_difficulty(difficulty_id)
         return MessageResponse(message="Difficulty deleted")
 
 

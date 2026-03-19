@@ -4,12 +4,11 @@ from typing import TYPE_CHECKING
 
 from fastapi import APIRouter, Depends, Request
 
-from src.fast_api.dependencies import require_role
+from src.fast_api.dependencies import build_client_context, require_role
 from src.models.pydantic import AuthContext
 from src.models.pydantic import (
     AccessValidationResponse,
     AuthUserResponse,
-    ClientContext,
     LoginRequest,
     RefreshRequest,
     RegisterRequest,
@@ -26,16 +25,6 @@ if TYPE_CHECKING:
 def get_auth_router(db: "DataBase") -> APIRouter:
     router = APIRouter(prefix="/auth", tags=["auth"])
     auth_service = AuthService(db)
-
-
-    def build_client_context(request: Request) -> ClientContext:
-        return ClientContext(
-            user_agent=request.headers.get("user-agent", "postman"),
-            client_id=request.headers.get("x-client-id", "default-client"),
-            local_system_time_zone=request.headers.get("x-time-zone", "UTC"),
-            platform=request.headers.get("x-platform", "desktop"),
-            ip=request.client.host if request.client is not None else "127.0.0.1",
-        )
 
 
     @router.post("/register", response_model=UserResponse, status_code=201)
