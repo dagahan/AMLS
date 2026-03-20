@@ -39,7 +39,8 @@ class ProblemTypeResponse(AmlsSchema):
 class ProblemTypeGraphNodeResponse(AmlsSchema):
     id: UUID
     name: str
-    prerequisites: list["ProblemTypeGraphNodeResponse"] = Field(default_factory=list)
+    prerequisite_ids: list[UUID] = Field(default_factory=list)
+    children: list["ProblemTypeGraphNodeResponse"] = Field(default_factory=list)
 
 
 class ProblemTypeGraphResponse(AmlsSchema):

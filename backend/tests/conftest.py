@@ -151,7 +151,7 @@ def _create_schema_and_seed(sync_engine_config: str) -> None:
             untouched_topic_link = TopicSubtopic(topic=topic, subtopic=untouched_subtopic, weight=1.0)
 
             difficulty = Difficulty(name="medium", coefficient=1.5)
-            problem_type = ProblemType(name="multiple choice")
+            problem_type = ProblemType(name="solve right-triangle configurations")
 
             problem = Problem(
                 subtopic=subtopic,

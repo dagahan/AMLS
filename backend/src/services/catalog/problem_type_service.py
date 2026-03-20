@@ -113,16 +113,14 @@ class ProblemTypeService:
             problem_types_by_id = await self._load_problem_types_by_id(session)
             prerequisite_ids_by_problem_type = await self._load_prerequisite_ids_by_problem_type(session)
 
-        all_prerequisite_ids = {
-            prerequisite_id
-            for prerequisite_ids in prerequisite_ids_by_problem_type.values()
-            for prerequisite_id in prerequisite_ids
-        }
         root_ids = [
             problem_type_id
             for problem_type_id in problem_types_by_id
-            if problem_type_id not in all_prerequisite_ids
+            if not prerequisite_ids_by_problem_type.get(problem_type_id)
         ]
+        child_ids_by_problem_type = self._build_child_ids_by_problem_type(
+            prerequisite_ids_by_problem_type
+        )
 
         return ProblemTypeGraphResponse(
             roots=[
@@ -130,6 +128,7 @@ class ProblemTypeService:
                     problem_type_id=problem_type_id,
                     problem_types_by_id=problem_types_by_id,
                     prerequisite_ids_by_problem_type=prerequisite_ids_by_problem_type,
+                    child_ids_by_problem_type=child_ids_by_problem_type,
                 )
                 for problem_type_id in self._sort_problem_type_ids(root_ids, problem_types_by_id)
             ]
@@ -259,20 +258,23 @@ class ProblemTypeService:
         problem_type_id: uuid.UUID,
         problem_types_by_id: dict[uuid.UUID, ProblemType],
         prerequisite_ids_by_problem_type: dict[uuid.UUID, list[uuid.UUID]],
+        child_ids_by_problem_type: dict[uuid.UUID, list[uuid.UUID]],
     ) -> ProblemTypeGraphNodeResponse:
         problem_type = problem_types_by_id[problem_type_id]
         prerequisite_ids = prerequisite_ids_by_problem_type.get(problem_type_id, [])
         return ProblemTypeGraphNodeResponse(
             id=problem_type.id,
             name=problem_type.name,
-            prerequisites=[
+            prerequisite_ids=prerequisite_ids,
+            children=[
                 self._build_graph_node(
-                    problem_type_id=prerequisite_id,
+                    problem_type_id=child_problem_type_id,
                     problem_types_by_id=problem_types_by_id,
                     prerequisite_ids_by_problem_type=prerequisite_ids_by_problem_type,
+                    child_ids_by_problem_type=child_ids_by_problem_type,
                 )
-                for prerequisite_id in self._sort_problem_type_ids(
-                    prerequisite_ids,
+                for child_problem_type_id in self._sort_problem_type_ids(
+                    child_ids_by_problem_type.get(problem_type_id, []),
                     problem_types_by_id,
                 )
             ],
@@ -295,6 +297,21 @@ class ProblemTypeService:
             problem_type_ids,
             key=lambda item: problem_types_by_id[item].name,
         )
+
+
+    def _build_child_ids_by_problem_type(
+        self,
+        prerequisite_ids_by_problem_type: dict[uuid.UUID, list[uuid.UUID]],
+    ) -> dict[uuid.UUID, list[uuid.UUID]]:
+        child_ids_by_problem_type: dict[uuid.UUID, list[uuid.UUID]] = {}
+        for problem_type_id, prerequisite_ids in prerequisite_ids_by_problem_type.items():
+            for prerequisite_id in prerequisite_ids:
+                child_ids_by_problem_type.setdefault(prerequisite_id, []).append(problem_type_id)
+
+        return {
+            problem_type_id: sorted(child_ids, key=str)
+            for problem_type_id, child_ids in child_ids_by_problem_type.items()
+        }
 
 
     async def _get_problem_type_or_404(

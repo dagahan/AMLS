@@ -60,14 +60,14 @@ async def get_problem_ids_for_creation(
 
     right_triangle_subtopic = next(item for item in subtopics if item["name"] == "right triangle")
     medium_difficulty = next(item for item in difficulties if item["name"] == "medium")
-    multiple_choice_problem_type = next(
-        item for item in problem_types if item["name"] == "multiple choice"
+    problem_type = next(
+        item for item in problem_types if item["name"] == "solve right-triangle configurations"
     )
 
     return (
         right_triangle_subtopic["id"],
         medium_difficulty["id"],
-        multiple_choice_problem_type["id"],
+        problem_type["id"],
     )
 
 
@@ -178,11 +178,11 @@ async def test_problem_type_graph_and_cycle_validation(
     assert graph_response.status_code == 200
     graph_payload = graph_response.json()
 
-    advanced_node = next(
+    base_node = next(
         item for item in graph_payload["roots"]
-        if item["id"] == advanced_problem_type["id"]
+        if item["id"] == base_problem_type["id"]
     )
-    assert advanced_node["prerequisites"][0]["id"] == base_problem_type["id"]
+    assert base_node["children"][0]["id"] == advanced_problem_type["id"]
 
     cycle_response = await client.patch(
         f"/admin/problem-types/{base_problem_type['id']}",
