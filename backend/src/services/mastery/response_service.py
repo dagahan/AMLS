@@ -49,7 +49,6 @@ class ResponseService:
             correct=response_state.correct,
             solution=response_state.solution,
             solution_images=response_state.solution_images,
-            skills=self._filter_mastery_values(overview.skills, response_state.skill_ids),
             subtopics=self._filter_mastery_values(overview.subtopics, response_state.subtopic_ids),
             topics=self._filter_mastery_values(overview.topics, response_state.topic_ids),
         )
@@ -78,7 +77,6 @@ class ResponseService:
             session.add(response_event)
             await session.flush()
 
-            skill_ids = [item.skill_id for item in problem.skill_links]
             subtopic_ids = [problem.subtopic_id]
             topic_ids = await self._load_affected_topic_ids(session, problem.subtopic_id)
 
@@ -89,7 +87,6 @@ class ResponseService:
                 correct=is_correct,
                 solution=problem.solution,
                 solution_images=problem.solution_images,
-                skill_ids=skill_ids,
                 subtopic_ids=subtopic_ids,
                 topic_ids=topic_ids,
             )

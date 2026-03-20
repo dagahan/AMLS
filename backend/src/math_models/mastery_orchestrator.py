@@ -23,12 +23,6 @@ def build_mastery_overview_cache(
     alpha_0: Decimal,
     beta_0: Decimal,
 ) -> MasteryOverviewCache:
-    skill_betas = build_leaf_betas(
-        entity_ids=snapshot.skill_ids,
-        evidence_values=snapshot.skill_evidence,
-        alpha_0=alpha_0,
-        beta_0=beta_0,
-    )
     subtopic_betas = build_leaf_betas(
         entity_ids=snapshot.subtopic_ids,
         evidence_values=snapshot.subtopic_evidence,
@@ -44,7 +38,6 @@ def build_mastery_overview_cache(
     )
 
     return MasteryOverviewCache(
-        skills=skill_betas,
         subtopics=subtopic_betas,
         topics=topic_betas,
     )

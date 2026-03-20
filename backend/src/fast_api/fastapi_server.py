@@ -11,7 +11,7 @@ from src.fast_api.routers.difficulty_router import get_difficulty_router
 from src.fast_api.routers.health_router import get_health_router
 from src.fast_api.routers.mastery_router import get_mastery_router
 from src.fast_api.routers.problem_router import get_problem_router
-from src.fast_api.routers.skill_router import get_skill_router
+from src.fast_api.routers.problem_type_router import get_problem_type_router
 from src.fast_api.routers.storage_router import get_storage_router
 from src.fast_api.routers.topic_router import get_topic_router
 
@@ -27,7 +27,7 @@ def create_application(database: DataBase) -> FastAPI:
     app.include_router(get_auth_router(database))
     app.include_router(get_difficulty_router(database))
     app.include_router(get_topic_router(database))
-    app.include_router(get_skill_router(database))
+    app.include_router(get_problem_type_router(database))
     app.include_router(get_problem_router(database))
     app.include_router(get_mastery_router(database))
     app.include_router(get_storage_router(database))

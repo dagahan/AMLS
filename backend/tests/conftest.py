@@ -27,8 +27,7 @@ from src.models.alchemy import (
     Difficulty,
     Problem,
     ProblemAnswerOption,
-    ProblemSkill,
-    Skill,
+    ProblemType,
     Subtopic,
     Topic,
     TopicSubtopic,
@@ -152,13 +151,12 @@ def _create_schema_and_seed(sync_engine_config: str) -> None:
             untouched_topic_link = TopicSubtopic(topic=topic, subtopic=untouched_subtopic, weight=1.0)
 
             difficulty = Difficulty(name="medium", coefficient=1.5)
-
-            skill_one = Skill(name="solve right-triangle configurations")
-            skill_two = Skill(name="compute lengths and areas in plane figures")
+            problem_type = ProblemType(name="multiple choice")
 
             problem = Problem(
                 subtopic=subtopic,
                 difficulty=difficulty,
+                problem_type=problem_type,
                 condition="In a right triangle, the legs are 6 and 8. Find the area.",
                 solution="The area is 24.",
                 condition_images=[],
@@ -168,10 +166,6 @@ def _create_schema_and_seed(sync_engine_config: str) -> None:
                 ProblemAnswerOption(text="10", is_correct=False),
                 ProblemAnswerOption(text="24", is_correct=True),
                 ProblemAnswerOption(text="14", is_correct=False),
-            ]
-            problem.skill_links = [
-                ProblemSkill(skill=skill_one, weight=0.6),
-                ProblemSkill(skill=skill_two, weight=0.4),
             ]
 
             admin_user = User(
@@ -191,8 +185,7 @@ def _create_schema_and_seed(sync_engine_config: str) -> None:
                     untouched_subtopic,
                     untouched_topic_link,
                     difficulty,
-                    skill_one,
-                    skill_two,
+                    problem_type,
                     problem,
                     admin_user,
                 ]

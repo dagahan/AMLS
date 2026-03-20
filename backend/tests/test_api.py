@@ -45,25 +45,30 @@ async def get_current_user_id(client: AsyncClient, access_token: str) -> str:
     return str(response.json()["user"]["id"])
 
 
-async def get_problem_ids_for_creation(client: AsyncClient, access_token: str) -> tuple[str, str, list[str]]:
+async def get_problem_ids_for_creation(
+    client: AsyncClient,
+    access_token: str,
+) -> tuple[str, str, str]:
     headers = build_auth_headers(access_token)
     subtopics_response = await client.get("/subtopics", headers=headers)
     difficulties_response = await client.get("/difficulties", headers=headers)
-    skills_response = await client.get("/skills", headers=headers)
+    problem_types_response = await client.get("/problem-types", headers=headers)
 
     subtopics = subtopics_response.json()
     difficulties = difficulties_response.json()
-    skills = skills_response.json()
+    problem_types = problem_types_response.json()
 
     right_triangle_subtopic = next(item for item in subtopics if item["name"] == "right triangle")
     medium_difficulty = next(item for item in difficulties if item["name"] == "medium")
-    needed_skills = [
-        item["id"]
-        for item in skills
-        if item["name"] in {"solve right-triangle configurations", "compute lengths and areas in plane figures"}
-    ]
+    multiple_choice_problem_type = next(
+        item for item in problem_types if item["name"] == "multiple choice"
+    )
 
-    return right_triangle_subtopic["id"], medium_difficulty["id"], needed_skills
+    return (
+        right_triangle_subtopic["id"],
+        medium_difficulty["id"],
+        multiple_choice_problem_type["id"],
+    )
 
 
 async def get_problem_answer_ids(session: AsyncSession, problem_id: str) -> tuple[str, str]:
@@ -78,11 +83,11 @@ async def get_problem_answer_ids(session: AsyncSession, problem_id: str) -> tupl
 
 async def test_protected_routes_require_authentication(client: AsyncClient) -> None:
     subtopics_response = await client.get("/subtopics?topic_id=")
-    skills_response = await client.get("/skills")
+    problem_types_response = await client.get("/problem-types")
     problems_response = await client.get("/problems?topic_id=")
 
     assert subtopics_response.status_code == 401
-    assert skills_response.status_code == 401
+    assert problem_types_response.status_code == 401
     assert problems_response.status_code == 401
 
 
@@ -92,11 +97,11 @@ async def test_filters_accept_empty_uuid_values(
 ) -> None:
     headers = build_auth_headers(student_tokens["access_token"])
     subtopics_response = await client.get("/subtopics?topic_id=", headers=headers)
-    skills_response = await client.get("/skills", headers=headers)
+    problem_types_response = await client.get("/problem-types", headers=headers)
     problems_response = await client.get("/problems?topic_id=", headers=headers)
 
     assert subtopics_response.status_code == 200
-    assert skills_response.status_code == 200
+    assert problem_types_response.status_code == 200
     assert problems_response.status_code == 200
 
 
@@ -141,11 +146,58 @@ async def test_admin_routes_require_admin(
     assert response.status_code == 403
 
 
+async def test_problem_type_graph_and_cycle_validation(
+    client: AsyncClient,
+    admin_tokens: dict[str, str],
+) -> None:
+    headers = build_auth_headers(admin_tokens["access_token"])
+
+    base_response = await client.post(
+        "/admin/problem-types",
+        json={
+            "name": f"base-{uuid.uuid4()}",
+            "prerequisite_ids": [],
+        },
+        headers=headers,
+    )
+    assert base_response.status_code == 201
+    base_problem_type = base_response.json()
+
+    advanced_response = await client.post(
+        "/admin/problem-types",
+        json={
+            "name": f"advanced-{uuid.uuid4()}",
+            "prerequisite_ids": [base_problem_type["id"]],
+        },
+        headers=headers,
+    )
+    assert advanced_response.status_code == 201
+    advanced_problem_type = advanced_response.json()
+
+    graph_response = await client.get("/problem-types/graph", headers=headers)
+    assert graph_response.status_code == 200
+    graph_payload = graph_response.json()
+
+    advanced_node = next(
+        item for item in graph_payload["roots"]
+        if item["id"] == advanced_problem_type["id"]
+    )
+    assert advanced_node["prerequisites"][0]["id"] == base_problem_type["id"]
+
+    cycle_response = await client.patch(
+        f"/admin/problem-types/{base_problem_type['id']}",
+        json={"prerequisite_ids": [advanced_problem_type["id"]]},
+        headers=headers,
+    )
+    assert cycle_response.status_code == 422
+    assert cycle_response.json()["detail"] == "Problem type prerequisites must not contain cycles"
+
+
 async def test_admin_problem_crud_and_public_shape(
     client: AsyncClient,
     admin_tokens: dict[str, str],
 ) -> None:
-    subtopic_id, difficulty_id, skill_ids = await get_problem_ids_for_creation(
+    subtopic_id, difficulty_id, problem_type_id = await get_problem_ids_for_creation(
         client,
         admin_tokens["access_token"],
     )
@@ -156,6 +208,7 @@ async def test_admin_problem_crud_and_public_shape(
         json={
             "subtopic_id": subtopic_id,
             "difficulty_id": difficulty_id,
+            "problem_type_id": problem_type_id,
             "condition": condition,
             "solution": "Test solution",
             "condition_images": [],
@@ -165,10 +218,6 @@ async def test_admin_problem_crud_and_public_shape(
                 {"text": "12", "is_correct": True},
                 {"text": "14", "is_correct": False},
             ],
-            "skills": [
-                {"skill_id": skill_ids[0], "weight": 0.6},
-                {"skill_id": skill_ids[1], "weight": 0.4},
-            ],
         },
         headers=build_auth_headers(admin_tokens["access_token"]),
     )
@@ -176,7 +225,7 @@ async def test_admin_problem_crud_and_public_shape(
     assert create_response.status_code == 201
     created_problem = create_response.json()
     problem_id = created_problem["id"]
-    assert all("skill_id" in item and "weight" in item for item in created_problem["skills"])
+    assert created_problem["problem_type"]["id"] == problem_type_id
     assert len([item for item in created_problem["answer_options"] if item["is_correct"]]) == 1
     assert all("text" in item and "is_correct" in item for item in created_problem["answer_options"])
 
@@ -187,8 +236,8 @@ async def test_admin_problem_crud_and_public_shape(
     assert public_response.status_code == 200
     public_problem = public_response.json()
     assert public_problem["condition"] == condition
+    assert public_problem["problem_type"]["id"] == problem_type_id
     assert "solution" not in public_problem
-    assert "right_answer" not in public_problem
 
     update_response = await client.patch(
         f"/admin/problems/{problem_id}",
@@ -215,7 +264,7 @@ async def test_admin_problem_rejects_invalid_latex(
     client: AsyncClient,
     admin_tokens: dict[str, str],
 ) -> None:
-    subtopic_id, difficulty_id, skill_ids = await get_problem_ids_for_creation(
+    subtopic_id, difficulty_id, problem_type_id = await get_problem_ids_for_creation(
         client,
         admin_tokens["access_token"],
     )
@@ -225,6 +274,7 @@ async def test_admin_problem_rejects_invalid_latex(
         json={
             "subtopic_id": subtopic_id,
             "difficulty_id": difficulty_id,
+            "problem_type_id": problem_type_id,
             "condition": "\\frac{1}{",
             "solution": "x = 1",
             "condition_images": [],
@@ -233,10 +283,6 @@ async def test_admin_problem_rejects_invalid_latex(
                 {"text": "1", "is_correct": True},
                 {"text": "2", "is_correct": False},
                 {"text": "3", "is_correct": False},
-            ],
-            "skills": [
-                {"skill_id": skill_ids[0], "weight": 0.6},
-                {"skill_id": skill_ids[1], "weight": 0.4},
             ],
         },
         headers=build_auth_headers(admin_tokens["access_token"]),
@@ -323,7 +369,6 @@ async def test_responses_and_mastery_endpoints(
     )
     assert overview_response.status_code == 200
     initial_overview = overview_response.json()
-    initial_skill_mastery = build_mastery_map(initial_overview["skills"])
     initial_subtopic_mastery = build_mastery_map(initial_overview["subtopics"])
     initial_topic_mastery = build_mastery_map(initial_overview["topics"])
 
@@ -338,25 +383,11 @@ async def test_responses_and_mastery_endpoints(
     assert response_create.status_code == 201
     response_payload = response_create.json()
     assert response_payload["correct"] is False
-    assert len(response_payload["skills"]) == 2
     assert len(response_payload["subtopics"]) == 1
     assert len(response_payload["topics"]) == 1
 
-    updated_skill_mastery = build_mastery_map(response_payload["skills"])
     updated_subtopic_mastery = build_mastery_map(response_payload["subtopics"])
     updated_topic_mastery = build_mastery_map(response_payload["topics"])
-
-    expected_wrong_skill_values = sorted(
-        [
-            calculate_expected_mastery("0", "0.9"),
-            calculate_expected_mastery("0", "0.6"),
-        ]
-    )
-    observed_wrong_skill_values = sorted(updated_skill_mastery.values())
-    assert all(
-        abs(observed - expected) < 1e-6
-        for observed, expected in zip(observed_wrong_skill_values, expected_wrong_skill_values, strict=True)
-    )
 
     expected_wrong_subtopic_mastery = calculate_expected_mastery("0", "1.5")
     expected_wrong_topic_mastery = calculate_expected_mastery("0", "1.5")
@@ -366,13 +397,8 @@ async def test_responses_and_mastery_endpoints(
     for mastery_value in updated_topic_mastery.values():
         assert abs(mastery_value - expected_wrong_topic_mastery) < 1e-6
 
-    first_skill_id = response_payload["skills"][0]["id"]
     first_topic_id = response_payload["topics"][0]["id"]
 
-    skill_response = await client.get(
-        f"/mastery/skills/{first_skill_id}",
-        headers=build_auth_headers(student_tokens["access_token"]),
-    )
     subtopic_response = await client.get(
         f"/mastery/subtopics/{subtopic_id}",
         headers=build_auth_headers(student_tokens["access_token"]),
@@ -382,7 +408,6 @@ async def test_responses_and_mastery_endpoints(
         headers=build_auth_headers(student_tokens["access_token"]),
     )
 
-    assert skill_response.status_code == 200
     assert subtopic_response.status_code == 200
     assert topic_response.status_code == 200
 
@@ -404,29 +429,11 @@ async def test_responses_and_mastery_endpoints(
     )
     assert final_overview_response.status_code == 200
     final_overview = final_overview_response.json()
-    final_skill_mastery = build_mastery_map(final_overview["skills"])
     final_subtopic_mastery = build_mastery_map(final_overview["subtopics"])
     final_topic_mastery = build_mastery_map(final_overview["topics"])
 
-    expected_correct_skill_values = sorted(
-        [
-            calculate_expected_mastery("0.9", "0"),
-            calculate_expected_mastery("0.6", "0"),
-        ]
-    )
-    observed_correct_skill_values = sorted(final_skill_mastery.values())
-    assert all(
-        abs(observed - expected) < 1e-6
-        for observed, expected in zip(observed_correct_skill_values, expected_correct_skill_values, strict=True)
-    )
-
     expected_correct_subtopic_mastery = calculate_expected_mastery("1.5", "0")
     expected_correct_topic_mastery = calculate_expected_mastery("1.5", "0")
-
-    for skill_id, mastery_value in updated_skill_mastery.items():
-        assert initial_skill_mastery[skill_id] == 0.5
-        assert final_skill_mastery[skill_id] > 0.5
-        assert mastery_value != final_skill_mastery[skill_id]
 
     for current_subtopic_id, mastery_value in updated_subtopic_mastery.items():
         assert initial_subtopic_mastery[current_subtopic_id] == 0.5
@@ -443,13 +450,8 @@ async def test_responses_and_mastery_endpoints(
     cached_overview = await mastery_cache.get_mastery_overview(current_user_id)
     assert cached_overview is not None
 
-    cached_skill_values = sorted(float(item.mastery) for item in cached_overview.skills)
     cached_subtopic_values = sorted(float(item.mastery) for item in cached_overview.subtopics)
     cached_topic_values = sorted(float(item.mastery) for item in cached_overview.topics)
-    assert all(
-        abs(observed - expected) < 1e-6
-        for observed, expected in zip(cached_skill_values, observed_correct_skill_values, strict=True)
-    )
     assert cached_subtopic_values == sorted([expected_correct_subtopic_mastery, 0.5])
     assert cached_topic_values == [expected_correct_topic_mastery]
 

@@ -6,9 +6,9 @@ from src.models.pydantic import (
     ProblemAnswerOptionResponse,
     ProblemResponse,
 )
-from src.models.pydantic.problem import AdminProblemAnswerOptionResponse
 from src.models.pydantic.difficulty import DifficultyResponse
-from src.models.pydantic.problem import ProblemSkillResponse
+from src.models.pydantic.problem import AdminProblemAnswerOptionResponse
+from src.models.pydantic.problem_type import ProblemTypeResponse
 from src.models.pydantic.topic import SubtopicResponse
 
 
@@ -17,6 +17,7 @@ def build_problem_response(problem: Problem) -> ProblemResponse:
         id=problem.id,
         subtopic=SubtopicResponse.model_validate(problem.subtopic),
         difficulty=DifficultyResponse.model_validate(problem.difficulty),
+        problem_type=_build_problem_type_response(problem),
         condition=problem.condition,
         condition_images=problem.condition_images,
         answer_options=_build_answer_option_responses(problem),
@@ -28,15 +29,12 @@ def build_admin_problem_response(problem: Problem) -> AdminProblemResponse:
         id=problem.id,
         subtopic=SubtopicResponse.model_validate(problem.subtopic),
         difficulty=DifficultyResponse.model_validate(problem.difficulty),
+        problem_type=_build_problem_type_response(problem),
         condition=problem.condition,
         condition_images=problem.condition_images,
         solution=problem.solution,
         solution_images=problem.solution_images,
         answer_options=_build_admin_answer_option_responses(problem),
-        skills=[
-            ProblemSkillResponse(skill_id=link.skill_id, weight=link.weight)
-            for link in problem.skill_links
-        ],
     )
 
 
@@ -56,3 +54,18 @@ def _build_admin_answer_option_responses(problem: Problem) -> list[AdminProblemA
         )
         for option in problem.answer_options
     ]
+
+
+def _build_problem_type_response(problem: Problem) -> ProblemTypeResponse:
+    prerequisite_ids = sorted(
+        (
+            item.prerequisite_problem_type_id
+            for item in problem.problem_type.prerequisite_links
+        ),
+        key=str,
+    )
+    return ProblemTypeResponse(
+        id=problem.problem_type.id,
+        name=problem.problem_type.name,
+        prerequisite_ids=prerequisite_ids,
+    )

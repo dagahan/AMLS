@@ -40,14 +40,6 @@ def get_mastery_router(db: "DataBase") -> APIRouter:
         return await mastery_service.get_mastery_overview(auth.user.id)
 
 
-    @router.get("/mastery/skills/{skill_id}", response_model=MasteryValueResponse, status_code=200)
-    async def get_skill_mastery(
-        skill_id: uuid.UUID,
-        auth: AuthContext = Depends(require_role()),
-    ) -> MasteryValueResponse:
-        return await mastery_service.get_skill_mastery(auth.user.id, skill_id)
-
-
     @router.get(
         "/mastery/subtopics/{subtopic_id}",
         response_model=MasteryValueResponse,

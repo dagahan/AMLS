@@ -26,7 +26,7 @@ class ProblemQueryService:
         topic_id: uuid.UUID | None,
         subtopic_id: uuid.UUID | None,
         difficulty_id: uuid.UUID | None,
-        skill_id: uuid.UUID | None,
+        problem_type_id: uuid.UUID | None,
         limit: int,
         offset: int,
     ) -> list[ProblemResponse]:
@@ -34,7 +34,7 @@ class ProblemQueryService:
             topic_id=topic_id,
             subtopic_id=subtopic_id,
             difficulty_id=difficulty_id,
-            skill_id=skill_id,
+            problem_type_id=problem_type_id,
             limit=limit,
             offset=offset,
         )
@@ -46,7 +46,7 @@ class ProblemQueryService:
         topic_id: uuid.UUID | None,
         subtopic_id: uuid.UUID | None,
         difficulty_id: uuid.UUID | None,
-        skill_id: uuid.UUID | None,
+        problem_type_id: uuid.UUID | None,
         limit: int,
         offset: int,
     ) -> list[AdminProblemResponse]:
@@ -54,7 +54,7 @@ class ProblemQueryService:
             topic_id=topic_id,
             subtopic_id=subtopic_id,
             difficulty_id=difficulty_id,
-            skill_id=skill_id,
+            problem_type_id=problem_type_id,
             limit=limit,
             offset=offset,
         )
@@ -76,7 +76,7 @@ class ProblemQueryService:
         topic_id: uuid.UUID | None,
         subtopic_id: uuid.UUID | None,
         difficulty_id: uuid.UUID | None,
-        skill_id: uuid.UUID | None,
+        problem_type_id: uuid.UUID | None,
         limit: int,
         offset: int,
     ) -> list[Problem]:
@@ -86,7 +86,7 @@ class ProblemQueryService:
                 topic_id=topic_id,
                 subtopic_id=subtopic_id,
                 difficulty_id=difficulty_id,
-                skill_id=skill_id,
+                problem_type_id=problem_type_id,
             ).order_by(Problem.created_at.desc()).limit(limit).offset(offset)
             result = await session.execute(statement)
             return list(result.scalars().unique().all())

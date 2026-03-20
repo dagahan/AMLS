@@ -7,7 +7,7 @@ from fastapi import HTTPException, status
 from sqlalchemy import Select, select
 from sqlalchemy.orm import selectinload
 
-from src.models.alchemy import Difficulty, Problem, ProblemSkill, Skill, Subtopic
+from src.models.alchemy import Difficulty, Problem, ProblemType, Subtopic
 
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
@@ -17,8 +17,8 @@ def build_problem_statement() -> Select[tuple[Problem]]:
     return select(Problem).options(
         selectinload(Problem.subtopic),
         selectinload(Problem.difficulty),
+        selectinload(Problem.problem_type).selectinload(ProblemType.prerequisite_links),
         selectinload(Problem.answer_options),
-        selectinload(Problem.skill_links),
     )
 
 
@@ -27,7 +27,7 @@ def apply_problem_filters(
     topic_id: uuid.UUID | None,
     subtopic_id: uuid.UUID | None,
     difficulty_id: uuid.UUID | None,
-    skill_id: uuid.UUID | None,
+    problem_type_id: uuid.UUID | None,
 ) -> Select[tuple[Problem]]:
     if topic_id is not None:
         statement = statement.join(Subtopic, Problem.subtopic_id == Subtopic.id).where(
@@ -40,11 +40,8 @@ def apply_problem_filters(
     if difficulty_id is not None:
         statement = statement.where(Problem.difficulty_id == difficulty_id)
 
-    if skill_id is not None:
-        statement = statement.join(
-            ProblemSkill,
-            ProblemSkill.problem_id == Problem.id,
-        ).where(ProblemSkill.skill_id == skill_id)
+    if problem_type_id is not None:
+        statement = statement.where(Problem.problem_type_id == problem_type_id)
 
     return statement
 
@@ -71,12 +68,13 @@ async def ensure_difficulty_exists(session: "AsyncSession", difficulty_id: uuid.
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Difficulty not found")
 
 
-async def ensure_skills_exist(session: "AsyncSession", skill_ids: list[uuid.UUID]) -> None:
-    result = await session.execute(select(Skill.id).where(Skill.id.in_(skill_ids)))
-    existing_ids = set(result.scalars().all())
-    missing_ids = [skill_id for skill_id in skill_ids if skill_id not in existing_ids]
-    if missing_ids:
+async def ensure_problem_type_exists(
+    session: "AsyncSession",
+    problem_type_id: uuid.UUID,
+) -> None:
+    result = await session.execute(select(ProblemType.id).where(ProblemType.id == problem_type_id))
+    if result.scalar_one_or_none() is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Skills not found: {', '.join(str(item) for item in missing_ids)}",
+            detail="Problem type not found",
         )

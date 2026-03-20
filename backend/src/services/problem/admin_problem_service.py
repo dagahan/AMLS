@@ -6,17 +6,16 @@ from typing import TYPE_CHECKING
 from fastapi import HTTPException, status
 
 from src.latex import LatexValidationError, MathJaxValidator
-from src.models.alchemy import Problem, ProblemAnswerOption, ProblemSkill
+from src.models.alchemy import Problem, ProblemAnswerOption
 from src.models.pydantic import AdminProblemResponse, ProblemCreate, ProblemUpdate
 from src.models.pydantic.problem import (
     ProblemAnswerOptionPayload,
-    ProblemSkillPayload,
     ProblemSnapshot,
     validate_answer_options,
 )
 from src.services.problem.loader import (
     ensure_difficulty_exists,
-    ensure_skills_exist,
+    ensure_problem_type_exists,
     ensure_subtopic_exists,
     load_problem_or_404,
 )
@@ -81,18 +80,18 @@ class AdminProblemService:
         async with self.db.session_ctx() as session:
             await ensure_subtopic_exists(session, data.subtopic_id)
             await ensure_difficulty_exists(session, data.difficulty_id)
-            await ensure_skills_exist(session, [item.skill_id for item in data.skills])
+            await ensure_problem_type_exists(session, data.problem_type_id)
 
             problem = Problem(
                 subtopic_id=data.subtopic_id,
                 difficulty_id=data.difficulty_id,
+                problem_type_id=data.problem_type_id,
                 condition=data.condition,
                 solution=data.solution,
                 condition_images=data.condition_images,
                 solution_images=data.solution_images,
             )
             problem.answer_options = self._build_answer_options(data.answer_options)
-            problem.skill_links = self._build_skill_links(data.skills)
             session.add(problem)
             await session.flush()
             return problem.id
@@ -116,8 +115,9 @@ class AdminProblemService:
                 await ensure_difficulty_exists(session, data.difficulty_id)
                 problem.difficulty_id = data.difficulty_id
 
-            if data.skills is not None:
-                await ensure_skills_exist(session, [item.skill_id for item in data.skills])
+            if data.problem_type_id is not None:
+                await ensure_problem_type_exists(session, data.problem_type_id)
+                problem.problem_type_id = data.problem_type_id
 
             self._validate_updated_answers(data)
             self._apply_problem_update(problem, data)
@@ -140,6 +140,7 @@ class AdminProblemService:
             id=problem.id,
             subtopic_id=problem.subtopic_id,
             difficulty_id=problem.difficulty_id,
+            problem_type_id=problem.problem_type_id,
             condition=problem.condition,
             solution=problem.solution,
             condition_images=list(problem.condition_images),
@@ -148,7 +149,6 @@ class AdminProblemService:
                 ProblemAnswerOptionPayload(text=item.text, is_correct=item.is_correct)
                 for item in problem.answer_options
             ],
-            skills=[(item.skill_id, item.weight) for item in problem.skill_links],
         )
 
 
@@ -160,6 +160,7 @@ class AdminProblemService:
                     id=snapshot.id,
                     subtopic_id=snapshot.subtopic_id,
                     difficulty_id=snapshot.difficulty_id,
+                    problem_type_id=snapshot.problem_type_id,
                     condition=snapshot.condition,
                     solution=snapshot.solution,
                     condition_images=snapshot.condition_images,
@@ -169,16 +170,13 @@ class AdminProblemService:
             else:
                 problem.subtopic_id = snapshot.subtopic_id
                 problem.difficulty_id = snapshot.difficulty_id
+                problem.problem_type_id = snapshot.problem_type_id
                 problem.condition = snapshot.condition
                 problem.solution = snapshot.solution
                 problem.condition_images = snapshot.condition_images
                 problem.solution_images = snapshot.solution_images
 
             problem.answer_options = self._build_answer_options(snapshot.answer_options)
-            problem.skill_links = [
-                ProblemSkill(skill_id=skill_id, weight=weight)
-                for skill_id, weight in snapshot.skills
-            ]
             await session.flush()
 
 
@@ -197,9 +195,6 @@ class AdminProblemService:
 
         if data.answer_options is not None:
             problem.answer_options = self._build_answer_options(data.answer_options)
-
-        if data.skills is not None:
-            problem.skill_links = self._build_skill_links(data.skills)
 
 
     def _validate_updated_answers(self, data: ProblemUpdate) -> None:
@@ -225,21 +220,11 @@ class AdminProblemService:
         ]
 
 
-    def _build_skill_links(
-        self,
-        skills: list[ProblemSkillPayload],
-    ) -> list[ProblemSkill]:
-        return [
-            ProblemSkill(skill_id=item.skill_id, weight=item.weight)
-            for item in skills
-        ]
-
-
     def _is_mastery_mapping_update(self, data: ProblemUpdate) -> bool:
         return (
             data.subtopic_id is not None
             or data.difficulty_id is not None
-            or data.skills is not None
+            or data.problem_type_id is not None
         )
 
 

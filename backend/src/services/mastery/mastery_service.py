@@ -33,13 +33,6 @@ class MasteryService:
         return self._build_mastery_overview_response(overview_cache)
 
 
-    async def get_skill_mastery(self, user_id: uuid.UUID, skill_id: uuid.UUID) -> MasteryValueResponse:
-        overview_cache = await self._get_mastery_overview_cache(user_id)
-        return self._build_mastery_value_response(
-            self._find_beta_value(overview_cache.skills, skill_id, "Skill")
-        )
-
-
     async def get_subtopic_mastery(self, user_id: uuid.UUID, subtopic_id: uuid.UUID) -> MasteryValueResponse:
         overview_cache = await self._get_mastery_overview_cache(user_id)
         return self._build_mastery_value_response(
@@ -74,7 +67,6 @@ class MasteryService:
         overview_cache: MasteryOverviewCache,
     ) -> MasteryOverviewResponse:
         return MasteryOverviewResponse(
-            skills=self._build_mastery_value_responses(overview_cache.skills),
             subtopics=self._build_mastery_value_responses(overview_cache.subtopics),
             topics=self._build_mastery_value_responses(overview_cache.topics),
         )

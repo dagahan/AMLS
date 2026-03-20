@@ -13,12 +13,6 @@ class MasteryBetaValue(AmlsSchema):
     mastery: Decimal
 
 
-class MasteryEvidenceValue(AmlsSchema):
-    id: UUID
-    success_sum: Decimal
-    failure_sum: Decimal
-
-
 class TopicSubtopicWeightValue(AmlsSchema):
     topic_id: UUID
     subtopic_id: UUID
@@ -26,16 +20,19 @@ class TopicSubtopicWeightValue(AmlsSchema):
 
 
 class MasteryAggregationSnapshot(AmlsSchema):
-    skill_ids: list[UUID]
     subtopic_ids: list[UUID]
     topic_ids: list[UUID]
-    skill_evidence: list[MasteryEvidenceValue]
-    subtopic_evidence: list[MasteryEvidenceValue]
+    subtopic_evidence: list["MasteryEvidenceValue"]
     topic_links: list[TopicSubtopicWeightValue]
 
 
+class MasteryEvidenceValue(AmlsSchema):
+    id: UUID
+    success_sum: Decimal
+    failure_sum: Decimal
+
+
 class MasteryOverviewCache(AmlsSchema):
-    skills: list[MasteryBetaValue]
     subtopics: list[MasteryBetaValue]
     topics: list[MasteryBetaValue]
 
@@ -46,7 +43,6 @@ class MasteryValueResponse(AmlsSchema):
 
 
 class MasteryOverviewResponse(AmlsSchema):
-    skills: list[MasteryValueResponse]
     subtopics: list[MasteryValueResponse]
     topics: list[MasteryValueResponse]
 
@@ -63,7 +59,6 @@ class ResponseCreateResponse(AmlsSchema):
     correct: bool
     solution: str
     solution_images: list[str]
-    skills: list[MasteryValueResponse]
     subtopics: list[MasteryValueResponse]
     topics: list[MasteryValueResponse]
 
@@ -75,6 +70,5 @@ class RecordedResponseState(AmlsSchema):
     correct: bool
     solution: str
     solution_images: list[str]
-    skill_ids: list[UUID]
     subtopic_ids: list[UUID]
     topic_ids: list[UUID]

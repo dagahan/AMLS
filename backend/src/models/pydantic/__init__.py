@@ -32,8 +32,6 @@ from src.models.pydantic.problem import (
     ProblemAnswerOptionPayload,
     ProblemAnswerOptionResponse,
     ProblemCreate,
-    ProblemSkillPayload,
-    ProblemSkillResponse,
     ProblemSnapshot,
     ProblemResponse,
     ProblemSubmitRequest,
@@ -42,10 +40,12 @@ from src.models.pydantic.problem import (
     SubmissionSnapshot,
     StudentProgressResponse,
 )
-from src.models.pydantic.skill import (
-    SkillCreate,
-    SkillResponse,
-    SkillUpdate,
+from src.models.pydantic.problem_type import (
+    ProblemTypeCreate,
+    ProblemTypeGraphNodeResponse,
+    ProblemTypeGraphResponse,
+    ProblemTypeResponse,
+    ProblemTypeUpdate,
 )
 from src.models.pydantic.storage import StoredFile, UploadedImageResponse
 from src.models.pydantic.topic import (
@@ -83,12 +83,15 @@ __all__ = [
     "ProblemAnswerOptionPayload",
     "ProblemAnswerOptionResponse",
     "ProblemCreate",
-    "ProblemSkillPayload",
-    "ProblemSkillResponse",
     "ProblemSnapshot",
     "ProblemResponse",
     "ProblemSubmitRequest",
     "ProblemSubmitResponse",
+    "ProblemTypeCreate",
+    "ProblemTypeGraphNodeResponse",
+    "ProblemTypeGraphResponse",
+    "ProblemTypeResponse",
+    "ProblemTypeUpdate",
     "ProblemUpdate",
     "RecordedResponseState",
     "RegisterRequest",
@@ -97,9 +100,6 @@ __all__ = [
     "RefreshPayload",
     "RefreshRequest",
     "SessionData",
-    "SkillCreate",
-    "SkillResponse",
-    "SkillUpdate",
     "StudentProgressResponse",
     "StoredFile",
     "SubtopicCreate",

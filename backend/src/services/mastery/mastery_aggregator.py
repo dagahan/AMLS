@@ -9,9 +9,7 @@ from sqlalchemy import Numeric, case, cast, func, literal, select
 from src.models.alchemy import (
     Difficulty,
     Problem,
-    ProblemSkill,
     ResponseEvent,
-    Skill,
     Subtopic,
     Topic,
     TopicSubtopic,
@@ -39,10 +37,8 @@ class MasteryAggregator:
         async with self.db.session_ctx() as session:
             latest_responses = self._build_latest_responses_cte(user_id)
             return MasteryAggregationSnapshot(
-                skill_ids=await self._load_skill_ids(session),
                 subtopic_ids=await self._load_subtopic_ids(session),
                 topic_ids=await self._load_topic_ids(session),
-                skill_evidence=await self._load_skill_evidence(session, latest_responses),
                 subtopic_evidence=await self._load_subtopic_evidence(session, latest_responses),
                 topic_links=await self._load_topic_links(session),
             )
@@ -74,11 +70,6 @@ class MasteryAggregator:
         )
 
 
-    async def _load_skill_ids(self, session: "AsyncSession") -> list[uuid.UUID]:
-        result = await session.execute(select(Skill.id))
-        return list(result.scalars().all())
-
-
     async def _load_subtopic_ids(self, session: "AsyncSession") -> list[uuid.UUID]:
         result = await session.execute(select(Subtopic.id))
         return list(result.scalars().all())
@@ -87,57 +78,6 @@ class MasteryAggregator:
     async def _load_topic_ids(self, session: "AsyncSession") -> list[uuid.UUID]:
         result = await session.execute(select(Topic.id))
         return list(result.scalars().all())
-
-
-    async def _load_skill_evidence(
-        self,
-        session: "AsyncSession",
-        latest_responses: "CTE",
-    ) -> list[MasteryEvidenceValue]:
-        weighted_value = cast(ProblemSkill.weight, self.numeric_type) * cast(
-            Difficulty.coefficient,
-            self.numeric_type,
-        )
-        success_sum = func.coalesce(
-            func.sum(
-                case(
-                    (latest_responses.c.is_correct.is_(True), weighted_value),
-                    else_=cast(literal(0), self.numeric_type),
-                )
-            ),
-            cast(literal(0), self.numeric_type),
-        )
-        failure_sum = func.coalesce(
-            func.sum(
-                case(
-                    (latest_responses.c.is_correct.is_(False), weighted_value),
-                    else_=cast(literal(0), self.numeric_type),
-                )
-            ),
-            cast(literal(0), self.numeric_type),
-        )
-
-        result = await session.execute(
-            select(
-                ProblemSkill.skill_id,
-                success_sum.label("success_sum"),
-                failure_sum.label("failure_sum"),
-            )
-            .select_from(latest_responses)
-            .join(Problem, Problem.id == latest_responses.c.problem_id)
-            .join(Difficulty, Difficulty.id == Problem.difficulty_id)
-            .join(ProblemSkill, ProblemSkill.problem_id == Problem.id)
-            .group_by(ProblemSkill.skill_id)
-        )
-
-        return [
-            MasteryEvidenceValue(
-                id=skill_id,
-                success_sum=self._to_decimal(success_value),
-                failure_sum=self._to_decimal(failure_value),
-            )
-            for skill_id, success_value, failure_value in result.all()
-        ]
 
 
     async def _load_subtopic_evidence(

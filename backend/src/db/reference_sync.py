@@ -8,8 +8,8 @@ from sqlalchemy import delete, or_, select
 
 from src.core.utils import EnvTools
 from src.db.database import DataBase
-from src.db.reference_dataset import DIFFICULTY_DATA, SKILL_DATA, TOPIC_DATA
-from src.models.alchemy import Difficulty, Problem, ProblemSkill, Skill, Subtopic, Topic, TopicSubtopic
+from src.db.reference_dataset import DIFFICULTY_DATA, TOPIC_DATA
+from src.models.alchemy import Difficulty, Problem, Subtopic, Topic, TopicSubtopic
 from src.valkey.mastery_cache import MasteryCache
 
 if TYPE_CHECKING:
@@ -19,18 +19,15 @@ if TYPE_CHECKING:
 async def sync_reference_data(db: DataBase) -> None:
     async with db.session_ctx() as session:
         topic_ids, subtopic_ids, topic_link_ids = await _sync_topics(session)
-        skill_ids = await _sync_skills(session)
         difficulty_ids = await _sync_difficulties(session)
 
         await _delete_invalid_problems(
             session=session,
             valid_subtopic_ids=subtopic_ids,
-            valid_skill_ids=skill_ids,
             valid_difficulty_ids=difficulty_ids,
         )
         await _delete_invalid_subtopics(session, subtopic_ids)
         await _delete_invalid_topics(session, topic_ids)
-        await _delete_invalid_skills(session, skill_ids)
         await _delete_invalid_difficulties(session, difficulty_ids)
         await _delete_invalid_topic_links(session, topic_link_ids)
 
@@ -74,22 +71,6 @@ async def _sync_topics(
     return valid_topic_ids, valid_subtopic_ids, valid_topic_link_ids
 
 
-async def _sync_skills(session: "AsyncSession") -> set[uuid.UUID]:
-    result = await session.execute(select(Skill))
-    skills = {skill.name: skill for skill in result.scalars().all()}
-    valid_skill_ids: set[uuid.UUID] = set()
-
-    for skill_name in SKILL_DATA:
-        skill = skills.get(skill_name)
-        if skill is None:
-            skill = Skill(name=skill_name)
-            session.add(skill)
-            await session.flush()
-        valid_skill_ids.add(skill.id)
-
-    return valid_skill_ids
-
-
 async def _sync_difficulties(session: "AsyncSession") -> set[uuid.UUID]:
     result = await session.execute(select(Difficulty))
     difficulties = {difficulty.name: difficulty for difficulty in result.scalars().all()}
@@ -111,7 +92,6 @@ async def _sync_difficulties(session: "AsyncSession") -> set[uuid.UUID]:
 async def _delete_invalid_problems(
     session: "AsyncSession",
     valid_subtopic_ids: set[uuid.UUID],
-    valid_skill_ids: set[uuid.UUID],
     valid_difficulty_ids: set[uuid.UUID],
 ) -> None:
     invalid_problem_ids: set[uuid.UUID] = set()
@@ -126,13 +106,6 @@ async def _delete_invalid_problems(
     )
     invalid_problem_ids.update(problem_result.scalars().all())
 
-    link_result = await session.execute(
-        select(ProblemSkill.problem_id).where(
-            ~ProblemSkill.skill_id.in_(valid_skill_ids)
-        )
-    )
-    invalid_problem_ids.update(link_result.scalars().all())
-
     if invalid_problem_ids:
         await session.execute(delete(Problem).where(Problem.id.in_(invalid_problem_ids)))
 
@@ -146,10 +119,6 @@ async def _delete_invalid_subtopics(
 
 async def _delete_invalid_topics(session: "AsyncSession", valid_topic_ids: set[uuid.UUID]) -> None:
     await session.execute(delete(Topic).where(~Topic.id.in_(valid_topic_ids)))
-
-
-async def _delete_invalid_skills(session: "AsyncSession", valid_skill_ids: set[uuid.UUID]) -> None:
-    await session.execute(delete(Skill).where(~Skill.id.in_(valid_skill_ids)))
 
 
 async def _delete_invalid_difficulties(

@@ -3,7 +3,7 @@ from __future__ import annotations
 import uuid
 from typing import TYPE_CHECKING
 
-from sqlalchemy import Boolean, CheckConstraint, Float, ForeignKey, PrimaryKeyConstraint, Text
+from sqlalchemy import Boolean, ForeignKey, Text
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -11,7 +11,7 @@ from src.models.alchemy.common import Base, IdMixin, TimestampMixin
 
 if TYPE_CHECKING:
     from src.models.alchemy.difficulty import Difficulty
-    from src.models.alchemy.skill import Skill
+    from src.models.alchemy.problem_type import ProblemType
     from src.models.alchemy.topic import Subtopic
 
 
@@ -28,6 +28,11 @@ class Problem(Base, IdMixin, TimestampMixin):
         ForeignKey("difficulties.id", ondelete="RESTRICT"),
         nullable=False,
     )
+    problem_type_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("problem_types.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
     condition: Mapped[str] = mapped_column(Text, nullable=False)
     solution: Mapped[str] = mapped_column(Text, nullable=False)
     condition_images: Mapped[list[str]] = mapped_column(JSONB, default=list, nullable=False)
@@ -35,38 +40,12 @@ class Problem(Base, IdMixin, TimestampMixin):
 
     subtopic: Mapped["Subtopic"] = relationship(back_populates="problems")
     difficulty: Mapped["Difficulty"] = relationship(back_populates="problems")
+    problem_type: Mapped["ProblemType"] = relationship(back_populates="problems")
     answer_options: Mapped[list["ProblemAnswerOption"]] = relationship(
         back_populates="problem",
         cascade="all, delete-orphan",
         order_by="ProblemAnswerOption.id",
     )
-    skill_links: Mapped[list["ProblemSkill"]] = relationship(
-        back_populates="problem",
-        cascade="all, delete-orphan",
-    )
-
-
-class ProblemSkill(Base):
-    __tablename__ = "problem_skills"
-    __table_args__ = (
-        PrimaryKeyConstraint("problem_id", "skill_id", name="pk_problem_skills"),
-        CheckConstraint("weight >= 0 AND weight <= 1", name="ck_problem_skill_weight"),
-    )
-
-    problem_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True),
-        ForeignKey("problems.id", ondelete="CASCADE"),
-        nullable=False,
-    )
-    skill_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True),
-        ForeignKey("skills.id", ondelete="RESTRICT"),
-        nullable=False,
-    )
-    weight: Mapped[float] = mapped_column(Float, nullable=False)
-
-    problem: Mapped["Problem"] = relationship(back_populates="skill_links")
-    skill: Mapped["Skill"] = relationship(back_populates="problem_links")
 
 
 class ProblemAnswerOption(Base, IdMixin):
