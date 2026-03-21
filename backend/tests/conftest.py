@@ -42,16 +42,17 @@ def reset_database(bootstrap_environment: None) -> Iterator[None]:
     with psycopg.connect(admin_dsn, autocommit=True) as connection:
         with connection.cursor() as cursor:
             cursor.execute(
-                "SELECT 1 FROM pg_database WHERE datname = %s",
+                """
+                SELECT pg_terminate_backend(pid)
+                FROM pg_stat_activity
+                WHERE datname = %s AND pid <> pg_backend_pid()
+                """,
                 (database.db_name,),
             )
-            if cursor.fetchone() is None:
-                cursor.execute(f'CREATE DATABASE "{database.db_name}"')
-
-    with psycopg.connect(sync_dsn, autocommit=True) as connection:
-        with connection.cursor() as cursor:
-            cursor.execute("DROP SCHEMA IF EXISTS public CASCADE")
-            cursor.execute("CREATE SCHEMA public")
+            cursor.execute(f'DROP DATABASE IF EXISTS "{database.db_name}"')
+            cursor.execute(
+                f'CREATE DATABASE "{database.db_name}"'
+            )
 
     get_valkey_client().flushdb()
 

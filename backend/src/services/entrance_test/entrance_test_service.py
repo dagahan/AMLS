@@ -5,6 +5,7 @@ from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
 from fastapi import HTTPException, status
+from loguru import logger
 from sqlalchemy import Select, select
 
 from src.db.enums import EntranceTestStatus, UserRole
@@ -20,6 +21,7 @@ from src.models.pydantic import (
 )
 from src.services.problem.loader import build_problem_statement, load_problem_or_404
 from src.services.problem.mapper import build_problem_response
+from src.services.entrance_test.assessment_service import EntranceAssessmentService
 from src.services.response import ResponseRecorderService
 from src.transaction_manager.transaction_manager import execute_atomic_step, transactional
 
@@ -32,6 +34,7 @@ if TYPE_CHECKING:
 class EntranceTestService:
     def __init__(self, db: "DataBase") -> None:
         self.db = db
+        self.entrance_assessment_service = EntranceAssessmentService()
         self.response_recorder_service = ResponseRecorderService(db)
 
 
@@ -80,7 +83,7 @@ class EntranceTestService:
                 entrance_test_session.started_at = datetime.now(UTC)
 
             if entrance_test_session.current_problem_id is None:
-                entrance_test_session.current_problem_id = await self._select_next_problem_id(
+                entrance_test_session.current_problem_id = await self.entrance_assessment_service.select_next_problem_id(
                     session,
                     entrance_test_session.id,
                 )
@@ -90,6 +93,13 @@ class EntranceTestService:
                     status_code=status.HTTP_409_CONFLICT,
                     detail="Entrance test does not have available problems",
                 )
+
+            logger.info(
+                "Started entrance test session {} for user {} with current_problem_id={}",
+                entrance_test_session.id,
+                user_id,
+                entrance_test_session.current_problem_id,
+            )
 
             session_response = build_entrance_test_session_response(entrance_test_session)
             current_problem = await self._load_current_problem(session, entrance_test_session)
@@ -146,6 +156,11 @@ class EntranceTestService:
                 entrance_test_session.status = EntranceTestStatus.SKIPPED
                 entrance_test_session.current_problem_id = None
                 entrance_test_session.skipped_at = datetime.now(UTC)
+                logger.info(
+                    "Skipped entrance test session {} for user {}",
+                    entrance_test_session.id,
+                    user_id,
+                )
 
             return build_entrance_test_session_response(entrance_test_session)
 
@@ -165,35 +180,16 @@ class EntranceTestService:
                     detail="Entrance test is not finished yet",
                 )
 
-            next_problem_id = await self._select_next_problem_id(session, entrance_test_session.id)
-            if next_problem_id is not None:
-                raise HTTPException(
-                    status_code=status.HTTP_409_CONFLICT,
-                    detail="Entrance test is not finished yet",
-                )
-
             if entrance_test_session.status != EntranceTestStatus.COMPLETED:
                 entrance_test_session.status = EntranceTestStatus.COMPLETED
                 entrance_test_session.completed_at = datetime.now(UTC)
+                logger.info(
+                    "Completed entrance test session {} for user {}",
+                    entrance_test_session.id,
+                    user_id,
+                )
 
             return build_entrance_test_session_response(entrance_test_session)
-
-
-    async def _select_next_problem_id(
-        self,
-        session: "AsyncSession",
-        entrance_test_session_id: uuid.UUID,
-    ) -> uuid.UUID | None:
-        answered_problem_ids = select(ResponseEvent.problem_id).where(
-            ResponseEvent.entrance_test_session_id == entrance_test_session_id
-        )
-        result = await session.execute(
-            select(Problem.id)
-            .where(Problem.id.not_in(answered_problem_ids))
-            .order_by(Problem.created_at, Problem.id)
-            .limit(1)
-        )
-        return result.scalar_one_or_none()
 
 
     async def _store_session_answer(
@@ -235,13 +231,22 @@ class EntranceTestService:
                     entrance_test_session_id=entrance_test_session.id,
                 ),
             )
-            entrance_test_session.current_problem_id = await self._select_next_problem_id(
+            entrance_test_session.current_problem_id = await self.entrance_assessment_service.select_next_problem_id(
                 session,
                 entrance_test_session.id,
             )
             if entrance_test_session.current_problem_id is None:
                 entrance_test_session.status = EntranceTestStatus.COMPLETED
                 entrance_test_session.completed_at = datetime.now(UTC)
+
+            logger.info(
+                "Recorded entrance test answer for session {}: problem_id={}, answer_option_id={}, next_problem_id={}, status={}",
+                entrance_test_session.id,
+                data.problem_id,
+                data.answer_option_id,
+                entrance_test_session.current_problem_id,
+                entrance_test_session.status,
+            )
 
             return StoredEntranceTestAnswerState(
                 session_id=entrance_test_session.id,

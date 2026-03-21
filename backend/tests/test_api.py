@@ -424,6 +424,129 @@ async def test_entrance_test_session_records_raw_response(
     assert current_problem_response.json()["problem"] is None
 
 
+async def test_entrance_assessment_advances_to_dependent_problem_type(
+    client: AsyncClient,
+    database: DataBase,
+    admin_tokens: dict[str, str],
+    student_tokens: dict[str, str],
+) -> None:
+    admin_headers = build_auth_headers(admin_tokens["access_token"])
+    student_headers = build_auth_headers(student_tokens["access_token"])
+    subtopic_id, difficulty_id, root_problem_type_id = await get_problem_ids_for_creation(
+        client,
+        admin_tokens["access_token"],
+    )
+
+    child_problem_type_response = await client.post(
+        "/admin/problem-types",
+        json={
+            "name": f"adaptive-child-{uuid.uuid4()}",
+            "prerequisite_ids": [root_problem_type_id],
+        },
+        headers=admin_headers,
+    )
+    assert child_problem_type_response.status_code == 201
+    child_problem_type_id = child_problem_type_response.json()["id"]
+
+    child_problem_response = await client.post(
+        "/admin/problems",
+        json={
+            "subtopic_id": subtopic_id,
+            "difficulty_id": difficulty_id,
+            "problem_type_id": child_problem_type_id,
+            "condition": "Find the length of the hypotenuse when the legs are 5 and 12.",
+            "solution": "The hypotenuse is 13.",
+            "condition_images": [],
+            "solution_images": [],
+            "answer_options": [
+                {"text": "13", "type": "right"},
+                {"text": "12", "type": "wrong"},
+                {"text": "I don't know", "type": "i_dont_know"},
+            ],
+        },
+        headers=admin_headers,
+    )
+    assert child_problem_response.status_code == 201
+    child_problem_id = child_problem_response.json()["id"]
+
+    start_response = await client.post("/entrance-test/start", headers=student_headers)
+    assert start_response.status_code == 200
+    started_payload = start_response.json()
+    first_problem_id = started_payload["session"]["current_problem_id"]
+    assert first_problem_id is not None
+    first_problem_type_id = started_payload["problem"]["problem_type"]["id"]
+    assert first_problem_type_id in {root_problem_type_id, child_problem_type_id}
+
+    if database.async_session is None:
+        raise RuntimeError("Database session factory is not initialized")
+
+    async with database.async_session() as session:
+        first_right_answer_id, _ = await get_problem_answer_ids(session, first_problem_id)
+
+    first_answer_response = await client.post(
+        "/entrance-test/answers",
+        json={
+            "problem_id": first_problem_id,
+            "answer_option_id": first_right_answer_id,
+        },
+        headers=student_headers,
+    )
+    assert first_answer_response.status_code == 201
+    first_answer_payload = first_answer_response.json()
+    assert first_answer_payload["response"]["answer_option_type"] == "right"
+    assert first_answer_payload["session"]["status"] == "active"
+
+    second_problem_id = first_answer_payload["session"]["current_problem_id"]
+    assert second_problem_id is not None
+    assert second_problem_id != first_problem_id
+
+    current_problem_response = await client.get(
+        "/entrance-test/current-problem",
+        headers=student_headers,
+    )
+    assert current_problem_response.status_code == 200
+    current_problem_payload = current_problem_response.json()
+    assert current_problem_payload["problem"]["id"] == second_problem_id
+
+    second_problem_type_id = current_problem_payload["problem"]["problem_type"]["id"]
+    assert {first_problem_type_id, second_problem_type_id} == {
+        root_problem_type_id,
+        child_problem_type_id,
+    }
+
+    async with database.async_session() as session:
+        second_right_answer_id, _ = await get_problem_answer_ids(session, second_problem_id)
+
+    second_answer_response = await client.post(
+        "/entrance-test/answers",
+        json={
+            "problem_id": second_problem_id,
+            "answer_option_id": second_right_answer_id,
+        },
+        headers=student_headers,
+    )
+    assert second_answer_response.status_code == 201
+    second_answer_payload = second_answer_response.json()
+    assert second_answer_payload["response"]["answer_option_type"] == "right"
+    assert second_answer_payload["session"]["status"] == "completed"
+    assert second_answer_payload["session"]["current_problem_id"] is None
+
+    current_user_id = await get_current_user_id(client, student_tokens["access_token"])
+
+    async with database.async_session() as session:
+        result = await session.execute(
+            select(ResponseEvent).where(
+                ResponseEvent.user_id == uuid.UUID(current_user_id),
+            )
+        )
+        stored_responses = result.scalars().all()
+        assert len(stored_responses) == 2
+        assert {response.problem_id for response in stored_responses} == {
+            uuid.UUID(first_problem_id),
+            uuid.UUID(second_problem_id),
+        }
+
+
 async def test_entrance_test_can_be_skipped(
     client: AsyncClient,
 ) -> None:
