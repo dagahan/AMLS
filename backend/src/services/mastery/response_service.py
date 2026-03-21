@@ -15,6 +15,7 @@ from src.models.pydantic.mastery import (
 )
 from src.services.mastery.mastery_service import MasteryService
 from src.services.problem.loader import load_problem_or_404
+from src.transaction_manager.transaction_manager import execute_atomic_step, transactional
 from src.valkey.mastery_cache import MasteryCache
 
 if TYPE_CHECKING:
@@ -30,9 +31,13 @@ class ResponseService:
         self.mastery_service = MasteryService(db)
 
 
+    @transactional
     async def create_response(self, user_id: uuid.UUID, data: ResponseCreate) -> ResponseCreateResponse:
-        async with self.db.session_ctx() as session:
-            response_state = await self.record_response(session, user_id, data)
+        response_state = await execute_atomic_step(
+            action=lambda: self._store_response(user_id, data),
+            rollback=self._rollback_response,
+            step_name="store_response",
+        )
 
         return await self.build_response_result(user_id, response_state)
 
@@ -97,6 +102,22 @@ class ResponseService:
             subtopics=self._filter_mastery_values(overview.subtopics, response_state.subtopic_ids),
             topics=self._filter_mastery_values(overview.topics, response_state.topic_ids),
         )
+
+
+    async def _store_response(
+        self,
+        user_id: uuid.UUID,
+        data: ResponseCreate,
+    ) -> RecordedResponseState:
+        async with self.db.session_ctx() as session:
+            return await self.record_response(session, user_id, data)
+
+
+    async def _rollback_response(self, response_state: RecordedResponseState) -> None:
+        async with self.db.session_ctx() as session:
+            response_event = await session.get(ResponseEvent, response_state.response_id)
+            if response_event is not None:
+                await session.delete(response_event)
 
 
     async def _load_affected_topic_ids(

@@ -19,6 +19,7 @@ from src.models.pydantic.entrance_test import (
     EntranceTestAnswerResponse,
     EntranceTestCurrentProblemResponse,
     EntranceTestSessionResponse,
+    StoredEntranceTestAnswerState,
     build_entrance_test_session_response,
 )
 from src.models.pydantic.mastery import (
@@ -113,6 +114,7 @@ __all__ = [
     "SessionData",
     "StudentProgressResponse",
     "StoredFile",
+    "StoredEntranceTestAnswerState",
     "SubtopicCreate",
     "SubtopicResponse",
     "SubtopicUpdate",
