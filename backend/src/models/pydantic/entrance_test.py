@@ -16,13 +16,8 @@ if TYPE_CHECKING:
 class EntranceTestSessionResponse(AmlsSchema):
     id: UUID
     status: EntranceTestStatus
-    problem_ids: list[UUID]
-    response_ids: list[UUID]
-    total_problems: int
-    answered_problems: int
-    remaining_problems: int
+    structure_version: int
     current_problem_id: UUID | None
-    required: bool
     started_at: datetime | None
     completed_at: datetime | None
     skipped_at: datetime | None
@@ -46,7 +41,7 @@ class EntranceTestAnswerResponse(AmlsSchema):
 class StoredEntranceTestAnswerState(AmlsSchema):
     session_id: UUID
     previous_status: EntranceTestStatus
-    previous_response_ids: list[UUID]
+    previous_current_problem_id: UUID | None
     previous_completed_at: datetime | None
     session: EntranceTestSessionResponse
     response_state: RecordedResponseState
@@ -55,23 +50,11 @@ class StoredEntranceTestAnswerState(AmlsSchema):
 def build_entrance_test_session_response(
     session: "EntranceTestSession",
 ) -> EntranceTestSessionResponse:
-    answered_problems = len(session.response_ids)
-    total_problems = len(session.problem_ids)
-    remaining_problems = max(total_problems - answered_problems, 0)
-    current_problem_id = None
-    if answered_problems < total_problems:
-        current_problem_id = session.problem_ids[answered_problems]
-
     return EntranceTestSessionResponse(
         id=session.id,
         status=session.status,
-        problem_ids=session.problem_ids,
-        response_ids=session.response_ids,
-        total_problems=total_problems,
-        answered_problems=answered_problems,
-        remaining_problems=remaining_problems,
-        current_problem_id=current_problem_id,
-        required=session.status in {EntranceTestStatus.PENDING, EntranceTestStatus.ACTIVE},
+        structure_version=session.structure_version,
+        current_problem_id=session.current_problem_id,
         started_at=session.started_at,
         completed_at=session.completed_at,
         skipped_at=session.skipped_at,

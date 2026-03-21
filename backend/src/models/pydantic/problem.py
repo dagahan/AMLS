@@ -106,3 +106,11 @@ def validate_answer_options(answer_options: list[ProblemAnswerOptionPayload]) ->
     right_options_count = sum(1 for item in answer_options if item.type == ProblemAnswerOptionType.RIGHT)
     if right_options_count != 1:
         raise ValueError("Problem must contain exactly one correct answer option")
+
+    i_dont_know_options_count = sum(
+        1
+        for item in answer_options
+        if item.type == ProblemAnswerOptionType.I_DONT_KNOW
+    )
+    if i_dont_know_options_count != 1:
+        raise ValueError("Problem must contain exactly one I don't know answer option")

@@ -164,7 +164,7 @@ def _seed_database(sync_engine_config: str) -> None:
             problem.answer_options = [
                 ProblemAnswerOption(text="10", type=ProblemAnswerOptionType.WRONG),
                 ProblemAnswerOption(text="24", type=ProblemAnswerOptionType.RIGHT),
-                ProblemAnswerOption(text="14", type=ProblemAnswerOptionType.WRONG),
+                ProblemAnswerOption(text="I don't know", type=ProblemAnswerOptionType.I_DONT_KNOW),
             ]
 
             admin_user = User(

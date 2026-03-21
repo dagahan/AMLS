@@ -33,7 +33,6 @@ class EntranceTestService:
     def __init__(self, db: "DataBase") -> None:
         self.db = db
         self.response_recorder_service = ResponseRecorderService(db)
-        self.problem_limit = 10
 
 
     async def create_pending_session_in_session(
@@ -44,12 +43,11 @@ class EntranceTestService:
         if user.role != UserRole.STUDENT:
             return None
 
-        problem_ids = await self._select_problem_ids(session)
         entrance_test_session = EntranceTestSession(
             user=user,
             status=EntranceTestStatus.PENDING,
-            problem_ids=problem_ids,
-            response_ids=[],
+            structure_version=1,
+            current_problem_id=None,
         )
         session.add(entrance_test_session)
         await session.flush()
@@ -76,15 +74,22 @@ class EntranceTestService:
                     status_code=status.HTTP_409_CONFLICT,
                     detail="Entrance test has already been completed",
                 )
-            if not entrance_test_session.problem_ids:
-                raise HTTPException(
-                    status_code=status.HTTP_409_CONFLICT,
-                    detail="Entrance test does not have assigned problems",
-                )
 
             if entrance_test_session.status == EntranceTestStatus.PENDING:
                 entrance_test_session.status = EntranceTestStatus.ACTIVE
                 entrance_test_session.started_at = datetime.now(UTC)
+
+            if entrance_test_session.current_problem_id is None:
+                entrance_test_session.current_problem_id = await self._select_next_problem_id(
+                    session,
+                    entrance_test_session.id,
+                )
+
+            if entrance_test_session.current_problem_id is None:
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail="Entrance test does not have available problems",
+                )
 
             session_response = build_entrance_test_session_response(entrance_test_session)
             current_problem = await self._load_current_problem(session, entrance_test_session)
@@ -139,6 +144,7 @@ class EntranceTestService:
 
             if entrance_test_session.status != EntranceTestStatus.SKIPPED:
                 entrance_test_session.status = EntranceTestStatus.SKIPPED
+                entrance_test_session.current_problem_id = None
                 entrance_test_session.skipped_at = datetime.now(UTC)
 
             return build_entrance_test_session_response(entrance_test_session)
@@ -153,7 +159,14 @@ class EntranceTestService:
                     detail="Skipped entrance test cannot be completed",
                 )
 
-            if len(entrance_test_session.response_ids) < len(entrance_test_session.problem_ids):
+            if entrance_test_session.current_problem_id is not None:
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail="Entrance test is not finished yet",
+                )
+
+            next_problem_id = await self._select_next_problem_id(session, entrance_test_session.id)
+            if next_problem_id is not None:
                 raise HTTPException(
                     status_code=status.HTTP_409_CONFLICT,
                     detail="Entrance test is not finished yet",
@@ -166,32 +179,21 @@ class EntranceTestService:
             return build_entrance_test_session_response(entrance_test_session)
 
 
-    async def _select_problem_ids(self, session: "AsyncSession") -> list[uuid.UUID]:
-        result = await session.execute(
-            select(Problem.id, Problem.subtopic_id)
-            .order_by(Problem.created_at, Problem.id)
+    async def _select_next_problem_id(
+        self,
+        session: "AsyncSession",
+        entrance_test_session_id: uuid.UUID,
+    ) -> uuid.UUID | None:
+        answered_problem_ids = select(ResponseEvent.problem_id).where(
+            ResponseEvent.entrance_test_session_id == entrance_test_session_id
         )
-        problem_rows = result.all()
-
-        selected_problem_ids: list[uuid.UUID] = []
-        selected_subtopic_ids: set[uuid.UUID] = set()
-
-        for problem_id, subtopic_id in problem_rows:
-            if subtopic_id in selected_subtopic_ids:
-                continue
-            selected_problem_ids.append(problem_id)
-            selected_subtopic_ids.add(subtopic_id)
-            if len(selected_problem_ids) >= self.problem_limit:
-                return selected_problem_ids
-
-        for problem_id, _ in problem_rows:
-            if problem_id in selected_problem_ids:
-                continue
-            selected_problem_ids.append(problem_id)
-            if len(selected_problem_ids) >= self.problem_limit:
-                break
-
-        return selected_problem_ids
+        result = await session.execute(
+            select(Problem.id)
+            .where(Problem.id.not_in(answered_problem_ids))
+            .order_by(Problem.created_at, Problem.id)
+            .limit(1)
+        )
+        return result.scalar_one_or_none()
 
 
     async def _store_session_answer(
@@ -207,7 +209,7 @@ class EntranceTestService:
                     detail="Entrance test is not active",
                 )
 
-            current_problem_id = self._get_current_problem_id(entrance_test_session)
+            current_problem_id = entrance_test_session.current_problem_id
             if current_problem_id is None:
                 raise HTTPException(
                     status_code=status.HTTP_409_CONFLICT,
@@ -221,7 +223,7 @@ class EntranceTestService:
                 )
 
             previous_status = entrance_test_session.status
-            previous_response_ids = list(entrance_test_session.response_ids)
+            previous_current_problem_id = entrance_test_session.current_problem_id
             previous_completed_at = entrance_test_session.completed_at
 
             response_state = await self.response_recorder_service.record_response(
@@ -233,18 +235,18 @@ class EntranceTestService:
                     entrance_test_session_id=entrance_test_session.id,
                 ),
             )
-            entrance_test_session.response_ids = [
-                *entrance_test_session.response_ids,
-                response_state.response_id,
-            ]
-            if len(entrance_test_session.response_ids) >= len(entrance_test_session.problem_ids):
+            entrance_test_session.current_problem_id = await self._select_next_problem_id(
+                session,
+                entrance_test_session.id,
+            )
+            if entrance_test_session.current_problem_id is None:
                 entrance_test_session.status = EntranceTestStatus.COMPLETED
                 entrance_test_session.completed_at = datetime.now(UTC)
 
             return StoredEntranceTestAnswerState(
                 session_id=entrance_test_session.id,
                 previous_status=previous_status,
-                previous_response_ids=previous_response_ids,
+                previous_current_problem_id=previous_current_problem_id,
                 previous_completed_at=previous_completed_at,
                 session=build_entrance_test_session_response(entrance_test_session),
                 response_state=response_state,
@@ -265,7 +267,7 @@ class EntranceTestService:
                 return
 
             entrance_test_session.status = stored_state.previous_status
-            entrance_test_session.response_ids = stored_state.previous_response_ids
+            entrance_test_session.current_problem_id = stored_state.previous_current_problem_id
             entrance_test_session.completed_at = stored_state.previous_completed_at
 
 
@@ -292,19 +294,12 @@ class EntranceTestService:
         return entrance_test_session
 
 
-    def _get_current_problem_id(self, entrance_test_session: EntranceTestSession) -> uuid.UUID | None:
-        answered_problems = len(entrance_test_session.response_ids)
-        if answered_problems >= len(entrance_test_session.problem_ids):
-            return None
-        return entrance_test_session.problem_ids[answered_problems]
-
-
     async def _load_current_problem(
         self,
         session: "AsyncSession",
         entrance_test_session: EntranceTestSession,
     ) -> Problem:
-        current_problem_id = self._get_current_problem_id(entrance_test_session)
+        current_problem_id = entrance_test_session.current_problem_id
         if current_problem_id is None:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
@@ -318,7 +313,7 @@ class EntranceTestService:
         session: "AsyncSession",
         entrance_test_session: EntranceTestSession,
     ) -> Problem | None:
-        current_problem_id = self._get_current_problem_id(entrance_test_session)
+        current_problem_id = entrance_test_session.current_problem_id
         if current_problem_id is None:
             return None
 

@@ -125,8 +125,8 @@ async def test_student_registration_login_and_profile(
     assert profile["role"] == "student"
     assert profile["email"].startswith("student-")
     assert profile["entrance_test"]["status"] == "pending"
-    assert profile["entrance_test"]["answered_problems"] == 0
-    assert profile["entrance_test"]["required"] is True
+    assert profile["entrance_test"]["structure_version"] == 1
+    assert profile["entrance_test"]["current_problem_id"] is None
 
 
 async def test_registration_creates_pending_entrance_test_session(client: AsyncClient) -> None:
@@ -147,10 +147,8 @@ async def test_registration_creates_pending_entrance_test_session(client: AsyncC
     assert register_response.status_code == 201
     session_payload = register_response.json()["entrance_test"]
     assert session_payload["status"] == "pending"
-    assert session_payload["total_problems"] == 1
-    assert session_payload["answered_problems"] == 0
-    assert session_payload["remaining_problems"] == 1
-    assert session_payload["required"] is True
+    assert session_payload["structure_version"] == 1
+    assert session_payload["current_problem_id"] is None
 
 
 async def test_admin_routes_require_admin(
@@ -236,7 +234,7 @@ async def test_admin_problem_crud_and_public_shape(
             "answer_options": [
                 {"text": "10", "type": "wrong"},
                 {"text": "12", "type": "right"},
-                {"text": "14", "type": "wrong"},
+                {"text": "I don't know", "type": "i_dont_know"},
             ],
         },
         headers=build_auth_headers(admin_tokens["access_token"]),
@@ -247,6 +245,7 @@ async def test_admin_problem_crud_and_public_shape(
     problem_id = created_problem["id"]
     assert created_problem["problem_type"]["id"] == problem_type_id
     assert len([item for item in created_problem["answer_options"] if item["type"] == "right"]) == 1
+    assert len([item for item in created_problem["answer_options"] if item["type"] == "i_dont_know"]) == 1
     assert all("text" in item and "type" in item for item in created_problem["answer_options"])
 
     public_response = await client.get(
@@ -302,7 +301,7 @@ async def test_admin_problem_rejects_invalid_latex(
             "answer_options": [
                 {"text": "1", "type": "right"},
                 {"text": "2", "type": "wrong"},
-                {"text": "3", "type": "wrong"},
+                {"text": "I don't know", "type": "i_dont_know"},
             ],
         },
         headers=build_auth_headers(admin_tokens["access_token"]),
@@ -369,9 +368,8 @@ async def test_entrance_test_session_records_raw_response(
     )
     assert session_response.status_code == 200
     initial_session = session_response.json()
-    problem_id = initial_session["current_problem_id"]
     assert initial_session["status"] == "pending"
-    assert problem_id is not None
+    assert initial_session["current_problem_id"] is None
 
     start_response = await client.post(
         "/entrance-test/start",
@@ -379,7 +377,9 @@ async def test_entrance_test_session_records_raw_response(
     )
     assert start_response.status_code == 200
     started_payload = start_response.json()
+    problem_id = started_payload["session"]["current_problem_id"]
     assert started_payload["session"]["status"] == "active"
+    assert problem_id is not None
     assert started_payload["problem"]["id"] == problem_id
 
     if database.async_session is None:
@@ -402,8 +402,7 @@ async def test_entrance_test_session_records_raw_response(
     answer_payload = answer_response.json()
     assert answer_payload["response"]["answer_option_type"] == "wrong"
     assert answer_payload["session"]["status"] == "completed"
-    assert answer_payload["session"]["answered_problems"] == 1
-    assert answer_payload["session"]["required"] is False
+    assert answer_payload["session"]["current_problem_id"] is None
 
     async with database.async_session() as session:
         result = await session.execute(
@@ -460,7 +459,7 @@ async def test_entrance_test_can_be_skipped(
     assert skip_response.status_code == 200
     skipped_session = skip_response.json()
     assert skipped_session["status"] == "skipped"
-    assert skipped_session["required"] is False
+    assert skipped_session["current_problem_id"] is None
 
     start_response = await client.post(
         "/entrance-test/start",
