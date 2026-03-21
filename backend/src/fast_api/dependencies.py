@@ -7,10 +7,11 @@ from typing import TYPE_CHECKING, cast
 from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy import select
+from sqlalchemy.orm import selectinload
 
 from src.db.enums import UserRole
 from src.models.alchemy import User
-from src.models.pydantic import AuthContext, ClientContext, UserResponse
+from src.models.pydantic import AuthContext, ClientContext, build_user_response
 from src.services.auth.auth_service import AuthService
 
 if TYPE_CHECKING:
@@ -44,7 +45,11 @@ def require_role(role: UserRole | None = None) -> Callable[..., Awaitable[AuthCo
             ) from error
 
         async with db.session_ctx() as session:
-            result = await session.execute(select(User).where(User.id == user_id))
+            result = await session.execute(
+                select(User)
+                .options(selectinload(User.entrance_test_session))
+                .where(User.id == user_id)
+            )
             user = result.scalar_one_or_none()
 
         if user is None:
@@ -66,7 +71,7 @@ def require_role(role: UserRole | None = None) -> Callable[..., Awaitable[AuthCo
             )
 
         return AuthContext(
-            user=UserResponse.model_validate(user),
+            user=build_user_response(user),
             payload=payload,
         )
 

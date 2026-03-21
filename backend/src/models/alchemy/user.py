@@ -1,10 +1,15 @@
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 from sqlalchemy import Boolean, Enum, String
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from src.db.enums import UserRole
 from src.models.alchemy.common import Base, IdMixin, TimestampMixin
+
+if TYPE_CHECKING:
+    from src.models.alchemy.entrance_test import EntranceTestSession
 
 
 class User(Base, IdMixin, TimestampMixin):
@@ -25,3 +30,8 @@ class User(Base, IdMixin, TimestampMixin):
         nullable=False,
     )
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    entrance_test_session: Mapped["EntranceTestSession | None"] = relationship(
+        back_populates="user",
+        cascade="all, delete-orphan",
+        uselist=False,
+    )

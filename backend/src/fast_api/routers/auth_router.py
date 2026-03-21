@@ -15,6 +15,7 @@ from src.models.pydantic import (
     TokenPairResponse,
     UserResponse,
     ValidateAccessRequest,
+    build_user_response,
 )
 from src.services.auth.auth_service import AuthService
 
@@ -30,7 +31,7 @@ def get_auth_router(db: "DataBase") -> APIRouter:
     @router.post("/register", response_model=UserResponse, status_code=201)
     async def register(data: RegisterRequest) -> UserResponse:
         user = await auth_service.register_user(data)
-        return UserResponse.model_validate(user)
+        return build_user_response(user)
 
 
     @router.post("/login", response_model=TokenPairResponse, status_code=201)

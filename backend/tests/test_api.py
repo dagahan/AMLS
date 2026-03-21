@@ -9,7 +9,7 @@ from typing import cast
 from sqlalchemy import select
 
 from src.db.database import DataBase
-from src.models.alchemy import ProblemAnswerOption
+from src.models.alchemy import ProblemAnswerOption, ResponseEvent
 from src.s3.s3_connector import S3Client
 from src.valkey.mastery_cache import MasteryCache
 
@@ -85,10 +85,12 @@ async def test_protected_routes_require_authentication(client: AsyncClient) -> N
     subtopics_response = await client.get("/subtopics?topic_id=")
     problem_types_response = await client.get("/problem-types")
     problems_response = await client.get("/problems?topic_id=")
+    entrance_test_response = await client.get("/entrance-test")
 
     assert subtopics_response.status_code == 401
     assert problem_types_response.status_code == 401
     assert problems_response.status_code == 401
+    assert entrance_test_response.status_code == 401
 
 
 async def test_filters_accept_empty_uuid_values(
@@ -131,6 +133,33 @@ async def test_student_registration_login_and_profile(
     profile = profile_response.json()["user"]
     assert profile["role"] == "student"
     assert profile["email"].startswith("student-")
+    assert profile["entrance_test"]["status"] == "pending"
+    assert profile["entrance_test"]["answered_problems"] == 0
+    assert profile["entrance_test"]["required"] is True
+
+
+async def test_registration_creates_pending_entrance_test_session(client: AsyncClient) -> None:
+    unique_suffix = uuid.uuid4().hex
+    email = f"fresh-student-{unique_suffix}@example.org"
+
+    register_response = await client.post(
+        "/auth/register",
+        json={
+            "email": email,
+            "first_name": "Fresh",
+            "last_name": "Student",
+            "password": "Student123!",
+            "avatar_url": None,
+        },
+    )
+
+    assert register_response.status_code == 201
+    session_payload = register_response.json()["entrance_test"]
+    assert session_payload["status"] == "pending"
+    assert session_payload["total_problems"] == 1
+    assert session_payload["answered_problems"] == 0
+    assert session_payload["remaining_problems"] == 1
+    assert session_payload["required"] is True
 
 
 async def test_admin_routes_require_admin(
@@ -458,6 +487,125 @@ async def test_responses_and_mastery_endpoints(
     touched_topic = cached_overview.topics[0]
     assert touched_topic.alpha == Decimal("3.5")
     assert touched_topic.beta == Decimal("2")
+
+
+async def test_entrance_test_session_updates_mastery_and_progress(
+    client: AsyncClient,
+    database: DataBase,
+    student_tokens: dict[str, str],
+) -> None:
+    session_response = await client.get(
+        "/entrance-test",
+        headers=build_auth_headers(student_tokens["access_token"]),
+    )
+    assert session_response.status_code == 200
+    initial_session = session_response.json()
+    problem_id = initial_session["current_problem_id"]
+    assert initial_session["status"] == "pending"
+    assert problem_id is not None
+
+    start_response = await client.post(
+        "/entrance-test/start",
+        headers=build_auth_headers(student_tokens["access_token"]),
+    )
+    assert start_response.status_code == 200
+    started_payload = start_response.json()
+    assert started_payload["session"]["status"] == "active"
+    assert started_payload["problem"]["id"] == problem_id
+
+    if database.async_session is None:
+        raise RuntimeError("Database session factory is not initialized")
+
+    current_user_id = await get_current_user_id(client, student_tokens["access_token"])
+
+    async with database.async_session() as session:
+        _, wrong_answer_id = await get_problem_answer_ids(session, problem_id)
+
+    answer_response = await client.post(
+        "/entrance-test/answers",
+        json={
+            "problem_id": problem_id,
+            "answer_option_id": wrong_answer_id,
+        },
+        headers=build_auth_headers(student_tokens["access_token"]),
+    )
+    assert answer_response.status_code == 201
+    answer_payload = answer_response.json()
+    assert answer_payload["response"]["correct"] is False
+    assert answer_payload["session"]["status"] == "completed"
+    assert answer_payload["session"]["answered_problems"] == 1
+    assert answer_payload["session"]["required"] is False
+    assert len(answer_payload["response"]["subtopics"]) == 1
+    assert len(answer_payload["response"]["topics"]) == 1
+
+    async with database.async_session() as session:
+        result = await session.execute(
+            select(ResponseEvent).where(
+                ResponseEvent.problem_id == uuid.UUID(problem_id),
+                ResponseEvent.user_id == uuid.UUID(current_user_id),
+            )
+        )
+        stored_responses = result.scalars().all()
+        assert len(stored_responses) == 1
+
+    current_problem_response = await client.get(
+        "/entrance-test/current-problem",
+        headers=build_auth_headers(student_tokens["access_token"]),
+    )
+    assert current_problem_response.status_code == 200
+    assert current_problem_response.json()["problem"] is None
+
+    progress_response = await client.get(
+        "/student/progress",
+        headers=build_auth_headers(student_tokens["access_token"]),
+    )
+    assert progress_response.status_code == 200
+    assert problem_id in progress_response.json()["failed_problem_ids"]
+
+
+async def test_entrance_test_can_be_skipped(
+    client: AsyncClient,
+) -> None:
+    unique_suffix = uuid.uuid4().hex
+    email = f"skip-student-{unique_suffix}@example.org"
+
+    register_response = await client.post(
+        "/auth/register",
+        json={
+            "email": email,
+            "first_name": "Skip",
+            "last_name": "Student",
+            "password": "Student123!",
+            "avatar_url": None,
+        },
+    )
+    assert register_response.status_code == 201
+
+    login_response = await client.post(
+        "/auth/login",
+        json={
+            "email": email,
+            "password": "Student123!",
+        },
+    )
+    assert login_response.status_code == 201
+    access_token = login_response.json()["access_token"]
+
+    skip_response = await client.post(
+        "/entrance-test/skip",
+        headers=build_auth_headers(access_token),
+    )
+    assert skip_response.status_code == 200
+    skipped_session = skip_response.json()
+    assert skipped_session["status"] == "skipped"
+    assert skipped_session["required"] is False
+
+    start_response = await client.post(
+        "/entrance-test/start",
+        headers=build_auth_headers(access_token),
+    )
+    assert start_response.status_code == 409
+    assert start_response.json()["detail"] == "Entrance test has already been skipped"
 
 
 async def test_storage_uploads_update_problem_and_profile_urls(

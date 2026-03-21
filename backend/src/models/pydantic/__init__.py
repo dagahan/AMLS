@@ -14,6 +14,13 @@ from src.models.pydantic.auth import (
 )
 from src.models.pydantic.common import AmlsSchema, HealthResponse, MessageResponse
 from src.models.pydantic.difficulty import DifficultyCreate, DifficultyResponse, DifficultyUpdate
+from src.models.pydantic.entrance_test import (
+    EntranceTestAnswerRequest,
+    EntranceTestAnswerResponse,
+    EntranceTestCurrentProblemResponse,
+    EntranceTestSessionResponse,
+    build_entrance_test_session_response,
+)
 from src.models.pydantic.mastery import (
     MasteryAggregationSnapshot,
     MasteryBetaValue,
@@ -56,7 +63,7 @@ from src.models.pydantic.topic import (
     TopicResponse,
     TopicUpdate,
 )
-from src.models.pydantic.user import AvatarSnapshot, UserResponse
+from src.models.pydantic.user import AvatarSnapshot, UserResponse, build_user_response
 
 __all__ = [
     "AccessPayload",
@@ -71,6 +78,10 @@ __all__ = [
     "DifficultyCreate",
     "DifficultyResponse",
     "DifficultyUpdate",
+    "EntranceTestAnswerRequest",
+    "EntranceTestAnswerResponse",
+    "EntranceTestCurrentProblemResponse",
+    "EntranceTestSessionResponse",
     "HealthResponse",
     "LoginRequest",
     "MasteryAggregationSnapshot",
@@ -114,4 +125,6 @@ __all__ = [
     "UploadedImageResponse",
     "UserResponse",
     "ValidateAccessRequest",
+    "build_entrance_test_session_response",
+    "build_user_response",
 ]

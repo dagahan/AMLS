@@ -10,6 +10,7 @@ from src.db.enums import UserRole
 from src.models.alchemy import User
 from src.models.pydantic import AccessPayload, ClientContext, RegisterRequest, TokenPairResponse
 from src.services.auth.sessions_manager import SessionsManager
+from src.services.entrance_test import EntranceTestService
 from src.services.jwt.jwt_parser import JwtParser
 from src.transaction_manager.transaction_manager import execute_atomic_step, transactional
 
@@ -22,6 +23,7 @@ class AuthService:
         self.db = db
         self.jwt_parser = JwtParser()
         self.sessions_manager = SessionsManager()
+        self.entrance_test_service = EntranceTestService(db)
 
 
     async def authenticate_user(self, email: str, password: str) -> User:
@@ -74,7 +76,7 @@ class AuthService:
             )
             session.add(user)
             await session.flush()
-            await session.refresh(user)
+            await self.entrance_test_service.create_pending_session_in_session(session, user)
 
         return user
 

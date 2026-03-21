@@ -54,7 +54,7 @@ def get_storage_router(db: "DataBase") -> APIRouter:
             file=file,
             url_factory=lambda storage_key: build_storage_file_url(request, storage_key),
         )
-        return UserResponse.model_validate(updated_user)
+        return auth.user.model_copy(update={"avatar_url": updated_user.avatar_url})
 
 
     @router.get("/storage/files/{storage_key:path}", name="get_stored_file")
