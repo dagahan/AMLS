@@ -3,10 +3,11 @@ from __future__ import annotations
 import uuid
 from typing import TYPE_CHECKING
 
-from sqlalchemy import Boolean, ForeignKey, Text
+from sqlalchemy import Enum, ForeignKey, Text
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
+from src.db.enums import ProblemAnswerOptionType
 from src.models.alchemy.common import Base, IdMixin, TimestampMixin
 
 if TYPE_CHECKING:
@@ -57,6 +58,13 @@ class ProblemAnswerOption(Base, IdMixin):
         nullable=False,
     )
     text: Mapped[str] = mapped_column(Text, nullable=False)
-    is_correct: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    type: Mapped[ProblemAnswerOptionType] = mapped_column(
+        Enum(
+            ProblemAnswerOptionType,
+            name="problem_answer_option_type_enum",
+            values_callable=lambda enum_class: [member.value for member in enum_class],
+        ),
+        nullable=False,
+    )
 
     problem: Mapped["Problem"] = relationship(back_populates="answer_options")

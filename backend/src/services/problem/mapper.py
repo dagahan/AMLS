@@ -50,7 +50,7 @@ def _build_admin_answer_option_responses(problem: Problem) -> list[AdminProblemA
         AdminProblemAnswerOptionResponse(
             id=option.id,
             text=option.text,
-            is_correct=option.is_correct,
+            type=option.type,
         )
         for option in problem.answer_options
     ]

@@ -20,19 +20,9 @@ if str(BACKEND_DIR) not in sys.path:
 
 from src.core.utils import EnvTools, PasswordTools
 from src.db.database import DataBase
-from src.db.enums import UserRole
+from src.db.enums import ProblemAnswerOptionType, UserRole
 from src.fast_api.fastapi_server import create_application
-from src.models.alchemy import (
-    Base,
-    Difficulty,
-    Problem,
-    ProblemAnswerOption,
-    ProblemType,
-    Subtopic,
-    Topic,
-    TopicSubtopic,
-    User,
-)
+from src.models.alchemy import Base, Difficulty, Problem, ProblemAnswerOption, ProblemType, Subtopic, Topic, TopicSubtopic, User
 from src.models.pydantic import TokenPairResponse
 from src.valkey.valkey_client import get_valkey_client
 
@@ -69,6 +59,7 @@ def reset_database(bootstrap_environment: None) -> Iterator[None]:
         alembic_config = Config(str(BACKEND_DIR / "alembic.ini"))
         alembic_config.set_main_option("script_location", str(BACKEND_DIR / "src/migrations"))
         command.upgrade(alembic_config, "head")
+        _seed_database(database.sync_engine_config)
     else:
         _create_schema_and_seed(database.sync_engine_config)
     yield
@@ -142,7 +133,15 @@ def _create_schema_and_seed(sync_engine_config: str) -> None:
 
     try:
         Base.metadata.create_all(engine)
+        _seed_database(sync_engine_config)
+    finally:
+        engine.dispose()
 
+
+def _seed_database(sync_engine_config: str) -> None:
+    engine = create_engine(sync_engine_config)
+
+    try:
         with Session(engine) as session:
             topic = Topic(name="Planimetry")
             subtopic = Subtopic(topic=topic, name="right triangle")
@@ -163,9 +162,9 @@ def _create_schema_and_seed(sync_engine_config: str) -> None:
                 solution_images=[],
             )
             problem.answer_options = [
-                ProblemAnswerOption(text="10", is_correct=False),
-                ProblemAnswerOption(text="24", is_correct=True),
-                ProblemAnswerOption(text="14", is_correct=False),
+                ProblemAnswerOption(text="10", type=ProblemAnswerOptionType.WRONG),
+                ProblemAnswerOption(text="24", type=ProblemAnswerOptionType.RIGHT),
+                ProblemAnswerOption(text="14", type=ProblemAnswerOptionType.WRONG),
             ]
 
             admin_user = User(

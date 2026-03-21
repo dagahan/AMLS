@@ -18,7 +18,6 @@ from src.models.alchemy import (
     Topic,
     TopicSubtopic,
 )
-from src.valkey.mastery_cache import MasteryCache
 
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
@@ -42,11 +41,6 @@ async def sync_reference_data(db: DataBase) -> None:
         await _delete_invalid_difficulties(session, difficulty_ids)
         await _delete_invalid_problem_type_links(session, problem_type_link_ids)
         await _delete_invalid_topic_links(session, topic_link_ids)
-
-    mastery_cache = MasteryCache()
-    await mastery_cache.bump_taxonomy_version()
-    await mastery_cache.bump_problem_mapping_version()
-
 
 async def _sync_topics(
     session: "AsyncSession",

@@ -13,14 +13,10 @@ from src.models.pydantic import (
     MessageResponse,
     ProblemCreate,
     ProblemResponse,
-    ProblemSubmitRequest,
-    ProblemSubmitResponse,
     ProblemUpdate,
-    StudentProgressResponse,
 )
 from src.services.problem.admin_problem_service import AdminProblemService
 from src.services.problem.problem_query_service import ProblemQueryService
-from src.services.problem.problem_submission_service import ProblemSubmissionService
 
 if TYPE_CHECKING:
     from src.db.database import DataBase
@@ -30,7 +26,6 @@ def get_problem_router(db: "DataBase") -> APIRouter:
     router = APIRouter()
     admin_problem_service = AdminProblemService(db)
     problem_query_service = ProblemQueryService(db)
-    problem_submission_service = ProblemSubmissionService(db)
 
 
     @router.get("/problems", response_model=list[ProblemResponse], status_code=200)
@@ -59,30 +54,6 @@ def get_problem_router(db: "DataBase") -> APIRouter:
         auth: AuthContext = Depends(require_role()),
     ) -> ProblemResponse:
         return await problem_query_service.get_problem(problem_id)
-
-
-    @router.get("/student/progress", response_model=StudentProgressResponse, status_code=200)
-    async def get_student_progress(
-        auth: AuthContext = Depends(require_role()),
-    ) -> StudentProgressResponse:
-        return await problem_submission_service.get_student_progress(auth.user.id)
-
-
-    @router.post(
-        "/student/problems/{problem_id}/submit",
-        response_model=ProblemSubmitResponse,
-        status_code=200,
-    )
-    async def submit_problem(
-        problem_id: uuid.UUID,
-        data: ProblemSubmitRequest,
-        auth: AuthContext = Depends(require_role()),
-    ) -> ProblemSubmitResponse:
-        return await problem_submission_service.submit_problem(
-            auth.user.id,
-            problem_id,
-            data.answer_option_id,
-        )
 
 
     @router.post("/admin/problems", response_model=AdminProblemResponse, status_code=201)

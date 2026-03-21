@@ -2,16 +2,14 @@ from __future__ import annotations
 
 import os
 import uuid
-from decimal import Decimal
 from typing import TYPE_CHECKING
-from typing import cast
 
 from sqlalchemy import select
 
 from src.db.database import DataBase
+from src.db.enums import ProblemAnswerOptionType
 from src.models.alchemy import ProblemAnswerOption, ResponseEvent
 from src.s3.s3_connector import S3Client
-from src.valkey.mastery_cache import MasteryCache
 
 if TYPE_CHECKING:
     from httpx import AsyncClient
@@ -21,19 +19,6 @@ if TYPE_CHECKING:
 
 def build_auth_headers(access_token: str) -> dict[str, str]:
     return {"Authorization": f"Bearer {access_token}"}
-
-
-def build_mastery_map(items: list[dict[str, object]]) -> dict[str, float]:
-    return {
-        str(item["id"]): float(cast("float", item["mastery"]))
-        for item in items
-    }
-
-
-def calculate_expected_mastery(success_sum: str, failure_sum: str) -> float:
-    alpha = Decimal("2") + Decimal(success_sum)
-    beta = Decimal("2") + Decimal(failure_sum)
-    return float(alpha / (alpha + beta))
 
 
 async def get_current_user_id(client: AsyncClient, access_token: str) -> str:
@@ -76,8 +61,14 @@ async def get_problem_answer_ids(session: AsyncSession, problem_id: str) -> tupl
         select(ProblemAnswerOption).where(ProblemAnswerOption.problem_id == uuid.UUID(problem_id))
     )
     answer_options = result.scalars().all()
-    correct_option = next(item for item in answer_options if item.is_correct)
-    wrong_option = next(item for item in answer_options if not item.is_correct)
+    correct_option = next(
+        item for item in answer_options
+        if item.type == ProblemAnswerOptionType.RIGHT
+    )
+    wrong_option = next(
+        item for item in answer_options
+        if item.type == ProblemAnswerOptionType.WRONG
+    )
     return str(correct_option.id), str(wrong_option.id)
 
 
@@ -243,9 +234,9 @@ async def test_admin_problem_crud_and_public_shape(
             "condition_images": [],
             "solution_images": [],
             "answer_options": [
-                {"text": "10", "is_correct": False},
-                {"text": "12", "is_correct": True},
-                {"text": "14", "is_correct": False},
+                {"text": "10", "type": "wrong"},
+                {"text": "12", "type": "right"},
+                {"text": "14", "type": "wrong"},
             ],
         },
         headers=build_auth_headers(admin_tokens["access_token"]),
@@ -255,8 +246,8 @@ async def test_admin_problem_crud_and_public_shape(
     created_problem = create_response.json()
     problem_id = created_problem["id"]
     assert created_problem["problem_type"]["id"] == problem_type_id
-    assert len([item for item in created_problem["answer_options"] if item["is_correct"]]) == 1
-    assert all("text" in item and "is_correct" in item for item in created_problem["answer_options"])
+    assert len([item for item in created_problem["answer_options"] if item["type"] == "right"]) == 1
+    assert all("text" in item and "type" in item for item in created_problem["answer_options"])
 
     public_response = await client.get(
         f"/problems/{problem_id}",
@@ -309,9 +300,9 @@ async def test_admin_problem_rejects_invalid_latex(
             "condition_images": [],
             "solution_images": [],
             "answer_options": [
-                {"text": "1", "is_correct": True},
-                {"text": "2", "is_correct": False},
-                {"text": "3", "is_correct": False},
+                {"text": "1", "type": "right"},
+                {"text": "2", "type": "wrong"},
+                {"text": "3", "type": "wrong"},
             ],
         },
         headers=build_auth_headers(admin_tokens["access_token"]),
@@ -321,7 +312,7 @@ async def test_admin_problem_rejects_invalid_latex(
     assert response.json()["detail"] == "Invalid LaTeX in condition: Missing close brace"
 
 
-async def test_student_submission_updates_progress(
+async def test_removed_old_practice_and_intelligence_routes(
     client: AsyncClient,
     database: DataBase,
     student_tokens: dict[str, str],
@@ -337,71 +328,22 @@ async def test_student_submission_updates_progress(
         raise RuntimeError("Database session factory is not initialized")
 
     async with database.async_session() as session:
-        correct_answer_id, wrong_answer_id = await get_problem_answer_ids(session, problem_id)
+        _, wrong_answer_id = await get_problem_answer_ids(session, problem_id)
 
-    wrong_response = await client.post(
+    progress_response = await client.get(
+        "/student/progress",
+        headers=build_auth_headers(student_tokens["access_token"]),
+    )
+    submit_response = await client.post(
         f"/student/problems/{problem_id}/submit",
         json={"answer_option_id": wrong_answer_id},
         headers=build_auth_headers(student_tokens["access_token"]),
     )
-    assert wrong_response.status_code == 200
-    assert wrong_response.json()["correct"] is False
-
-    failed_progress = await client.get(
-        "/student/progress",
-        headers=build_auth_headers(student_tokens["access_token"]),
-    )
-    assert failed_progress.status_code == 200
-    assert problem_id in failed_progress.json()["failed_problem_ids"]
-
-    correct_response = await client.post(
-        f"/student/problems/{problem_id}/submit",
-        json={"answer_option_id": correct_answer_id},
-        headers=build_auth_headers(student_tokens["access_token"]),
-    )
-    assert correct_response.status_code == 200
-    assert correct_response.json()["correct"] is True
-
-    solved_progress = await client.get(
-        "/student/progress",
-        headers=build_auth_headers(student_tokens["access_token"]),
-    )
-    assert solved_progress.status_code == 200
-    solved_payload = solved_progress.json()
-    assert problem_id in solved_payload["solved_problem_ids"]
-    assert problem_id not in solved_payload["failed_problem_ids"]
-
-
-async def test_responses_and_mastery_endpoints(
-    client: AsyncClient,
-    database: DataBase,
-    student_tokens: dict[str, str],
-) -> None:
-    list_response = await client.get(
-        "/problems",
-        headers=build_auth_headers(student_tokens["access_token"]),
-    )
-    assert list_response.status_code == 200
-    problem_payload = list_response.json()[0]
-    problem_id = problem_payload["id"]
-    subtopic_id = problem_payload["subtopic"]["id"]
-
-    if database.async_session is None:
-        raise RuntimeError("Database session factory is not initialized")
-
-    async with database.async_session() as session:
-        correct_answer_id, wrong_answer_id = await get_problem_answer_ids(session, problem_id)
-
-    overview_response = await client.get(
+    removed_overview_response = await client.get(
         "/mastery/overview",
         headers=build_auth_headers(student_tokens["access_token"]),
     )
-    assert overview_response.status_code == 200
-    initial_overview = overview_response.json()
-    initial_subtopic_mastery = build_mastery_map(initial_overview["subtopics"])
-    initial_topic_mastery = build_mastery_map(initial_overview["topics"])
-
-    response_create = await client.post(
+    raw_response_endpoint = await client.post(
         "/responses",
         json={
             "problem_id": problem_id,
@@ -409,87 +351,14 @@ async def test_responses_and_mastery_endpoints(
         },
         headers=build_auth_headers(student_tokens["access_token"]),
     )
-    assert response_create.status_code == 201
-    response_payload = response_create.json()
-    assert response_payload["correct"] is False
-    assert len(response_payload["subtopics"]) == 1
-    assert len(response_payload["topics"]) == 1
 
-    updated_subtopic_mastery = build_mastery_map(response_payload["subtopics"])
-    updated_topic_mastery = build_mastery_map(response_payload["topics"])
-
-    expected_wrong_subtopic_mastery = calculate_expected_mastery("0", "1.5")
-    expected_wrong_topic_mastery = calculate_expected_mastery("0", "1.5")
-
-    for mastery_value in updated_subtopic_mastery.values():
-        assert abs(mastery_value - expected_wrong_subtopic_mastery) < 1e-6
-    for mastery_value in updated_topic_mastery.values():
-        assert abs(mastery_value - expected_wrong_topic_mastery) < 1e-6
-
-    first_topic_id = response_payload["topics"][0]["id"]
-
-    subtopic_response = await client.get(
-        f"/mastery/subtopics/{subtopic_id}",
-        headers=build_auth_headers(student_tokens["access_token"]),
-    )
-    topic_response = await client.get(
-        f"/mastery/topics/{first_topic_id}",
-        headers=build_auth_headers(student_tokens["access_token"]),
-    )
-
-    assert subtopic_response.status_code == 200
-    assert topic_response.status_code == 200
-
-    follow_up_response = await client.post(
-        "/responses",
-        json={
-            "problem_id": problem_id,
-            "answer_option_id": correct_answer_id,
-        },
-        headers=build_auth_headers(student_tokens["access_token"]),
-    )
-    assert follow_up_response.status_code == 201
-    follow_up_payload = follow_up_response.json()
-    assert follow_up_payload["correct"] is True
-
-    final_overview_response = await client.get(
-        "/mastery/overview",
-        headers=build_auth_headers(student_tokens["access_token"]),
-    )
-    assert final_overview_response.status_code == 200
-    final_overview = final_overview_response.json()
-    final_subtopic_mastery = build_mastery_map(final_overview["subtopics"])
-    final_topic_mastery = build_mastery_map(final_overview["topics"])
-
-    expected_correct_subtopic_mastery = calculate_expected_mastery("1.5", "0")
-    expected_correct_topic_mastery = calculate_expected_mastery("1.5", "0")
-
-    for current_subtopic_id, mastery_value in updated_subtopic_mastery.items():
-        assert initial_subtopic_mastery[current_subtopic_id] == 0.5
-        assert abs(final_subtopic_mastery[current_subtopic_id] - expected_correct_subtopic_mastery) < 1e-6
-        assert mastery_value != final_subtopic_mastery[current_subtopic_id]
-
-    for topic_id, mastery_value in updated_topic_mastery.items():
-        assert initial_topic_mastery[topic_id] == 0.5
-        assert abs(final_topic_mastery[topic_id] - expected_correct_topic_mastery) < 1e-6
-        assert mastery_value != final_topic_mastery[topic_id]
-
-    current_user_id = await get_current_user_id(client, student_tokens["access_token"])
-    mastery_cache = MasteryCache()
-    cached_overview = await mastery_cache.get_mastery_overview(current_user_id)
-    assert cached_overview is not None
-
-    cached_subtopic_values = sorted(float(item.mastery) for item in cached_overview.subtopics)
-    cached_topic_values = sorted(float(item.mastery) for item in cached_overview.topics)
-    assert cached_subtopic_values == sorted([expected_correct_subtopic_mastery, 0.5])
-    assert cached_topic_values == [expected_correct_topic_mastery]
-
-    touched_topic = cached_overview.topics[0]
-    assert touched_topic.alpha == Decimal("3.5")
-    assert touched_topic.beta == Decimal("2")
+    assert progress_response.status_code == 404
+    assert submit_response.status_code == 404
+    assert removed_overview_response.status_code == 404
+    assert raw_response_endpoint.status_code == 404
 
 
-async def test_entrance_test_session_updates_mastery_and_progress(
+async def test_entrance_test_session_records_raw_response(
     client: AsyncClient,
     database: DataBase,
     student_tokens: dict[str, str],
@@ -531,12 +400,10 @@ async def test_entrance_test_session_updates_mastery_and_progress(
     )
     assert answer_response.status_code == 201
     answer_payload = answer_response.json()
-    assert answer_payload["response"]["correct"] is False
+    assert answer_payload["response"]["answer_option_type"] == "wrong"
     assert answer_payload["session"]["status"] == "completed"
     assert answer_payload["session"]["answered_problems"] == 1
     assert answer_payload["session"]["required"] is False
-    assert len(answer_payload["response"]["subtopics"]) == 1
-    assert len(answer_payload["response"]["topics"]) == 1
 
     async with database.async_session() as session:
         result = await session.execute(
@@ -547,6 +414,8 @@ async def test_entrance_test_session_updates_mastery_and_progress(
         )
         stored_responses = result.scalars().all()
         assert len(stored_responses) == 1
+        assert stored_responses[0].answer_option_id == uuid.UUID(wrong_answer_id)
+        assert stored_responses[0].entrance_test_session_id == uuid.UUID(answer_payload["session"]["id"])
 
     current_problem_response = await client.get(
         "/entrance-test/current-problem",
@@ -554,13 +423,6 @@ async def test_entrance_test_session_updates_mastery_and_progress(
     )
     assert current_problem_response.status_code == 200
     assert current_problem_response.json()["problem"] is None
-
-    progress_response = await client.get(
-        "/student/progress",
-        headers=build_auth_headers(student_tokens["access_token"]),
-    )
-    assert progress_response.status_code == 200
-    assert problem_id in progress_response.json()["failed_problem_ids"]
 
 
 async def test_entrance_test_can_be_skipped(

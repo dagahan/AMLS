@@ -6,8 +6,8 @@ from uuid import UUID
 
 from src.db.enums import EntranceTestStatus
 from src.models.pydantic.common import AmlsSchema
-from src.models.pydantic.mastery import RecordedResponseState, ResponseCreateResponse
 from src.models.pydantic.problem import ProblemResponse
+from src.models.pydantic.response import RecordedResponseResponse, RecordedResponseState
 
 if TYPE_CHECKING:
     from src.models.alchemy.entrance_test import EntranceTestSession
@@ -40,7 +40,7 @@ class EntranceTestAnswerRequest(AmlsSchema):
 
 class EntranceTestAnswerResponse(AmlsSchema):
     session: EntranceTestSessionResponse
-    response: ResponseCreateResponse
+    response: RecordedResponseResponse
 
 
 class StoredEntranceTestAnswerState(AmlsSchema):

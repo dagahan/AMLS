@@ -18,9 +18,9 @@ from src.models.pydantic import (
     StoredEntranceTestAnswerState,
     build_entrance_test_session_response,
 )
-from src.services.mastery.response_service import ResponseService
 from src.services.problem.loader import build_problem_statement, load_problem_or_404
 from src.services.problem.mapper import build_problem_response
+from src.services.response import ResponseRecorderService
 from src.transaction_manager.transaction_manager import execute_atomic_step, transactional
 
 if TYPE_CHECKING:
@@ -32,7 +32,7 @@ if TYPE_CHECKING:
 class EntranceTestService:
     def __init__(self, db: "DataBase") -> None:
         self.db = db
-        self.response_service = ResponseService(db)
+        self.response_recorder_service = ResponseRecorderService(db)
         self.problem_limit = 10
 
 
@@ -122,14 +122,9 @@ class EntranceTestService:
             rollback=self._rollback_session_answer,
             step_name="store_entrance_test_answer",
         )
-
-        response_payload = await self.response_service.build_response_result(
-            user_id,
-            stored_state.response_state,
-        )
         return EntranceTestAnswerResponse(
             session=stored_state.session,
-            response=response_payload,
+            response=stored_state.response_state,
         )
 
 
@@ -229,12 +224,13 @@ class EntranceTestService:
             previous_response_ids = list(entrance_test_session.response_ids)
             previous_completed_at = entrance_test_session.completed_at
 
-            response_state = await self.response_service.record_response(
+            response_state = await self.response_recorder_service.record_response(
                 session,
                 user_id,
                 ResponseCreate(
                     problem_id=data.problem_id,
                     answer_option_id=data.answer_option_id,
+                    entrance_test_session_id=entrance_test_session.id,
                 ),
             )
             entrance_test_session.response_ids = [

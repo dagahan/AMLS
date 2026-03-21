@@ -6,6 +6,12 @@ class UserRole(StrEnum):
     STUDENT = "student"
 
 
+class ProblemAnswerOptionType(StrEnum):
+    RIGHT = "right"
+    WRONG = "wrong"
+    I_DONT_KNOW = "i_dont_know"
+
+
 class EntranceTestStatus(StrEnum):
     PENDING = "pending"
     ACTIVE = "active"

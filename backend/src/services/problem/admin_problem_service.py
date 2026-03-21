@@ -21,7 +21,6 @@ from src.services.problem.loader import (
 )
 from src.services.problem.problem_query_service import ProblemQueryService
 from src.transaction_manager.transaction_manager import execute_atomic_step, transactional
-from src.valkey.mastery_cache import MasteryCache
 
 if TYPE_CHECKING:
     from src.db.database import DataBase
@@ -31,7 +30,6 @@ class AdminProblemService:
     def __init__(self, db: "DataBase") -> None:
         self.db = db
         self.mathjax_validator = MathJaxValidator()
-        self.mastery_cache = MasteryCache()
         self.problem_query_service = ProblemQueryService(db)
 
 
@@ -42,7 +40,6 @@ class AdminProblemService:
             rollback=lambda created_problem_id: self._delete_problem_record(created_problem_id),
             step_name="create_problem_record",
         )
-        await self.mastery_cache.bump_problem_mapping_version()
         return await self.problem_query_service.get_admin_problem(problem_id)
 
 
@@ -54,8 +51,6 @@ class AdminProblemService:
             rollback=lambda _: self._restore_problem_snapshot(snapshot),
             step_name="update_problem_record",
         )
-        if self._is_mastery_mapping_update(data):
-            await self.mastery_cache.bump_problem_mapping_version()
         return await self.problem_query_service.get_admin_problem(updated_problem_id)
 
 
@@ -67,7 +62,6 @@ class AdminProblemService:
             rollback=lambda _: self._restore_problem_snapshot(snapshot),
             step_name="delete_problem_record",
         )
-        await self.mastery_cache.bump_problem_mapping_version()
 
 
     async def _create_problem_record(self, data: ProblemCreate) -> uuid.UUID:
@@ -146,7 +140,7 @@ class AdminProblemService:
             condition_images=list(problem.condition_images),
             solution_images=list(problem.solution_images),
             answer_options=[
-                ProblemAnswerOptionPayload(text=item.text, is_correct=item.is_correct)
+                ProblemAnswerOptionPayload(text=item.text, type=item.type)
                 for item in problem.answer_options
             ],
         )
@@ -215,17 +209,9 @@ class AdminProblemService:
         answer_options: list[ProblemAnswerOptionPayload],
     ) -> list[ProblemAnswerOption]:
         return [
-            ProblemAnswerOption(text=item.text, is_correct=item.is_correct)
+            ProblemAnswerOption(text=item.text, type=item.type)
             for item in answer_options
         ]
-
-
-    def _is_mastery_mapping_update(self, data: ProblemUpdate) -> bool:
-        return (
-            data.subtopic_id is not None
-            or data.difficulty_id is not None
-            or data.problem_type_id is not None
-        )
 
 
     async def _validate_problem_latex(

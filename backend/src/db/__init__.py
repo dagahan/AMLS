@@ -1,5 +1,5 @@
 from src.db.database import DataBase
-from src.db.enums import EntranceTestStatus, UserRole
+from src.db.enums import EntranceTestStatus, ProblemAnswerOptionType, UserRole
 from src.models.alchemy import (
     Base,
     Difficulty,
@@ -24,6 +24,7 @@ __all__ = [
     "EntranceTestStatus",
     "Problem",
     "ProblemAnswerOption",
+    "ProblemAnswerOptionType",
     "ProblemType",
     "ProblemTypePrerequisite",
     "ResponseEvent",

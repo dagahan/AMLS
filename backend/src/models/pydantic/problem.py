@@ -2,6 +2,7 @@ from uuid import UUID
 
 from pydantic import Field, model_validator
 
+from src.db.enums import ProblemAnswerOptionType
 from src.models.pydantic.common import AmlsSchema
 from src.models.pydantic.difficulty import DifficultyResponse
 from src.models.pydantic.problem_type import ProblemTypeResponse
@@ -10,7 +11,7 @@ from src.models.pydantic.topic import SubtopicResponse
 
 class ProblemAnswerOptionPayload(AmlsSchema):
     text: str = Field(min_length=1)
-    is_correct: bool
+    type: ProblemAnswerOptionType
 
 
 class ProblemCreate(AmlsSchema):
@@ -54,7 +55,7 @@ class ProblemAnswerOptionResponse(AmlsSchema):
 
 
 class AdminProblemAnswerOptionResponse(ProblemAnswerOptionResponse):
-    is_correct: bool
+    type: ProblemAnswerOptionType
 
 
 class ProblemResponse(AmlsSchema):
@@ -79,21 +80,6 @@ class AdminProblemResponse(AmlsSchema):
     answer_options: list[AdminProblemAnswerOptionResponse]
 
 
-class ProblemSubmitRequest(AmlsSchema):
-    answer_option_id: UUID
-
-
-class ProblemSubmitResponse(AmlsSchema):
-    correct: bool
-    solution: str
-    solution_images: list[str]
-
-
-class StudentProgressResponse(AmlsSchema):
-    solved_problem_ids: list[UUID]
-    failed_problem_ids: list[UUID]
-
-
 class ProblemSnapshot(AmlsSchema):
     id: UUID
     subtopic_id: UUID
@@ -104,13 +90,6 @@ class ProblemSnapshot(AmlsSchema):
     condition_images: list[str]
     solution_images: list[str]
     answer_options: list[ProblemAnswerOptionPayload]
-
-
-class SubmissionSnapshot(AmlsSchema):
-    user_id: UUID
-    problem_id: UUID
-    solved_exists: bool
-    failed_exists: bool
 
 
 def validate_answer_options(answer_options: list[ProblemAnswerOptionPayload]) -> None:
@@ -124,6 +103,6 @@ def validate_answer_options(answer_options: list[ProblemAnswerOptionPayload]) ->
     if len(set(normalized_options)) != len(answer_options):
         raise ValueError("Answer options must be unique")
 
-    correct_options_count = sum(1 for item in answer_options if item.is_correct)
-    if correct_options_count != 1:
+    right_options_count = sum(1 for item in answer_options if item.type == ProblemAnswerOptionType.RIGHT)
+    if right_options_count != 1:
         raise ValueError("Problem must contain exactly one correct answer option")

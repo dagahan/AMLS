@@ -15,7 +15,6 @@ from src.models.pydantic import (
     TopicResponse,
     TopicUpdate,
 )
-from src.valkey.mastery_cache import MasteryCache
 
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
@@ -26,7 +25,6 @@ if TYPE_CHECKING:
 class TopicService:
     def __init__(self, db: "DataBase") -> None:
         self.db = db
-        self.mastery_cache = MasteryCache()
 
 
     async def list_topics(self) -> list[TopicResponse]:
@@ -65,9 +63,7 @@ class TopicService:
             session.add(topic)
             await session.flush()
             await session.refresh(topic)
-            response = TopicResponse.model_validate(topic)
-        await self.mastery_cache.bump_taxonomy_version()
-        return response
+            return TopicResponse.model_validate(topic)
 
 
     async def update_topic(self, topic_id: uuid.UUID, data: TopicUpdate) -> TopicResponse:
@@ -85,7 +81,6 @@ class TopicService:
         async with self.db.session_ctx() as session:
             topic = await self._get_topic_or_404(session, topic_id)
             await session.delete(topic)
-        await self.mastery_cache.bump_taxonomy_version()
 
 
     async def create_subtopic(self, data: SubtopicCreate) -> SubtopicResponse:
@@ -97,9 +92,7 @@ class TopicService:
             await session.flush()
             session.add(TopicSubtopic(topic_id=data.topic_id, subtopic_id=subtopic.id, weight=1.0))
             await session.refresh(subtopic)
-            response = SubtopicResponse.model_validate(subtopic)
-        await self.mastery_cache.bump_taxonomy_version()
-        return response
+            return SubtopicResponse.model_validate(subtopic)
 
 
     async def update_subtopic(
@@ -140,19 +133,13 @@ class TopicService:
 
             await session.flush()
             await session.refresh(subtopic)
-            response = SubtopicResponse.model_validate(subtopic)
-
-        if taxonomy_mapping_changed:
-            await self.mastery_cache.bump_taxonomy_version()
-
-        return response
+            return SubtopicResponse.model_validate(subtopic)
 
 
     async def delete_subtopic(self, subtopic_id: uuid.UUID) -> None:
         async with self.db.session_ctx() as session:
             subtopic = await self._get_subtopic_or_404(session, subtopic_id)
             await session.delete(subtopic)
-        await self.mastery_cache.bump_taxonomy_version()
 
 
     async def _get_topic_or_404(self, session: "AsyncSession", topic_id: uuid.UUID) -> Topic:
