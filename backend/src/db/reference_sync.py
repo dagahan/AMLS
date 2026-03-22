@@ -4,6 +4,7 @@ import asyncio
 import uuid
 from typing import TYPE_CHECKING
 
+from loguru import logger
 from sqlalchemy import delete, or_, select
 
 from src.core.utils import EnvTools
@@ -25,6 +26,7 @@ if TYPE_CHECKING:
 
 async def sync_reference_data(db: DataBase) -> None:
     async with db.session_ctx() as session:
+        logger.info("Starting reference data sync")
         topic_ids, subtopic_ids, topic_link_ids = await _sync_topics(session)
         problem_type_ids, problem_type_link_ids = await _sync_problem_types(session)
         difficulty_ids = await _sync_difficulties(session)
@@ -41,6 +43,17 @@ async def sync_reference_data(db: DataBase) -> None:
         await _delete_invalid_difficulties(session, difficulty_ids)
         await _delete_invalid_problem_type_links(session, problem_type_link_ids)
         await _delete_invalid_topic_links(session, topic_link_ids)
+
+        logger.info(
+            "Finished reference data sync: topics={}, subtopics={}, topic_links={}, problem_types={}, problem_type_links={}, difficulties={}",
+            len(topic_ids),
+            len(subtopic_ids),
+            len(topic_link_ids),
+            len(problem_type_ids),
+            len(problem_type_link_ids),
+            len(difficulty_ids),
+        )
+
 
 async def _sync_topics(
     session: "AsyncSession",

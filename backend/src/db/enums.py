@@ -17,3 +17,14 @@ class EntranceTestStatus(StrEnum):
     ACTIVE = "active"
     COMPLETED = "completed"
     SKIPPED = "skipped"
+
+
+class EntranceTestStructureStatus(StrEnum):
+    READY = "ready"
+    FAILED = "failed"
+
+
+class EntranceTestResultNodeStatus(StrEnum):
+    LEARNED = "learned"
+    READY = "ready"
+    LOCKED = "locked"

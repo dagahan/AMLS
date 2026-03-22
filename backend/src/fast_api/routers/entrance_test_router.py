@@ -10,7 +10,9 @@ from src.models.pydantic import (
     AuthContext,
     EntranceTestAnswerRequest,
     EntranceTestAnswerResponse,
+    EntranceTestStructureCompileResponse,
     EntranceTestCurrentProblemResponse,
+    EntranceTestResultResponse,
     EntranceTestSessionResponse,
 )
 from src.services.entrance_test import EntranceTestService
@@ -24,11 +26,33 @@ def get_entrance_test_router(db: "DataBase") -> APIRouter:
     entrance_test_service = EntranceTestService(db)
 
 
+    @router.post(
+        "/admin/entrance-test/structure/compile",
+        response_model=EntranceTestStructureCompileResponse,
+        status_code=200,
+    )
+    async def compile_entrance_test_structure(
+        auth: AuthContext = Depends(require_role(role=UserRole.ADMIN)),
+    ) -> EntranceTestStructureCompileResponse:
+        return await entrance_test_service.compile_current_structure()
+
+
     @router.get("/entrance-test", response_model=EntranceTestSessionResponse, status_code=200)
     async def get_entrance_test(
         auth: AuthContext = Depends(require_role(role=UserRole.STUDENT)),
     ) -> EntranceTestSessionResponse:
         return await entrance_test_service.get_session(auth.user.id)
+
+
+    @router.get(
+        "/entrance-test/result",
+        response_model=EntranceTestResultResponse,
+        status_code=200,
+    )
+    async def get_entrance_test_result(
+        auth: AuthContext = Depends(require_role(role=UserRole.STUDENT)),
+    ) -> EntranceTestResultResponse:
+        return await entrance_test_service.get_result(auth.user.id)
 
 
     @router.post(

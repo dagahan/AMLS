@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from math import log2
+from math import log
 
 import numpy as np
 
@@ -22,7 +22,7 @@ def build_state_artifact(graph_artifact: GraphArtifact) -> StateArtifact:
         state_masks=state_masks,
         node_count=len(graph_artifact.node_ids),
     )
-    initial_entropy = log2(len(state_masks)) if state_masks else 0.0
+    initial_entropy = log(len(state_masks)) if state_masks else 0.0
 
     return StateArtifact(
         state_masks=state_masks,

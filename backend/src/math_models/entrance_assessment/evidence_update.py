@@ -5,11 +5,11 @@ import numpy as np
 from src.math_models.entrance_assessment.types import FloatVector, RuntimeSnapshot
 
 
-def apply_state_increments(
+def apply_node_score_increment(
     runtime: RuntimeSnapshot,
-    state_increments: FloatVector,
-) -> tuple[FloatVector, FloatVector, FloatVector]:
-    next_alpha = runtime.alpha + np.maximum(state_increments, 0.0)
-    next_beta = runtime.beta + np.maximum(-state_increments, 0.0)
-    next_z = next_alpha - next_beta
-    return next_alpha, next_beta, next_z
+    node_score_increment: FloatVector,
+) -> FloatVector:
+    return np.asarray(
+        runtime.node_scores + np.asarray(node_score_increment, dtype=np.float64),
+        dtype=np.float64,
+    )

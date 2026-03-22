@@ -2,58 +2,73 @@ from __future__ import annotations
 
 import uuid
 
+from loguru import logger
 import numpy as np
 
-from src.math_models.entrance_assessment.evidence_update import apply_state_increments
+from src.math_models.entrance_assessment.evidence_update import (
+    apply_node_score_increment,
+)
 from src.math_models.entrance_assessment.fringes import (
     compute_inner_fringe_indices,
     compute_outer_fringe_indices,
-    extract_problem_type_indices_from_mask,
 )
-from src.math_models.entrance_assessment.probability import calculate_state_probabilities
+from src.math_models.entrance_assessment.probability import solve_forest_posterior
 from src.math_models.entrance_assessment.selection import select_next_problem_type
-from src.math_models.entrance_assessment.state_scoring import calculate_state_increments
+from src.math_models.entrance_assessment.state_scoring import (
+    calculate_node_score_increment,
+)
 from src.math_models.entrance_assessment.stopping import should_stop
 from src.math_models.entrance_assessment.support_profile import build_support_profile
-from src.math_models.entrance_assessment.temperature import calculate_temperature
 from src.math_models.entrance_assessment.types import (
     FinalAssessmentResult,
+    ForestArtifact,
     GraphArtifact,
     Outcome,
     RuntimeSnapshot,
-    StateArtifact,
     StepResult,
 )
 
 
-def initialize_runtime(state_artifact: StateArtifact) -> RuntimeSnapshot:
-    state_count = len(state_artifact.state_masks)
-    if state_count <= 0:
-        raise ValueError("State artifact must contain at least one feasible state")
+def initialize_runtime(
+    forest_artifact: ForestArtifact,
+    temperature_sharpening: float,
+) -> RuntimeSnapshot:
+    node_count = len(forest_artifact.parent_by_index)
+    if node_count <= 0:
+        raise ValueError("Forest artifact must contain at least one problem type")
 
-    uniform_probability = 1.0 / float(state_count)
-    probabilities = np.full(state_count, uniform_probability, dtype=np.float64)
-    alpha = np.zeros(state_count, dtype=np.float64)
-    beta = np.zeros(state_count, dtype=np.float64)
-    z = np.zeros(state_count, dtype=np.float64)
+    node_scores = np.zeros(node_count, dtype=np.float64)
+    (
+        marginal_probabilities,
+        current_entropy,
+        current_temperature,
+        leader_problem_type_indices,
+        leader_state_index,
+        leader_state_probability,
+    ) = solve_forest_posterior(
+        forest_artifact=forest_artifact,
+        node_scores=node_scores,
+        initial_entropy=forest_artifact.initial_entropy,
+        temperature_sharpening=temperature_sharpening,
+        initial_temperature=1.0,
+    )
 
     return RuntimeSnapshot(
-        alpha=alpha,
-        beta=beta,
-        z=z,
-        probabilities=probabilities,
-        initial_entropy=state_artifact.initial_entropy,
-        current_entropy=state_artifact.initial_entropy,
-        current_temperature=1.0,
+        node_scores=node_scores,
+        marginal_probabilities=marginal_probabilities,
+        initial_entropy=forest_artifact.initial_entropy,
+        current_entropy=current_entropy,
+        current_temperature=current_temperature,
         asked_problem_type_indices=tuple(),
-        leader_state_index=0,
-        leader_state_probability=uniform_probability,
+        leader_state_index=leader_state_index,
+        leader_state_probability=leader_state_probability,
+        leader_problem_type_indices=leader_problem_type_indices,
     )
 
 
 def apply_answer_step(
     graph_artifact: GraphArtifact,
-    state_artifact: StateArtifact,
+    forest_artifact: ForestArtifact,
     runtime: RuntimeSnapshot,
     answered_problem_type_id: uuid.UUID,
     outcome: Outcome,
@@ -68,7 +83,7 @@ def apply_answer_step(
     temperature_sharpening: float,
     entropy_stop: float,
     utility_stop: float,
-    leader_probability_stop: float,
+    leader_probability_stop: float | None,
     max_questions: int,
     epsilon: float,
     available_problem_type_ids: set[uuid.UUID] | None = None,
@@ -93,45 +108,54 @@ def apply_answer_step(
         ancestor_decay=ancestor_decay,
         descendant_decay=descendant_decay,
     )
-    state_increments = calculate_state_increments(
-        state_artifact=state_artifact,
+    node_score_increment = calculate_node_score_increment(
         support_profile=support_profile,
         instance_difficulty_weight=instance_difficulty_weight,
         epsilon=epsilon,
     )
-    next_alpha, next_beta, next_z = apply_state_increments(
+    next_node_scores = apply_node_score_increment(
         runtime=runtime,
-        state_increments=state_increments,
+        node_score_increment=node_score_increment,
     )
-    next_temperature = calculate_temperature(
-        previous_entropy=runtime.current_entropy,
+    (
+        next_marginal_probabilities,
+        next_entropy,
+        next_temperature,
+        leader_problem_type_indices,
+        leader_state_index,
+        leader_state_probability,
+    ) = solve_forest_posterior(
+        forest_artifact=forest_artifact,
+        node_scores=next_node_scores,
         initial_entropy=runtime.initial_entropy,
         temperature_sharpening=temperature_sharpening,
-    )
-    next_probabilities, next_entropy, leader_state_index, leader_state_probability = (
-        calculate_state_probabilities(
-            state_scores=next_z,
-            temperature=next_temperature,
-        )
+        initial_temperature=runtime.current_temperature,
     )
     asked_problem_type_indices = tuple(
         sorted(set(runtime.asked_problem_type_indices) | {answered_problem_type_index})
     )
+    logger.debug(
+        "Applied forest entrance assessment step: answered_problem_type_id={}, outcome={}, difficulty_weight={}, entropy={}, temperature={}, leader_probability={}",
+        answered_problem_type_id,
+        outcome,
+        instance_difficulty_weight,
+        next_entropy,
+        next_temperature,
+        leader_state_probability,
+    )
     next_runtime = RuntimeSnapshot(
-        alpha=next_alpha,
-        beta=next_beta,
-        z=next_z,
-        probabilities=next_probabilities,
+        node_scores=next_node_scores,
+        marginal_probabilities=next_marginal_probabilities,
         initial_entropy=runtime.initial_entropy,
         current_entropy=next_entropy,
         current_temperature=next_temperature,
         asked_problem_type_indices=asked_problem_type_indices,
         leader_state_index=leader_state_index,
         leader_state_probability=leader_state_probability,
+        leader_problem_type_indices=leader_problem_type_indices,
     )
     selection = select_next_problem_type(
         graph_artifact=graph_artifact,
-        state_artifact=state_artifact,
         runtime=next_runtime,
         available_problem_type_indices=available_problem_type_indices,
     )
@@ -154,33 +178,36 @@ def apply_answer_step(
 
 def build_final_result(
     graph_artifact: GraphArtifact,
-    state_artifact: StateArtifact,
     runtime: RuntimeSnapshot,
 ) -> FinalAssessmentResult:
-    state_index = runtime.leader_state_index
-    state_probability = runtime.leader_state_probability
-    state_mask = state_artifact.state_masks[state_index]
-    learned_indices = extract_problem_type_indices_from_mask(state_mask)
+    learned_indices = tuple(sorted(runtime.leader_problem_type_indices))
     inner_fringe_indices = compute_inner_fringe_indices(
-        state_artifact=state_artifact,
-        state_mask=state_mask,
+        graph_artifact=graph_artifact,
+        learned_problem_type_indices=learned_indices,
     )
     outer_fringe_indices = compute_outer_fringe_indices(
         graph_artifact=graph_artifact,
-        state_artifact=state_artifact,
-        state_mask=state_mask,
+        learned_problem_type_indices=learned_indices,
     )
 
     return FinalAssessmentResult(
-        state_index=state_index,
-        state_probability=state_probability,
-        state_mask=state_mask,
+        state_index=runtime.leader_state_index,
+        state_probability=runtime.leader_state_probability,
         learned_problem_type_indices=learned_indices,
-        learned_problem_type_ids=tuple(graph_artifact.node_ids[index] for index in learned_indices),
+        learned_problem_type_ids=tuple(
+            graph_artifact.node_ids[index]
+            for index in learned_indices
+        ),
         inner_fringe_indices=inner_fringe_indices,
-        inner_fringe_ids=tuple(graph_artifact.node_ids[index] for index in inner_fringe_indices),
+        inner_fringe_ids=tuple(
+            graph_artifact.node_ids[index]
+            for index in inner_fringe_indices
+        ),
         outer_fringe_indices=outer_fringe_indices,
-        outer_fringe_ids=tuple(graph_artifact.node_ids[index] for index in outer_fringe_indices),
+        outer_fringe_ids=tuple(
+            graph_artifact.node_ids[index]
+            for index in outer_fringe_indices
+        ),
     )
 
 

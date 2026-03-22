@@ -4,8 +4,8 @@ import uuid
 from datetime import datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import DateTime, Enum, ForeignKey
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy import DateTime, Enum, Float, ForeignKey, Integer
+from sqlalchemy.dialects.postgresql import ARRAY, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from src.db.enums import EntranceTestStatus
@@ -42,6 +42,23 @@ class EntranceTestSession(Base, IdMixin, TimestampMixin):
         UUID(as_uuid=True),
         ForeignKey("problems.id", ondelete="SET NULL"),
         nullable=True,
+    )
+    final_state_index: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    final_state_probability: Mapped[float | None] = mapped_column(Float, nullable=True)
+    learned_problem_type_ids: Mapped[list[uuid.UUID]] = mapped_column(
+        ARRAY(UUID(as_uuid=True)),
+        default=list,
+        nullable=False,
+    )
+    inner_fringe_problem_type_ids: Mapped[list[uuid.UUID]] = mapped_column(
+        ARRAY(UUID(as_uuid=True)),
+        default=list,
+        nullable=False,
+    )
+    outer_fringe_problem_type_ids: Mapped[list[uuid.UUID]] = mapped_column(
+        ARRAY(UUID(as_uuid=True)),
+        default=list,
+        nullable=False,
     )
     started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

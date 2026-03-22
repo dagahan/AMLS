@@ -2,18 +2,18 @@ from __future__ import annotations
 
 import numpy as np
 
-from src.math_models.entrance_assessment.types import FloatVector, StateArtifact
+from src.math_models.entrance_assessment.types import FloatVector
 
 
-def calculate_state_increments(
-    state_artifact: StateArtifact,
+def calculate_node_score_increment(
     support_profile: FloatVector,
     instance_difficulty_weight: float,
     epsilon: float,
 ) -> FloatVector:
     denominator = float(np.abs(support_profile).sum()) + epsilon
-    raw_scores = state_artifact.state_sign_matrix.astype(np.float64) @ support_profile
-    return np.asarray(
-        float(instance_difficulty_weight) * (raw_scores / denominator),
-        dtype=np.float64,
+    normalized_profile = (
+        (2.0 * float(instance_difficulty_weight))
+        * np.asarray(support_profile, dtype=np.float64)
+        / denominator
     )
+    return np.asarray(normalized_profile, dtype=np.float64)

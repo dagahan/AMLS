@@ -4,12 +4,19 @@ import os
 import uuid
 from typing import TYPE_CHECKING
 
-from sqlalchemy import select
+from sqlalchemy import delete, select
 
 from src.db.database import DataBase
 from src.db.enums import ProblemAnswerOptionType
-from src.models.alchemy import ProblemAnswerOption, ResponseEvent
+from src.models.alchemy import (
+    EntranceTestSession,
+    EntranceTestStructure,
+    ProblemAnswerOption,
+    ResponseEvent,
+)
+from src.models.pydantic import EntranceTestStructureCompileResponse
 from src.s3.s3_connector import S3Client
+from src.services.entrance_test import EntranceTestRuntimeService
 
 if TYPE_CHECKING:
     from httpx import AsyncClient
@@ -70,6 +77,18 @@ async def get_problem_answer_ids(session: AsyncSession, problem_id: str) -> tupl
         if item.type == ProblemAnswerOptionType.WRONG
     )
     return str(correct_option.id), str(wrong_option.id)
+
+
+async def compile_current_structure(
+    client: AsyncClient,
+    access_token: str,
+) -> EntranceTestStructureCompileResponse:
+    response = await client.post(
+        "/admin/entrance-test/structure/compile",
+        headers=build_auth_headers(access_token),
+    )
+    assert response.status_code == 200
+    return EntranceTestStructureCompileResponse.model_validate(response.json())
 
 
 async def test_protected_routes_require_authentication(client: AsyncClient) -> None:
@@ -151,6 +170,77 @@ async def test_registration_creates_pending_entrance_test_session(client: AsyncC
     assert session_payload["current_problem_id"] is None
 
 
+async def test_entrance_test_result_requires_completed_session(
+    client: AsyncClient,
+    student_tokens: dict[str, str],
+) -> None:
+    response = await client.get(
+        "/entrance-test/result",
+        headers=build_auth_headers(student_tokens["access_token"]),
+    )
+
+    assert response.status_code == 409
+    assert response.json()["detail"] == (
+        "Entrance test result is available only for completed sessions"
+    )
+
+
+async def test_admin_can_compile_current_entrance_test_structure(
+    client: AsyncClient,
+    admin_tokens: dict[str, str],
+) -> None:
+    compile_payload = await compile_current_structure(
+        client,
+        admin_tokens["access_token"],
+    )
+
+    assert compile_payload.status == "ready"
+    assert compile_payload.artifact_kind == "exact_forest_v1"
+    assert compile_payload.problem_type_count == 94
+    assert compile_payload.edge_count == 86
+    assert compile_payload.feasible_state_count == 8492446687900032
+    assert compile_payload.error_message is None
+
+
+async def test_entrance_test_start_requires_compiled_structure(
+    client: AsyncClient,
+    database: DataBase,
+    admin_tokens: dict[str, str],
+    student_tokens: dict[str, str],
+) -> None:
+    if database.async_session is None:
+        raise RuntimeError("Database session factory is not initialized")
+
+    async with database.async_session() as session:
+        await session.execute(delete(EntranceTestStructure))
+        await session.commit()
+
+    start_response = await client.post(
+        "/entrance-test/start",
+        headers=build_auth_headers(student_tokens["access_token"]),
+    )
+
+    assert start_response.status_code == 409
+    assert "is not compiled" in start_response.json()["detail"]
+
+    compile_payload = await compile_current_structure(
+        client,
+        admin_tokens["access_token"],
+    )
+    assert compile_payload.status == "ready"
+
+    start_response = await client.post(
+        "/entrance-test/start",
+        headers=build_auth_headers(student_tokens["access_token"]),
+    )
+
+    assert start_response.status_code == 200
+    assert (
+        start_response.json()["session"]["structure_version"]
+        == compile_payload.structure_version
+    )
+
+
 async def test_admin_routes_require_admin(
     client: AsyncClient,
     student_tokens: dict[str, str],
@@ -160,8 +250,13 @@ async def test_admin_routes_require_admin(
         json={"name": f"Blocked {uuid.uuid4()}"},
         headers=build_auth_headers(student_tokens["access_token"]),
     )
+    compile_response = await client.post(
+        "/admin/entrance-test/structure/compile",
+        headers=build_auth_headers(student_tokens["access_token"]),
+    )
 
     assert response.status_code == 403
+    assert compile_response.status_code == 403
 
 
 async def test_problem_type_graph_and_cycle_validation(
@@ -360,8 +455,11 @@ async def test_removed_old_practice_and_intelligence_routes(
 async def test_entrance_test_session_records_raw_response(
     client: AsyncClient,
     database: DataBase,
+    admin_tokens: dict[str, str],
     student_tokens: dict[str, str],
 ) -> None:
+    await compile_current_structure(client, admin_tokens["access_token"])
+
     session_response = await client.get(
         "/entrance-test",
         headers=build_auth_headers(student_tokens["access_token"]),
@@ -401,8 +499,27 @@ async def test_entrance_test_session_records_raw_response(
     assert answer_response.status_code == 201
     answer_payload = answer_response.json()
     assert answer_payload["response"]["answer_option_type"] == "wrong"
-    assert answer_payload["session"]["status"] == "completed"
-    assert answer_payload["session"]["current_problem_id"] is None
+    assert answer_payload["session"]["status"] in {"active", "completed"}
+
+    runtime_service = EntranceTestRuntimeService()
+    runtime_payload = await runtime_service.load_runtime_payload(
+        uuid.UUID(answer_payload["session"]["id"])
+    )
+
+    if answer_payload["session"]["status"] == "completed":
+        assert answer_payload["session"]["current_problem_id"] is None
+        assert answer_payload["next_problem"] is None
+        assert answer_payload["final_result"] is not None
+        assert answer_payload["session"]["final_result"] == answer_payload["final_result"]
+        assert runtime_payload is None
+    else:
+        assert answer_payload["session"]["current_problem_id"] is not None
+        assert answer_payload["next_problem"] is not None
+        assert answer_payload["final_result"] is None
+        assert runtime_payload is not None
+        assert runtime_payload.structure_version == answer_payload["session"][
+            "structure_version"
+        ]
 
     async with database.async_session() as session:
         result = await session.execute(
@@ -414,68 +531,285 @@ async def test_entrance_test_session_records_raw_response(
         stored_responses = result.scalars().all()
         assert len(stored_responses) == 1
         assert stored_responses[0].answer_option_id == uuid.UUID(wrong_answer_id)
-        assert stored_responses[0].entrance_test_session_id == uuid.UUID(answer_payload["session"]["id"])
+        assert stored_responses[0].entrance_test_session_id == uuid.UUID(
+            answer_payload["session"]["id"]
+        )
+
+        stored_session = await session.get(
+            EntranceTestSession,
+            uuid.UUID(answer_payload["session"]["id"]),
+        )
+        assert stored_session is not None
+        if answer_payload["final_result"] is not None:
+            assert stored_session.final_state_index == answer_payload["final_result"][
+                "state_index"
+            ]
+            assert (
+                stored_session.final_state_probability
+                == answer_payload["final_result"]["state_probability"]
+            )
+            assert stored_session.learned_problem_type_ids == [
+                uuid.UUID(item)
+                for item in answer_payload["final_result"]["learned_problem_type_ids"]
+            ]
+            assert stored_session.inner_fringe_problem_type_ids == [
+                uuid.UUID(item)
+                for item in answer_payload["final_result"]["inner_fringe_ids"]
+            ]
+            assert stored_session.outer_fringe_problem_type_ids == [
+                uuid.UUID(item)
+                for item in answer_payload["final_result"]["outer_fringe_ids"]
+            ]
+        else:
+            assert stored_session.final_state_index is None
+            assert stored_session.final_state_probability is None
 
     current_problem_response = await client.get(
         "/entrance-test/current-problem",
         headers=build_auth_headers(student_tokens["access_token"]),
     )
     assert current_problem_response.status_code == 200
-    assert current_problem_response.json()["problem"] is None
+    if answer_payload["session"]["status"] == "completed":
+        assert current_problem_response.json()["problem"] is None
+
+        completed_session_response = await client.get(
+            "/entrance-test",
+            headers=build_auth_headers(student_tokens["access_token"]),
+        )
+        assert completed_session_response.status_code == 200
+        assert completed_session_response.json()["final_result"] == answer_payload[
+            "final_result"
+        ]
+
+        result_response = await client.get(
+            "/entrance-test/result",
+            headers=build_auth_headers(student_tokens["access_token"]),
+        )
+        assert result_response.status_code == 200
+        projected_result = result_response.json()
+        assert projected_result["session"]["id"] == answer_payload["session"]["id"]
+        assert projected_result["final_result"] == answer_payload["final_result"]
+        assert len(projected_result["nodes"]) >= 1
+        assert isinstance(projected_result["edges"], list)
+        assert isinstance(projected_result["topic_summaries"], list)
+        assert isinstance(projected_result["subtopic_summaries"], list)
+    else:
+        assert current_problem_response.json()["problem"] is not None
 
 
-async def test_entrance_assessment_advances_to_dependent_problem_type(
+async def test_entrance_assessment_advances_to_next_problem_until_completion(
     client: AsyncClient,
     database: DataBase,
     admin_tokens: dict[str, str],
     student_tokens: dict[str, str],
 ) -> None:
-    admin_headers = build_auth_headers(admin_tokens["access_token"])
     student_headers = build_auth_headers(student_tokens["access_token"])
-    subtopic_id, difficulty_id, root_problem_type_id = await get_problem_ids_for_creation(
-        client,
-        admin_tokens["access_token"],
-    )
-
-    child_problem_type_response = await client.post(
-        "/admin/problem-types",
-        json={
-            "name": f"adaptive-child-{uuid.uuid4()}",
-            "prerequisite_ids": [root_problem_type_id],
-        },
-        headers=admin_headers,
-    )
-    assert child_problem_type_response.status_code == 201
-    child_problem_type_id = child_problem_type_response.json()["id"]
-
-    child_problem_response = await client.post(
-        "/admin/problems",
-        json={
-            "subtopic_id": subtopic_id,
-            "difficulty_id": difficulty_id,
-            "problem_type_id": child_problem_type_id,
-            "condition": "Find the length of the hypotenuse when the legs are 5 and 12.",
-            "solution": "The hypotenuse is 13.",
-            "condition_images": [],
-            "solution_images": [],
-            "answer_options": [
-                {"text": "13", "type": "right"},
-                {"text": "12", "type": "wrong"},
-                {"text": "I don't know", "type": "i_dont_know"},
-            ],
-        },
-        headers=admin_headers,
-    )
-    assert child_problem_response.status_code == 201
-    child_problem_id = child_problem_response.json()["id"]
+    await compile_current_structure(client, admin_tokens["access_token"])
 
     start_response = await client.post("/entrance-test/start", headers=student_headers)
     assert start_response.status_code == 200
     started_payload = start_response.json()
     first_problem_id = started_payload["session"]["current_problem_id"]
     assert first_problem_id is not None
-    first_problem_type_id = started_payload["problem"]["problem_type"]["id"]
-    assert first_problem_type_id in {root_problem_type_id, child_problem_type_id}
+
+    if database.async_session is None:
+        raise RuntimeError("Database session factory is not initialized")
+
+    answered_problem_ids = {first_problem_id}
+    current_problem_id = first_problem_id
+    observed_problem_type_ids = {
+        started_payload["problem"]["problem_type"]["id"]
+    }
+    completed_payload = None
+
+    for answer_step in range(25):
+        async with database.async_session() as session:
+            current_right_answer_id, current_wrong_answer_id = await get_problem_answer_ids(
+                session,
+                current_problem_id,
+            )
+            selected_answer_id = (
+                current_right_answer_id
+                if answer_step % 3 in {0, 2}
+                else current_wrong_answer_id
+            )
+
+        answer_response = await client.post(
+            "/entrance-test/answers",
+            json={
+                "problem_id": current_problem_id,
+                "answer_option_id": selected_answer_id,
+            },
+            headers=student_headers,
+        )
+        assert answer_response.status_code == 201
+        answer_payload = answer_response.json()
+        assert answer_payload["response"]["answer_option_type"] in {"right", "wrong"}
+
+        if answer_payload["session"]["status"] == "completed":
+            assert answer_payload["session"]["current_problem_id"] is None
+            assert answer_payload["next_problem"] is None
+            assert answer_payload["final_result"] is not None
+            assert answer_payload["session"]["final_result"] == answer_payload["final_result"]
+            completed_payload = answer_payload
+            break
+
+        assert answer_payload["session"]["status"] == "active"
+        assert answer_payload["next_problem"] is not None
+        assert answer_payload["final_result"] is None
+
+        current_problem_id = answer_payload["session"]["current_problem_id"]
+        assert current_problem_id is not None
+        assert answer_payload["next_problem"]["id"] == current_problem_id
+        answered_problem_ids.add(current_problem_id)
+        observed_problem_type_ids.add(
+            answer_payload["next_problem"]["problem_type"]["id"]
+        )
+
+        current_problem_response = await client.get(
+            "/entrance-test/current-problem",
+            headers=student_headers,
+        )
+        assert current_problem_response.status_code == 200
+        assert current_problem_response.json()["problem"]["id"] == current_problem_id
+
+    assert completed_payload is not None
+    assert len(observed_problem_type_ids) >= 2
+
+    completed_session_response = await client.get(
+        "/entrance-test",
+        headers=student_headers,
+    )
+    assert completed_session_response.status_code == 200
+    assert completed_session_response.json()["final_result"] == completed_payload["final_result"]
+
+    result_response = await client.get(
+        "/entrance-test/result",
+        headers=student_headers,
+    )
+    assert result_response.status_code == 200
+    projected_result = result_response.json()
+    assert projected_result["session"]["status"] == "completed"
+    assert projected_result["final_result"] == completed_payload["final_result"]
+    assert len(projected_result["nodes"]) >= len(observed_problem_type_ids)
+    assert any(node["status"] == "learned" for node in projected_result["nodes"])
+
+    current_user_id = await get_current_user_id(client, student_tokens["access_token"])
+
+    async with database.async_session() as session:
+        result = await session.execute(
+            select(ResponseEvent).where(
+                ResponseEvent.user_id == uuid.UUID(current_user_id),
+            )
+        )
+        stored_responses = result.scalars().all()
+        assert len(stored_responses) == len(answered_problem_ids)
+        assert {response.problem_id for response in stored_responses} == {
+            uuid.UUID(problem_id)
+            for problem_id in answered_problem_ids
+        }
+
+
+async def test_active_session_keeps_using_its_compiled_structure_version(
+    client: AsyncClient,
+    database: DataBase,
+    admin_tokens: dict[str, str],
+) -> None:
+    admin_headers = build_auth_headers(admin_tokens["access_token"])
+    await compile_current_structure(client, admin_tokens["access_token"])
+
+    first_suffix = uuid.uuid4().hex
+    second_suffix = uuid.uuid4().hex
+
+    first_register_response = await client.post(
+        "/auth/register",
+        json={
+            "email": f"compiled-a-{first_suffix}@example.org",
+            "first_name": "Compiled",
+            "last_name": "A",
+            "password": "Student123!",
+            "avatar_url": None,
+        },
+    )
+    assert first_register_response.status_code == 201
+    first_login_response = await client.post(
+        "/auth/login",
+        json={
+            "email": f"compiled-a-{first_suffix}@example.org",
+            "password": "Student123!",
+        },
+    )
+    assert first_login_response.status_code == 201
+    first_access_token = first_login_response.json()["access_token"]
+    first_headers = build_auth_headers(first_access_token)
+
+    second_register_response = await client.post(
+        "/auth/register",
+        json={
+            "email": f"compiled-b-{second_suffix}@example.org",
+            "first_name": "Compiled",
+            "last_name": "B",
+            "password": "Student123!",
+            "avatar_url": None,
+        },
+    )
+    assert second_register_response.status_code == 201
+    second_login_response = await client.post(
+        "/auth/login",
+        json={
+            "email": f"compiled-b-{second_suffix}@example.org",
+            "password": "Student123!",
+        },
+    )
+    assert second_login_response.status_code == 201
+    second_access_token = second_login_response.json()["access_token"]
+    second_headers = build_auth_headers(second_access_token)
+
+    first_start_response = await client.post("/entrance-test/start", headers=first_headers)
+    assert first_start_response.status_code == 200
+    first_started_payload = first_start_response.json()
+    first_problem_id = first_started_payload["session"]["current_problem_id"]
+    assert first_problem_id is not None
+
+    subtopic_id, difficulty_id, root_problem_type_id = await get_problem_ids_for_creation(
+        client,
+        admin_tokens["access_token"],
+    )
+
+    new_problem_type_response = await client.post(
+        "/admin/problem-types",
+        json={
+            "name": f"versioned-child-{uuid.uuid4()}",
+            "prerequisite_ids": [root_problem_type_id],
+        },
+        headers=admin_headers,
+    )
+    assert new_problem_type_response.status_code == 201
+    new_problem_type_id = new_problem_type_response.json()["id"]
+
+    new_problem_response = await client.post(
+        "/admin/problems",
+        json={
+            "subtopic_id": subtopic_id,
+            "difficulty_id": difficulty_id,
+            "problem_type_id": new_problem_type_id,
+            "condition": f"Versioned problem {uuid.uuid4()}",
+            "solution": "Versioned solution",
+            "condition_images": [],
+            "solution_images": [],
+            "answer_options": [
+                {"text": "10", "type": "wrong"},
+                {"text": "24", "type": "right"},
+                {"text": "I don't know", "type": "i_dont_know"},
+            ],
+        },
+        headers=admin_headers,
+    )
+    assert new_problem_response.status_code == 201
+
+    second_start_response = await client.post("/entrance-test/start", headers=second_headers)
+    assert second_start_response.status_code == 409
+    assert "is not compiled" in second_start_response.json()["detail"]
 
     if database.async_session is None:
         raise RuntimeError("Database session factory is not initialized")
@@ -489,62 +823,19 @@ async def test_entrance_assessment_advances_to_dependent_problem_type(
             "problem_id": first_problem_id,
             "answer_option_id": first_right_answer_id,
         },
-        headers=student_headers,
+        headers=first_headers,
     )
     assert first_answer_response.status_code == 201
-    first_answer_payload = first_answer_response.json()
-    assert first_answer_payload["response"]["answer_option_type"] == "right"
-    assert first_answer_payload["session"]["status"] == "active"
 
-    second_problem_id = first_answer_payload["session"]["current_problem_id"]
-    assert second_problem_id is not None
-    assert second_problem_id != first_problem_id
+    compile_payload = await compile_current_structure(client, admin_tokens["access_token"])
+    assert compile_payload.status == "ready"
 
-    current_problem_response = await client.get(
-        "/entrance-test/current-problem",
-        headers=student_headers,
+    second_start_response = await client.post("/entrance-test/start", headers=second_headers)
+    assert second_start_response.status_code == 200
+    assert (
+        second_start_response.json()["session"]["structure_version"]
+        == compile_payload.structure_version
     )
-    assert current_problem_response.status_code == 200
-    current_problem_payload = current_problem_response.json()
-    assert current_problem_payload["problem"]["id"] == second_problem_id
-
-    second_problem_type_id = current_problem_payload["problem"]["problem_type"]["id"]
-    assert {first_problem_type_id, second_problem_type_id} == {
-        root_problem_type_id,
-        child_problem_type_id,
-    }
-
-    async with database.async_session() as session:
-        second_right_answer_id, _ = await get_problem_answer_ids(session, second_problem_id)
-
-    second_answer_response = await client.post(
-        "/entrance-test/answers",
-        json={
-            "problem_id": second_problem_id,
-            "answer_option_id": second_right_answer_id,
-        },
-        headers=student_headers,
-    )
-    assert second_answer_response.status_code == 201
-    second_answer_payload = second_answer_response.json()
-    assert second_answer_payload["response"]["answer_option_type"] == "right"
-    assert second_answer_payload["session"]["status"] == "completed"
-    assert second_answer_payload["session"]["current_problem_id"] is None
-
-    current_user_id = await get_current_user_id(client, student_tokens["access_token"])
-
-    async with database.async_session() as session:
-        result = await session.execute(
-            select(ResponseEvent).where(
-                ResponseEvent.user_id == uuid.UUID(current_user_id),
-            )
-        )
-        stored_responses = result.scalars().all()
-        assert len(stored_responses) == 2
-        assert {response.problem_id for response in stored_responses} == {
-            uuid.UUID(first_problem_id),
-            uuid.UUID(second_problem_id),
-        }
 
 
 async def test_entrance_test_can_be_skipped(

@@ -41,6 +41,19 @@ class GraphArtifact(EntranceAssessmentSchema):
     descendant_branch_support_from_index: tuple[dict[int, float], ...]
 
 
+class ForestArtifact(EntranceAssessmentSchema):
+    parent_by_index: tuple[int | None, ...]
+    children_by_index: tuple[tuple[int, ...], ...]
+    root_indices: tuple[int, ...]
+    preorder_indices: tuple[int, ...]
+    postorder_indices: tuple[int, ...]
+    depth_by_index: tuple[int, ...]
+    component_sizes: tuple[int, ...]
+    max_depth: int
+    feasible_state_count: int
+    initial_entropy: float
+
+
 class StateArtifact(EntranceAssessmentSchema):
     state_masks: tuple[int, ...]
     state_index_by_mask: dict[int, int]
@@ -50,16 +63,15 @@ class StateArtifact(EntranceAssessmentSchema):
 
 
 class RuntimeSnapshot(EntranceAssessmentSchema):
-    alpha: FloatVector
-    beta: FloatVector
-    z: FloatVector
-    probabilities: FloatVector
+    node_scores: FloatVector
+    marginal_probabilities: FloatVector
     initial_entropy: float
     current_entropy: float
     current_temperature: float
     asked_problem_type_indices: tuple[int, ...]
     leader_state_index: int
     leader_state_probability: float
+    leader_problem_type_indices: tuple[int, ...]
 
 
 class SelectionResult(EntranceAssessmentSchema):
@@ -80,7 +92,6 @@ class StepResult(EntranceAssessmentSchema):
 class FinalAssessmentResult(EntranceAssessmentSchema):
     state_index: int
     state_probability: float
-    state_mask: int
     learned_problem_type_indices: tuple[int, ...]
     learned_problem_type_ids: tuple[ProblemTypeId, ...]
     inner_fringe_indices: tuple[int, ...]

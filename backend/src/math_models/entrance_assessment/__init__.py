@@ -5,12 +5,17 @@ from src.math_models.entrance_assessment.engine import (
     build_final_result,
     initialize_runtime,
 )
+from src.math_models.entrance_assessment.forest_artifact import (
+    ForestStructureError,
+    build_forest_artifact,
+)
 from src.math_models.entrance_assessment.graph_artifact import build_graph_artifact
 from src.math_models.entrance_assessment.selection import select_next_problem_type
 from src.math_models.entrance_assessment.state_space import build_state_artifact
 from src.math_models.entrance_assessment.stopping import should_stop
 from src.math_models.entrance_assessment.types import (
     FinalAssessmentResult,
+    ForestArtifact,
     GraphArtifact,
     Outcome,
     RuntimeSnapshot,
@@ -21,6 +26,8 @@ from src.math_models.entrance_assessment.types import (
 
 __all__ = [
     "FinalAssessmentResult",
+    "ForestArtifact",
+    "ForestStructureError",
     "GraphArtifact",
     "Outcome",
     "RuntimeSnapshot",
@@ -29,6 +36,7 @@ __all__ = [
     "StepResult",
     "apply_answer_step",
     "build_final_result",
+    "build_forest_artifact",
     "build_graph_artifact",
     "build_state_artifact",
     "initialize_runtime",
