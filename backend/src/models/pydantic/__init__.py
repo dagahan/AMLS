@@ -13,7 +13,7 @@ from src.models.pydantic.auth import (
     ValidateAccessRequest,
 )
 from src.models.pydantic.common import AmlsSchema, HealthResponse, MessageResponse
-from src.models.pydantic.difficulty import DifficultyCreate, DifficultyResponse, DifficultyUpdate
+from src.models.pydantic.difficulty import DifficultyResponse
 from src.models.pydantic.entrance_test import (
     EntranceTestAnswerRequest,
     EntranceTestAnswerResponse,
@@ -81,9 +81,7 @@ __all__ = [
     "AuthUserResponse",
     "AvatarSnapshot",
     "ClientContext",
-    "DifficultyCreate",
     "DifficultyResponse",
-    "DifficultyUpdate",
     "EntranceTestAnswerRequest",
     "EntranceTestAnswerResponse",
     "EntranceTestCompiledForestPayload",

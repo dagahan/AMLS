@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING
 from fastapi import HTTPException, status
 from loguru import logger
 
+from src.config import get_app_config
 from src.db.enums import ProblemAnswerOptionType
 from src.math_models.entrance_assessment import Outcome
 from src.models.pydantic import EntranceTestEvaluationState
@@ -33,8 +34,9 @@ class EntranceTestEvaluatorService:
                 detail="Answer option not found for this problem",
             )
 
+        difficulty_config = get_app_config().get_difficulty(problem.difficulty.value)
         outcome = self._map_answer_option_type_to_outcome(answer_option.type)
-        difficulty_weight = float(problem.difficulty.coefficient)
+        difficulty_weight = float(difficulty_config["coefficient"])
 
         logger.info(
             "Evaluated entrance test answer: problem_id={}, problem_type_id={}, answer_option_id={}, answer_option_type={}, outcome={}, difficulty_weight={}",
@@ -50,6 +52,7 @@ class EntranceTestEvaluatorService:
             problem_type_id=problem.problem_type_id,
             answer_option_id=answer_option.id,
             answer_option_type=answer_option.type,
+            difficulty=problem.difficulty,
             outcome=outcome,
             difficulty_weight=difficulty_weight,
         )

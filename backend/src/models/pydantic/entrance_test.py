@@ -5,6 +5,7 @@ from typing import TYPE_CHECKING
 from uuid import UUID
 
 from src.db.enums import (
+    DifficultyLevel,
     EntranceTestResultNodeStatus,
     EntranceTestStructureStatus,
     EntranceTestStatus,
@@ -183,6 +184,7 @@ class EntranceTestEvaluationState(AmlsSchema):
     problem_type_id: UUID
     answer_option_id: UUID
     answer_option_type: ProblemAnswerOptionType
+    difficulty: DifficultyLevel
     outcome: Outcome
     difficulty_weight: float
 

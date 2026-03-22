@@ -51,14 +51,16 @@ async def get_problem_ids_for_creation(
     problem_types = problem_types_response.json()
 
     right_triangle_subtopic = next(item for item in subtopics if item["name"] == "right triangle")
-    medium_difficulty = next(item for item in difficulties if item["name"] == "medium")
+    upper_intermediate_difficulty = next(
+        item for item in difficulties if item["key"] == "upper_intermediate"
+    )
     problem_type = next(
         item for item in problem_types if item["name"] == "solve right-triangle configurations"
     )
 
     return (
         right_triangle_subtopic["id"],
-        medium_difficulty["id"],
+        upper_intermediate_difficulty["key"],
         problem_type["id"],
     )
 
@@ -310,7 +312,7 @@ async def test_admin_problem_crud_and_public_shape(
     client: AsyncClient,
     admin_tokens: dict[str, str],
 ) -> None:
-    subtopic_id, difficulty_id, problem_type_id = await get_problem_ids_for_creation(
+    subtopic_id, difficulty, problem_type_id = await get_problem_ids_for_creation(
         client,
         admin_tokens["access_token"],
     )
@@ -320,7 +322,7 @@ async def test_admin_problem_crud_and_public_shape(
         "/admin/problems",
         json={
             "subtopic_id": subtopic_id,
-            "difficulty_id": difficulty_id,
+            "difficulty": difficulty,
             "problem_type_id": problem_type_id,
             "condition": condition,
             "solution": "Test solution",
@@ -378,7 +380,7 @@ async def test_admin_problem_rejects_invalid_latex(
     client: AsyncClient,
     admin_tokens: dict[str, str],
 ) -> None:
-    subtopic_id, difficulty_id, problem_type_id = await get_problem_ids_for_creation(
+    subtopic_id, difficulty, problem_type_id = await get_problem_ids_for_creation(
         client,
         admin_tokens["access_token"],
     )
@@ -387,7 +389,7 @@ async def test_admin_problem_rejects_invalid_latex(
         "/admin/problems",
         json={
             "subtopic_id": subtopic_id,
-            "difficulty_id": difficulty_id,
+            "difficulty": difficulty,
             "problem_type_id": problem_type_id,
             "condition": "\\frac{1}{",
             "solution": "x = 1",
@@ -771,7 +773,7 @@ async def test_active_session_keeps_using_its_compiled_structure_version(
     first_problem_id = first_started_payload["session"]["current_problem_id"]
     assert first_problem_id is not None
 
-    subtopic_id, difficulty_id, root_problem_type_id = await get_problem_ids_for_creation(
+    subtopic_id, difficulty, root_problem_type_id = await get_problem_ids_for_creation(
         client,
         admin_tokens["access_token"],
     )
@@ -791,7 +793,7 @@ async def test_active_session_keeps_using_its_compiled_structure_version(
         "/admin/problems",
         json={
             "subtopic_id": subtopic_id,
-            "difficulty_id": difficulty_id,
+            "difficulty": difficulty,
             "problem_type_id": new_problem_type_id,
             "condition": f"Versioned problem {uuid.uuid4()}",
             "solution": "Versioned solution",

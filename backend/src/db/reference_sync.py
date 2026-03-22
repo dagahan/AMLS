@@ -7,11 +7,10 @@ from typing import TYPE_CHECKING
 from loguru import logger
 from sqlalchemy import delete, or_, select
 
-from src.core.utils import EnvTools
+from src.config import bootstrap_config
 from src.db.database import DataBase
-from src.db.reference_dataset import DIFFICULTY_DATA, PROBLEM_TYPE_DATA, TOPIC_DATA
+from src.db.reference_dataset import PROBLEM_TYPE_DATA, TOPIC_DATA
 from src.models.alchemy import (
-    Difficulty,
     Problem,
     ProblemType,
     ProblemTypePrerequisite,
@@ -29,29 +28,25 @@ async def sync_reference_data(db: DataBase) -> None:
         logger.info("Starting reference data sync")
         topic_ids, subtopic_ids, topic_link_ids = await _sync_topics(session)
         problem_type_ids, problem_type_link_ids = await _sync_problem_types(session)
-        difficulty_ids = await _sync_difficulties(session)
 
         await _delete_invalid_problems(
             session=session,
             valid_subtopic_ids=subtopic_ids,
             valid_problem_type_ids=problem_type_ids,
-            valid_difficulty_ids=difficulty_ids,
         )
         await _delete_invalid_subtopics(session, subtopic_ids)
         await _delete_invalid_topics(session, topic_ids)
         await _delete_invalid_problem_types(session, problem_type_ids)
-        await _delete_invalid_difficulties(session, difficulty_ids)
         await _delete_invalid_problem_type_links(session, problem_type_link_ids)
         await _delete_invalid_topic_links(session, topic_link_ids)
 
         logger.info(
-            "Finished reference data sync: topics={}, subtopics={}, topic_links={}, problem_types={}, problem_type_links={}, difficulties={}",
+            "Finished reference data sync: topics={}, subtopics={}, topic_links={}, problem_types={}, problem_type_links={}",
             len(topic_ids),
             len(subtopic_ids),
             len(topic_link_ids),
             len(problem_type_ids),
             len(problem_type_link_ids),
-            len(difficulty_ids),
         )
 
 
@@ -88,24 +83,6 @@ async def _sync_topics(
             valid_topic_link_ids.add((topic.id, subtopic.id))
 
     return valid_topic_ids, valid_subtopic_ids, valid_topic_link_ids
-
-
-async def _sync_difficulties(session: "AsyncSession") -> set[uuid.UUID]:
-    result = await session.execute(select(Difficulty))
-    difficulties = {difficulty.name: difficulty for difficulty in result.scalars().all()}
-    valid_difficulty_ids: set[uuid.UUID] = set()
-
-    for name, coefficient in DIFFICULTY_DATA:
-        difficulty = difficulties.get(name)
-        if difficulty is None:
-            difficulty = Difficulty(name=name, coefficient=coefficient)
-            session.add(difficulty)
-            await session.flush()
-        else:
-            difficulty.coefficient = coefficient
-        valid_difficulty_ids.add(difficulty.id)
-
-    return valid_difficulty_ids
 
 
 async def _sync_problem_types(
@@ -146,7 +123,6 @@ async def _delete_invalid_problems(
     session: "AsyncSession",
     valid_subtopic_ids: set[uuid.UUID],
     valid_problem_type_ids: set[uuid.UUID],
-    valid_difficulty_ids: set[uuid.UUID],
 ) -> None:
     invalid_problem_ids: set[uuid.UUID] = set()
 
@@ -155,7 +131,6 @@ async def _delete_invalid_problems(
             or_(
                 ~Problem.subtopic_id.in_(valid_subtopic_ids),
                 ~Problem.problem_type_id.in_(valid_problem_type_ids),
-                ~Problem.difficulty_id.in_(valid_difficulty_ids),
             )
         )
     )
@@ -174,13 +149,6 @@ async def _delete_invalid_subtopics(
 
 async def _delete_invalid_topics(session: "AsyncSession", valid_topic_ids: set[uuid.UUID]) -> None:
     await session.execute(delete(Topic).where(~Topic.id.in_(valid_topic_ids)))
-
-
-async def _delete_invalid_difficulties(
-    session: "AsyncSession",
-    valid_difficulty_ids: set[uuid.UUID],
-) -> None:
-    await session.execute(delete(Difficulty).where(~Difficulty.id.in_(valid_difficulty_ids)))
 
 
 async def _delete_invalid_problem_types(
@@ -298,7 +266,7 @@ def _validate_problem_type_reference_data() -> None:
 
 
 async def main() -> None:
-    EnvTools.bootstrap_env()
+    bootstrap_config()
     db = DataBase()
     await db.init_alchemy_engine()
     try:

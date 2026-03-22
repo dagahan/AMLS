@@ -1,0 +1,51 @@
+COMPOSE_PROJECT_NAME = {must_exist=true, len_min=1}
+TZ = {must_exist=true, len_min=1}
+BACKEND_HOST = {must_exist=true, len_min=1}
+BACKEND_PORT = {must_exist=true, gte=1, lte=65535}
+POSTGRES_HOST = {must_exist=true, len_min=1}
+POSTGRES_PORT = {must_exist=true, gte=1, lte=65535}
+POSTGRES_USER = {must_exist=true, len_min=1}
+POSTGRES_PASSWORD = {must_exist=true, len_min=1}
+POSTGRES_DB = {must_exist=true, len_min=1}
+VALKEY_HOST = {must_exist=true, len_min=1}
+VALKEY_PORT = {must_exist=true, gte=1, lte=65535}
+ACCESS_TOKEN_EXPIRE_MINUTES = {must_exist=true, gte=1}
+REFRESH_TOKEN_EXPIRE_DAYS = {must_exist=true, gte=1}
+SESSIONS_MAX_LIFE_DAYS = {must_exist=true, gte=1}
+SESSIONS_INACTIVE_DAYS = {must_exist=true, gte=1}
+JWT_PRIVATE_KEY_PATH = {must_exist=true, len_min=1}
+JWT_PUBLIC_KEY_PATH = {must_exist=true, len_min=1}
+DB_ECHO = {must_exist=true, is_in=[0, 1]}
+DB_POOL_SIZE = {must_exist=true, gte=1}
+DB_MAX_OVERFLOW = {must_exist=true, gte=0}
+S3_BUCKET_NAME = {must_exist=true, len_min=1}
+S3_ENDPOINT_URL = {must_exist=true, len_min=1}
+S3_PUBLIC_BASE_URL = {must_exist=true, len_min=1}
+S3_ACCESS_KEY = {must_exist=true, len_min=1}
+S3_SECRET_KEY = {must_exist=true, len_min=1}
+S3_REGION = {must_exist=true, len_min=1}
+S3_TLS_VERIFY = {must_exist=true, is_in=[0, 1]}
+'business.entrance_assessment.i_dont_know_scalar' = {must_exist=true, gt=0}
+'business.entrance_assessment.ancestor_support_correct' = {must_exist=true, gt=0}
+'business.entrance_assessment.ancestor_support_wrong' = {must_exist=true, gt=0}
+'business.entrance_assessment.descendant_support_correct' = {must_exist=true, gt=0}
+'business.entrance_assessment.descendant_support_wrong' = {must_exist=true, gt=0}
+'business.entrance_assessment.ancestor_decay' = {must_exist=true, gt=0}
+'business.entrance_assessment.descendant_decay' = {must_exist=true, gt=0}
+'business.entrance_assessment.branch_penalty_exponent' = {must_exist=true, gte=0}
+'business.entrance_assessment.temperature_sharpening' = {must_exist=true, gte=0}
+'business.entrance_assessment.entropy_stop' = {must_exist=true, gte=0}
+'business.entrance_assessment.utility_stop' = {must_exist=true, gte=0}
+'business.entrance_assessment.leader_probability_stop' = {must_exist=true, gte=0, lte=1}
+'business.entrance_assessment.max_questions' = {must_exist=true, gte=1}
+'business.entrance_assessment.epsilon' = {must_exist=true, gt=0}
+'business.difficulties.elementary.name' = {must_exist=true, len_min=1}
+'business.difficulties.elementary.coefficient' = {must_exist=true, gt=0}
+'business.difficulties.intermediate.name' = {must_exist=true, len_min=1}
+'business.difficulties.intermediate.coefficient' = {must_exist=true, gt=0}
+'business.difficulties.upper_intermediate.name' = {must_exist=true, len_min=1}
+'business.difficulties.upper_intermediate.coefficient' = {must_exist=true, gt=0}
+'business.difficulties.advanced.name' = {must_exist=true, len_min=1}
+'business.difficulties.advanced.coefficient' = {must_exist=true, gt=0}
+'business.difficulties.proficient.name' = {must_exist=true, len_min=1}
+'business.difficulties.proficient.coefficient' = {must_exist=true, gt=0}

@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING
 import pytest
 from sqlalchemy import func, select
 
+from src.config import get_app_config
 from src.core.utils import PasswordTools
 from src.db.database import DataBase
 from src.db.enums import EntranceTestStatus, ProblemAnswerOptionType, UserRole
@@ -16,7 +17,6 @@ from src.db.reference_dataset import PROBLEM_TYPE_DATA, TOPIC_DATA
 from src.db.reference_problem_bank import build_reference_problem_bank, load_reference_problem_bank
 from src.db.reference_sync import sync_reference_data
 from src.models.alchemy import (
-    Difficulty,
     EntranceTestSession,
     Problem,
     ProblemAnswerOption,
@@ -86,7 +86,6 @@ async def test_load_reference_problem_bank_restores_reference_catalog(
     async with database.session_ctx() as session:
         topic_count = await _count_rows(session, Topic)
         subtopic_count = await _count_rows(session, Subtopic)
-        difficulty_count = await _count_rows(session, Difficulty)
         problem_type_count = await _count_rows(session, ProblemType)
         prerequisite_edge_count = await _count_rows(session, ProblemTypePrerequisite)
         problem_count = await _count_rows(session, Problem)
@@ -104,7 +103,7 @@ async def test_load_reference_problem_bank_restores_reference_catalog(
 
     assert topic_count == 19
     assert subtopic_count == 186
-    assert difficulty_count == 5
+    assert len(get_app_config().list_difficulties()) == 5
     assert problem_type_count == len(PROBLEM_TYPE_DATA)
     assert prerequisite_edge_count == len(PROBLEM_TYPE_DATA) - 8
     assert problem_count == len(PROBLEM_TYPE_DATA) * 2

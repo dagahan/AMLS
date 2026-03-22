@@ -8,7 +8,8 @@ from loguru import logger
 import numpy as np
 from sqlalchemy import select
 
-from src.core.utils import EnvTools, StringTools
+from src.config import get_app_config
+from src.core.utils import StringTools
 from src.db.enums import EntranceTestStructureStatus
 from src.math_models.entrance_assessment import (
     ForestStructureError,
@@ -49,8 +50,8 @@ class EntranceTestStructureCompilationFailedError(RuntimeError):
 class EntranceTestStructureService:
     def __init__(self) -> None:
         self.branch_penalty_exponent = float(
-            EnvTools.required_load_env_var(
-                "ENTRANCE_ASSESSMENT_BRANCH_PENALTY_EXPONENT"
+            get_app_config().business.require(
+                "entrance_assessment.branch_penalty_exponent"
             )
         )
         self.artifact_kind = "exact_forest_v1"

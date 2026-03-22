@@ -2,7 +2,7 @@ from uuid import UUID
 
 from pydantic import Field, model_validator
 
-from src.db.enums import ProblemAnswerOptionType
+from src.db.enums import DifficultyLevel, ProblemAnswerOptionType
 from src.models.pydantic.common import AmlsSchema
 from src.models.pydantic.difficulty import DifficultyResponse
 from src.models.pydantic.problem_type import ProblemTypeResponse
@@ -16,7 +16,7 @@ class ProblemAnswerOptionPayload(AmlsSchema):
 
 class ProblemCreate(AmlsSchema):
     subtopic_id: UUID
-    difficulty_id: UUID
+    difficulty: DifficultyLevel
     problem_type_id: UUID
     condition: str = Field(min_length=1)
     solution: str = Field(min_length=1)
@@ -33,7 +33,7 @@ class ProblemCreate(AmlsSchema):
 
 class ProblemUpdate(AmlsSchema):
     subtopic_id: UUID | None = None
-    difficulty_id: UUID | None = None
+    difficulty: DifficultyLevel | None = None
     problem_type_id: UUID | None = None
     condition: str | None = Field(default=None, min_length=1)
     solution: str | None = Field(default=None, min_length=1)
@@ -83,7 +83,7 @@ class AdminProblemResponse(AmlsSchema):
 class ProblemSnapshot(AmlsSchema):
     id: UUID
     subtopic_id: UUID
-    difficulty_id: UUID
+    difficulty: DifficultyLevel
     problem_type_id: UUID
     condition: str
     solution: str

@@ -5,7 +5,7 @@ from typing import TypedDict
 import numpy as np
 import pytest
 
-from src.core.utils import EnvTools
+from src.config import get_app_config
 from src.db.database import DataBase
 from src.db.reference_dataset import PROBLEM_TYPE_DATA
 from src.math_models.entrance_assessment import (
@@ -41,56 +41,33 @@ class AssessmentParameters(TypedDict):
 
 @pytest.fixture(scope="module")
 def assessment_parameters() -> AssessmentParameters:
+    config = get_app_config().business
     return AssessmentParameters(
-        i_dont_know_scalar=float(
-            EnvTools.required_load_env_var("ENTRANCE_ASSESSMENT_I_DONT_KNOW_SCALAR")
-        ),
+        i_dont_know_scalar=float(config.require("entrance_assessment.i_dont_know_scalar")),
         ancestor_support_correct=float(
-            EnvTools.required_load_env_var(
-                "ENTRANCE_ASSESSMENT_ANCESTOR_SUPPORT_CORRECT"
-            )
+            config.require("entrance_assessment.ancestor_support_correct")
         ),
         ancestor_support_wrong=float(
-            EnvTools.required_load_env_var(
-                "ENTRANCE_ASSESSMENT_ANCESTOR_SUPPORT_WRONG"
-            )
+            config.require("entrance_assessment.ancestor_support_wrong")
         ),
         descendant_support_correct=float(
-            EnvTools.required_load_env_var(
-                "ENTRANCE_ASSESSMENT_DESCENDANT_SUPPORT_CORRECT"
-            )
+            config.require("entrance_assessment.descendant_support_correct")
         ),
         descendant_support_wrong=float(
-            EnvTools.required_load_env_var(
-                "ENTRANCE_ASSESSMENT_DESCENDANT_SUPPORT_WRONG"
-            )
+            config.require("entrance_assessment.descendant_support_wrong")
         ),
-        ancestor_decay=float(
-            EnvTools.required_load_env_var("ENTRANCE_ASSESSMENT_ANCESTOR_DECAY")
-        ),
-        descendant_decay=float(
-            EnvTools.required_load_env_var("ENTRANCE_ASSESSMENT_DESCENDANT_DECAY")
-        ),
+        ancestor_decay=float(config.require("entrance_assessment.ancestor_decay")),
+        descendant_decay=float(config.require("entrance_assessment.descendant_decay")),
         temperature_sharpening=float(
-            EnvTools.required_load_env_var(
-                "ENTRANCE_ASSESSMENT_TEMPERATURE_SHARPENING"
-            )
+            config.require("entrance_assessment.temperature_sharpening")
         ),
-        entropy_stop=float(
-            EnvTools.required_load_env_var("ENTRANCE_ASSESSMENT_ENTROPY_STOP")
-        ),
-        utility_stop=float(
-            EnvTools.required_load_env_var("ENTRANCE_ASSESSMENT_UTILITY_STOP")
-        ),
+        entropy_stop=float(config.require("entrance_assessment.entropy_stop")),
+        utility_stop=float(config.require("entrance_assessment.utility_stop")),
         leader_probability_stop=_load_optional_float(
-            "ENTRANCE_ASSESSMENT_LEADER_PROBABILITY_STOP"
+            config.get("entrance_assessment.leader_probability_stop")
         ),
-        max_questions=int(
-            EnvTools.required_load_env_var("ENTRANCE_ASSESSMENT_MAX_QUESTIONS")
-        ),
-        epsilon=float(
-            EnvTools.required_load_env_var("ENTRANCE_ASSESSMENT_EPSILON")
-        ),
+        max_questions=int(config.require("entrance_assessment.max_questions")),
+        epsilon=float(config.require("entrance_assessment.epsilon")),
     )
 
 
@@ -291,9 +268,8 @@ async def test_big_reference_graph_final_result_is_structurally_valid(
     assert 0.0 <= final_result.state_probability <= 1.0
 
 
-def _load_optional_float(variable_name: str) -> float | None:
-    raw_value = EnvTools.load_env_var(variable_name)
-    if not isinstance(raw_value, str) or raw_value == "":
+def _load_optional_float(raw_value: float | int | None) -> float | None:
+    if raw_value is None:
         return None
 
     return float(raw_value)

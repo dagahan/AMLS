@@ -50,3 +50,6 @@ for (const entry of entries) {
 }
 
 process.stdout.write(JSON.stringify({ ok: true }));
+
+
+

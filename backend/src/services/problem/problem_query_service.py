@@ -3,6 +3,7 @@ from __future__ import annotations
 import uuid
 from typing import TYPE_CHECKING
 
+from src.db.enums import DifficultyLevel
 from src.models.alchemy import Problem
 from src.models.pydantic import AdminProblemResponse, ProblemResponse
 from src.services.problem.loader import (
@@ -25,7 +26,7 @@ class ProblemQueryService:
         self,
         topic_id: uuid.UUID | None,
         subtopic_id: uuid.UUID | None,
-        difficulty_id: uuid.UUID | None,
+        difficulty: DifficultyLevel | None,
         problem_type_id: uuid.UUID | None,
         limit: int,
         offset: int,
@@ -33,7 +34,7 @@ class ProblemQueryService:
         problems = await self._list_loaded_problems(
             topic_id=topic_id,
             subtopic_id=subtopic_id,
-            difficulty_id=difficulty_id,
+            difficulty=difficulty,
             problem_type_id=problem_type_id,
             limit=limit,
             offset=offset,
@@ -45,7 +46,7 @@ class ProblemQueryService:
         self,
         topic_id: uuid.UUID | None,
         subtopic_id: uuid.UUID | None,
-        difficulty_id: uuid.UUID | None,
+        difficulty: DifficultyLevel | None,
         problem_type_id: uuid.UUID | None,
         limit: int,
         offset: int,
@@ -53,7 +54,7 @@ class ProblemQueryService:
         problems = await self._list_loaded_problems(
             topic_id=topic_id,
             subtopic_id=subtopic_id,
-            difficulty_id=difficulty_id,
+            difficulty=difficulty,
             problem_type_id=problem_type_id,
             limit=limit,
             offset=offset,
@@ -75,7 +76,7 @@ class ProblemQueryService:
         self,
         topic_id: uuid.UUID | None,
         subtopic_id: uuid.UUID | None,
-        difficulty_id: uuid.UUID | None,
+        difficulty: DifficultyLevel | None,
         problem_type_id: uuid.UUID | None,
         limit: int,
         offset: int,
@@ -85,7 +86,7 @@ class ProblemQueryService:
                 statement=build_problem_statement(),
                 topic_id=topic_id,
                 subtopic_id=subtopic_id,
-                difficulty_id=difficulty_id,
+                difficulty=difficulty,
                 problem_type_id=problem_type_id,
             ).order_by(Problem.created_at.desc()).limit(limit).offset(offset)
             result = await session.execute(statement)

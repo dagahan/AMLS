@@ -6,17 +6,17 @@ from src.models.pydantic import (
     ProblemAnswerOptionResponse,
     ProblemResponse,
 )
-from src.models.pydantic.difficulty import DifficultyResponse
 from src.models.pydantic.problem import AdminProblemAnswerOptionResponse
 from src.models.pydantic.problem_type import ProblemTypeResponse
 from src.models.pydantic.topic import SubtopicResponse
+from src.services.catalog.difficulty_service import build_difficulty_response
 
 
 def build_problem_response(problem: Problem) -> ProblemResponse:
     return ProblemResponse(
         id=problem.id,
         subtopic=SubtopicResponse.model_validate(problem.subtopic),
-        difficulty=DifficultyResponse.model_validate(problem.difficulty),
+        difficulty=build_difficulty_response(problem.difficulty),
         problem_type=_build_problem_type_response(problem),
         condition=problem.condition,
         condition_images=problem.condition_images,
@@ -28,7 +28,7 @@ def build_admin_problem_response(problem: Problem) -> AdminProblemResponse:
     return AdminProblemResponse(
         id=problem.id,
         subtopic=SubtopicResponse.model_validate(problem.subtopic),
-        difficulty=DifficultyResponse.model_validate(problem.difficulty),
+        difficulty=build_difficulty_response(problem.difficulty),
         problem_type=_build_problem_type_response(problem),
         condition=problem.condition,
         condition_images=problem.condition_images,

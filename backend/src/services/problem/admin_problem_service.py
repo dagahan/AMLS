@@ -73,12 +73,12 @@ class AdminProblemService:
 
         async with self.db.session_ctx() as session:
             await ensure_subtopic_exists(session, data.subtopic_id)
-            await ensure_difficulty_exists(session, data.difficulty_id)
+            ensure_difficulty_exists(data.difficulty)
             await ensure_problem_type_exists(session, data.problem_type_id)
 
             problem = Problem(
                 subtopic_id=data.subtopic_id,
-                difficulty_id=data.difficulty_id,
+                difficulty=data.difficulty,
                 problem_type_id=data.problem_type_id,
                 condition=data.condition,
                 solution=data.solution,
@@ -105,9 +105,9 @@ class AdminProblemService:
                 await ensure_subtopic_exists(session, data.subtopic_id)
                 problem.subtopic_id = data.subtopic_id
 
-            if data.difficulty_id is not None:
-                await ensure_difficulty_exists(session, data.difficulty_id)
-                problem.difficulty_id = data.difficulty_id
+            if data.difficulty is not None:
+                ensure_difficulty_exists(data.difficulty)
+                problem.difficulty = data.difficulty
 
             if data.problem_type_id is not None:
                 await ensure_problem_type_exists(session, data.problem_type_id)
@@ -133,7 +133,7 @@ class AdminProblemService:
         return ProblemSnapshot(
             id=problem.id,
             subtopic_id=problem.subtopic_id,
-            difficulty_id=problem.difficulty_id,
+            difficulty=problem.difficulty,
             problem_type_id=problem.problem_type_id,
             condition=problem.condition,
             solution=problem.solution,
@@ -153,7 +153,7 @@ class AdminProblemService:
                 problem = Problem(
                     id=snapshot.id,
                     subtopic_id=snapshot.subtopic_id,
-                    difficulty_id=snapshot.difficulty_id,
+                    difficulty=snapshot.difficulty,
                     problem_type_id=snapshot.problem_type_id,
                     condition=snapshot.condition,
                     solution=snapshot.solution,
@@ -163,7 +163,7 @@ class AdminProblemService:
                 session.add(problem)
             else:
                 problem.subtopic_id = snapshot.subtopic_id
-                problem.difficulty_id = snapshot.difficulty_id
+                problem.difficulty = snapshot.difficulty
                 problem.problem_type_id = snapshot.problem_type_id
                 problem.condition = snapshot.condition
                 problem.solution = snapshot.solution

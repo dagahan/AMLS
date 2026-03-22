@@ -380,11 +380,3 @@ PROBLEM_TYPE_DATA: tuple[tuple[str, str | None], ...] = (
     ("analyze digit properties of integers", "solve remainder problems"),
 )
 
-
-DIFFICULTY_DATA: tuple[tuple[str, float], ...] = (
-    ("very easy", 0.25),
-    ("easy", 0.75),
-    ("medium", 1.5),
-    ("hard", 2.25),
-    ("very hard", 3.0),
-)

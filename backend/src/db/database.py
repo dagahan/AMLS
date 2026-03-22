@@ -7,7 +7,7 @@ from loguru import logger
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker, create_async_engine
 
-from src.core.utils import EnvTools
+from src.config import get_app_config
 
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator
@@ -15,14 +15,15 @@ if TYPE_CHECKING:
 
 class DataBase:
     def __init__(self) -> None:
+        app_config = get_app_config()
         self.engine: AsyncEngine | None = None
         self.async_session: async_sessionmaker[AsyncSession] | None = None
 
-        self.db_host = EnvTools.get_service_host("postgres")
-        self.db_port = EnvTools.get_service_port("postgres")
-        self.db_user = EnvTools.required_load_env_var("POSTGRES_USER")
-        self.db_password = EnvTools.required_load_env_var("POSTGRES_PASSWORD")
-        self.db_name = EnvTools.required_load_env_var("POSTGRES_DB")
+        self.db_host = app_config.service_host("postgres")
+        self.db_port = app_config.service_port("postgres")
+        self.db_user = str(app_config.infra.require("POSTGRES_USER"))
+        self.db_password = str(app_config.infra.require("POSTGRES_PASSWORD"))
+        self.db_name = str(app_config.infra.require("POSTGRES_DB"))
 
         self.async_engine_config = (
             f"postgresql+asyncpg://{self.db_user}:{self.db_password}"
@@ -32,9 +33,9 @@ class DataBase:
             f"postgresql+psycopg://{self.db_user}:{self.db_password}"
             f"@{self.db_host}:{self.db_port}/{self.db_name}"
         )
-        self.echo = EnvTools.required_load_env_var("DB_ECHO") == "1"
-        self.pool_size = int(EnvTools.required_load_env_var("DB_POOL_SIZE"))
-        self.max_overflow = int(EnvTools.required_load_env_var("DB_MAX_OVERFLOW"))
+        self.echo = bool(int(app_config.infra.require("DB_ECHO")))
+        self.pool_size = int(app_config.infra.require("DB_POOL_SIZE"))
+        self.max_overflow = int(app_config.infra.require("DB_MAX_OVERFLOW"))
 
 
     async def init_alchemy_engine(self) -> None:

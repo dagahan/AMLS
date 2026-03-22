@@ -7,7 +7,8 @@ from fastapi import HTTPException, status
 from sqlalchemy import Select, select
 from sqlalchemy.orm import selectinload
 
-from src.models.alchemy import Difficulty, Problem, ProblemType, Subtopic
+from src.db.enums import DifficultyLevel
+from src.models.alchemy import Problem, ProblemType, Subtopic
 
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
@@ -16,7 +17,6 @@ if TYPE_CHECKING:
 def build_problem_statement() -> Select[tuple[Problem]]:
     return select(Problem).options(
         selectinload(Problem.subtopic),
-        selectinload(Problem.difficulty),
         selectinload(Problem.problem_type).selectinload(ProblemType.prerequisite_links),
         selectinload(Problem.answer_options),
     )
@@ -26,7 +26,7 @@ def apply_problem_filters(
     statement: Select[tuple[Problem]],
     topic_id: uuid.UUID | None,
     subtopic_id: uuid.UUID | None,
-    difficulty_id: uuid.UUID | None,
+    difficulty: DifficultyLevel | None,
     problem_type_id: uuid.UUID | None,
 ) -> Select[tuple[Problem]]:
     if topic_id is not None:
@@ -37,8 +37,8 @@ def apply_problem_filters(
     if subtopic_id is not None:
         statement = statement.where(Problem.subtopic_id == subtopic_id)
 
-    if difficulty_id is not None:
-        statement = statement.where(Problem.difficulty_id == difficulty_id)
+    if difficulty is not None:
+        statement = statement.where(Problem.difficulty == difficulty)
 
     if problem_type_id is not None:
         statement = statement.where(Problem.problem_type_id == problem_type_id)
@@ -62,9 +62,8 @@ async def ensure_subtopic_exists(session: "AsyncSession", subtopic_id: uuid.UUID
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Subtopic not found")
 
 
-async def ensure_difficulty_exists(session: "AsyncSession", difficulty_id: uuid.UUID) -> None:
-    result = await session.execute(select(Difficulty.id).where(Difficulty.id == difficulty_id))
-    if result.scalar_one_or_none() is None:
+def ensure_difficulty_exists(difficulty: DifficultyLevel) -> None:
+    if not isinstance(difficulty, DifficultyLevel):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Difficulty not found")
 
 

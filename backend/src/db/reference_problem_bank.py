@@ -7,12 +7,11 @@ from typing import TYPE_CHECKING, TypedDict
 from loguru import logger
 from sqlalchemy import delete, func, select
 
-from src.core.utils import EnvTools
+from src.config import bootstrap_config
 from src.db.database import DataBase
-from src.db.enums import EntranceTestStatus, ProblemAnswerOptionType
+from src.db.enums import DifficultyLevel, EntranceTestStatus, ProblemAnswerOptionType
 from src.db.reference_dataset import PROBLEM_TYPE_DATA
 from src.models.alchemy import (
-    Difficulty,
     EntranceTestSession,
     Problem,
     ProblemAnswerOption,
@@ -35,7 +34,7 @@ class GeneratedProblem(TypedDict):
     problem_type_name: str
     topic_name: str
     subtopic_name: str
-    difficulty_name: str
+    difficulty: DifficultyLevel
     condition: str
     solution: str
     answer_options: tuple[GeneratedAnswerOption, ...]
@@ -65,10 +64,10 @@ def build_reference_problem_bank() -> tuple[GeneratedProblem, ...]:
     generated_problems: list[GeneratedProblem] = []
 
     for problem_type_name, _ in PROBLEM_TYPE_DATA:
-        difficulty_names = _build_difficulty_names(
+        difficulty_levels = _build_difficulty_levels(
             depth_by_problem_type_name[problem_type_name]
         )
-        for variant_index, difficulty_name in enumerate(difficulty_names):
+        for variant_index, difficulty_level in enumerate(difficulty_levels):
             blueprint = _build_problem_blueprint(
                 problem_type_name=problem_type_name,
                 variant_index=variant_index,
@@ -78,7 +77,7 @@ def build_reference_problem_bank() -> tuple[GeneratedProblem, ...]:
                     problem_type_name=problem_type_name,
                     topic_name=blueprint["topic_name"],
                     subtopic_name=blueprint["subtopic_name"],
-                    difficulty_name=difficulty_name,
+                    difficulty=difficulty_level,
                     condition=blueprint["condition"],
                     solution=blueprint["solution"],
                     answer_options=(
@@ -116,13 +115,11 @@ async def load_reference_problem_bank(db: DataBase) -> None:
         await session.execute(delete(Problem))
         await _reset_entrance_test_sessions(session)
 
-        difficulties_by_name = await _load_difficulties_by_name(session)
         problem_types_by_name = await _load_problem_types_by_name(session)
         subtopic_ids_by_key = await _load_subtopic_ids_by_key(session)
 
         for generated_problem in generated_problems:
             problem_type = problem_types_by_name[generated_problem["problem_type_name"]]
-            difficulty = difficulties_by_name[generated_problem["difficulty_name"]]
             subtopic_id = subtopic_ids_by_key[
                 (
                     generated_problem["topic_name"],
@@ -132,7 +129,7 @@ async def load_reference_problem_bank(db: DataBase) -> None:
 
             problem = Problem(
                 subtopic_id=subtopic_id,
-                difficulty_id=difficulty.id,
+                difficulty=generated_problem["difficulty"],
                 problem_type_id=problem_type.id,
                 condition=generated_problem["condition"],
                 solution=generated_problem["solution"],
@@ -170,12 +167,12 @@ def _build_problem_type_depth(
     )
 
 
-def _build_difficulty_names(depth: int) -> tuple[str, str]:
+def _build_difficulty_levels(depth: int) -> tuple[DifficultyLevel, DifficultyLevel]:
     if depth <= 1:
-        return ("easy", "medium")
+        return (DifficultyLevel.INTERMEDIATE, DifficultyLevel.UPPER_INTERMEDIATE)
     if depth == 2:
-        return ("medium", "hard")
-    return ("hard", "very hard")
+        return (DifficultyLevel.UPPER_INTERMEDIATE, DifficultyLevel.ADVANCED)
+    return (DifficultyLevel.ADVANCED, DifficultyLevel.PROFICIENT)
 
 
 def _build_problem_blueprint(
@@ -2185,16 +2182,6 @@ async def _reset_entrance_test_sessions(session: "AsyncSession") -> None:
         entrance_test_session.outer_fringe_problem_type_ids = []
 
 
-async def _load_difficulties_by_name(
-    session: "AsyncSession",
-) -> dict[str, Difficulty]:
-    result = await session.execute(select(Difficulty))
-    return {
-        difficulty.name: difficulty
-        for difficulty in result.scalars().all()
-    }
-
-
 async def _load_problem_types_by_name(
     session: "AsyncSession",
 ) -> dict[str, ProblemType]:
@@ -2219,7 +2206,7 @@ async def _load_subtopic_ids_by_key(
 
 
 async def main() -> None:
-    EnvTools.bootstrap_env()
+    bootstrap_config()
     db = DataBase()
     await db.init_alchemy_engine()
     try:

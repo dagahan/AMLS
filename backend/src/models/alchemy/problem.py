@@ -7,11 +7,10 @@ from sqlalchemy import Enum, ForeignKey, Text
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from src.db.enums import ProblemAnswerOptionType
+from src.db.enums import DifficultyLevel, ProblemAnswerOptionType
 from src.models.alchemy.common import Base, IdMixin, TimestampMixin
 
 if TYPE_CHECKING:
-    from src.models.alchemy.difficulty import Difficulty
     from src.models.alchemy.problem_type import ProblemType
     from src.models.alchemy.topic import Subtopic
 
@@ -24,9 +23,12 @@ class Problem(Base, IdMixin, TimestampMixin):
         ForeignKey("subtopics.id", ondelete="RESTRICT"),
         nullable=False,
     )
-    difficulty_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True),
-        ForeignKey("difficulties.id", ondelete="RESTRICT"),
+    difficulty: Mapped[DifficultyLevel] = mapped_column(
+        Enum(
+            DifficultyLevel,
+            name="difficulty_level_enum",
+            values_callable=lambda enum_class: [member.value for member in enum_class],
+        ),
         nullable=False,
     )
     problem_type_id: Mapped[uuid.UUID] = mapped_column(
@@ -40,7 +42,6 @@ class Problem(Base, IdMixin, TimestampMixin):
     solution_images: Mapped[list[str]] = mapped_column(JSONB, default=list, nullable=False)
 
     subtopic: Mapped["Subtopic"] = relationship(back_populates="problems")
-    difficulty: Mapped["Difficulty"] = relationship(back_populates="problems")
     problem_type: Mapped["ProblemType"] = relationship(back_populates="problems")
     answer_options: Mapped[list["ProblemAnswerOption"]] = relationship(
         back_populates="problem",

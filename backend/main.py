@@ -5,8 +5,8 @@ import sys
 import colorama
 from loguru import logger
 
+from src.config import bootstrap_config, get_app_config
 from src.core.logging import InterceptHandler, LogSetup
-from src.core.utils import EnvTools
 from src.fast_api.fastapi_server import Server
 
 
@@ -18,8 +18,6 @@ class Service:
 
 
     async def run_service(self) -> None:
-        self.logger_setup.configure()
-
         loop = asyncio.get_running_loop()
         stop_future: asyncio.Future[None] = loop.create_future()
 
@@ -86,7 +84,8 @@ class Service:
 
 if __name__ == "__main__":
     try:
-        EnvTools.bootstrap_env()
+        bootstrap_config()
+        LogSetup.configure(time_zone_name=str(get_app_config().infra.get("TZ", "UTC")))
         asyncio.run(Service().run_service())
     except KeyboardInterrupt:
         logger.info(f"{colorama.Fore.CYAN}Service stopped by user{colorama.Style.RESET_ALL}")

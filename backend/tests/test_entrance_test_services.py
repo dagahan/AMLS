@@ -7,7 +7,8 @@ from typing import TYPE_CHECKING
 import pytest
 from sqlalchemy import delete, func, select
 
-from src.core.utils import EnvTools, PasswordTools
+from src.config import get_app_config
+from src.core.utils import PasswordTools
 from src.db.database import DataBase
 from src.db.enums import (
     EntranceTestResultNodeStatus,
@@ -97,7 +98,7 @@ async def test_runtime_service_saves_loads_and_deletes_big_graph_runtime(
     structure_service = EntranceTestStructureService()
     runtime_service = EntranceTestRuntimeService()
     temperature_sharpening = float(
-        EnvTools.required_load_env_var("ENTRANCE_ASSESSMENT_TEMPERATURE_SHARPENING")
+        get_app_config().business.require("entrance_assessment.temperature_sharpening")
     )
 
     async with database.async_session() as session:

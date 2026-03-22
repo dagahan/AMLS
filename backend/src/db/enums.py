@@ -12,6 +12,14 @@ class ProblemAnswerOptionType(StrEnum):
     I_DONT_KNOW = "i_dont_know"
 
 
+class DifficultyLevel(StrEnum):
+    ELEMENTARY = "elementary"
+    INTERMEDIATE = "intermediate"
+    UPPER_INTERMEDIATE = "upper_intermediate"
+    ADVANCED = "advanced"
+    PROFICIENT = "proficient"
+
+
 class EntranceTestStatus(StrEnum):
     PENDING = "pending"
     ACTIVE = "active"

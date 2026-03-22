@@ -4,7 +4,7 @@ import uvicorn
 from fastapi import FastAPI
 from loguru import logger
 
-from src.core.utils import EnvTools
+from src.config import get_app_config, get_config_manager
 from src.db.database import DataBase
 from src.fast_api.routers.auth_router import get_auth_router
 from src.fast_api.routers.difficulty_router import get_difficulty_router
@@ -36,21 +36,23 @@ def create_application(database: DataBase) -> FastAPI:
 
 class Server:
     def __init__(self) -> None:
+        app_config = get_app_config()
         self.database = DataBase()
         self.app = create_application(self.database)
         self.server: uvicorn.Server | None = None
         self.uvicorn_config = uvicorn.Config(
             app=self.app,
             host="0.0.0.0"
-            if EnvTools.is_running_inside_docker_compose()
-            else EnvTools.get_service_host("backend"),
-            port=int(EnvTools.get_service_port("backend")),
+            if app_config.is_running_inside_docker()
+            else app_config.service_host("backend"),
+            port=app_config.service_port("backend"),
             log_level="info",
         )
 
 
     async def run_server(self) -> None:
         await self.database.init_alchemy_engine()
+        await get_config_manager().start_watcher()
         self.server = uvicorn.Server(self.uvicorn_config)
         logger.info(f"Starting {self.app.title} FastAPI server")
         await self.server.serve()
@@ -60,4 +62,5 @@ class Server:
         if self.server is not None:
             self.server.should_exit = True
 
+        await get_config_manager().stop_watcher()
         await self.database.dispose()
