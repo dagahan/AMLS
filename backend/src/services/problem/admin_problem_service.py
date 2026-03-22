@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import uuid
-from typing import TYPE_CHECKING
 
 from fastapi import HTTPException, status
 
@@ -20,17 +19,15 @@ from src.services.problem.loader import (
     load_problem_or_404,
 )
 from src.services.problem.problem_query_service import ProblemQueryService
+from src.storage.storage_manager import StorageManager
 from src.transaction_manager.transaction_manager import execute_atomic_step, transactional
-
-if TYPE_CHECKING:
-    from src.db.database import DataBase
 
 
 class AdminProblemService:
-    def __init__(self, db: "DataBase") -> None:
-        self.db = db
+    def __init__(self, storage_manager: StorageManager) -> None:
+        self.storage_manager = storage_manager
         self.mathjax_validator = MathJaxValidator()
-        self.problem_query_service = ProblemQueryService(db)
+        self.problem_query_service = ProblemQueryService(storage_manager)
 
 
     @transactional
@@ -71,7 +68,7 @@ class AdminProblemService:
             answer_options=data.answer_options,
         )
 
-        async with self.db.session_ctx() as session:
+        async with self.storage_manager.session_ctx() as session:
             await ensure_subtopic_exists(session, data.subtopic_id)
             ensure_difficulty_exists(data.difficulty)
             await ensure_problem_type_exists(session, data.problem_type_id)
@@ -98,7 +95,7 @@ class AdminProblemService:
             answer_options=data.answer_options,
         )
 
-        async with self.db.session_ctx() as session:
+        async with self.storage_manager.session_ctx() as session:
             problem = await load_problem_or_404(session, problem_id)
 
             if data.subtopic_id is not None:
@@ -121,13 +118,13 @@ class AdminProblemService:
 
 
     async def _delete_problem_record(self, problem_id: uuid.UUID) -> None:
-        async with self.db.session_ctx() as session:
+        async with self.storage_manager.session_ctx() as session:
             problem = await load_problem_or_404(session, problem_id)
             await session.delete(problem)
 
 
     async def _get_problem_snapshot(self, problem_id: uuid.UUID) -> ProblemSnapshot:
-        async with self.db.session_ctx() as session:
+        async with self.storage_manager.session_ctx() as session:
             problem = await load_problem_or_404(session, problem_id)
 
         return ProblemSnapshot(
@@ -147,7 +144,7 @@ class AdminProblemService:
 
 
     async def _restore_problem_snapshot(self, snapshot: ProblemSnapshot) -> None:
-        async with self.db.session_ctx() as session:
+        async with self.storage_manager.session_ctx() as session:
             problem = await session.get(Problem, snapshot.id)
             if problem is None:
                 problem = Problem(

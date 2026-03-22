@@ -9,13 +9,14 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 
-from src.db.enums import UserRole
 from src.models.alchemy import User
 from src.models.pydantic import AuthContext, ClientContext, build_user_response
 from src.services.auth.auth_service import AuthService
+from src.storage.storage_manager import StorageManager
+from src.storage.db.enums import UserRole
 
 if TYPE_CHECKING:
-    from src.db.database import DataBase
+    from sqlalchemy.ext.asyncio import AsyncSession
 
 
 bearer_scheme = HTTPBearer(auto_error=False)
@@ -32,8 +33,8 @@ def require_role(role: UserRole | None = None) -> Callable[..., Awaitable[AuthCo
                 detail="Authorization required",
             )
 
-        db = cast("DataBase", request.app.state.database)
-        auth_service = AuthService(db)
+        storage_manager = cast("StorageManager", request.app.state.storage)
+        auth_service = AuthService(storage_manager)
         payload = await auth_service.validate_access_token(credentials.credentials)
 
         try:
@@ -44,13 +45,8 @@ def require_role(role: UserRole | None = None) -> Callable[..., Awaitable[AuthCo
                 detail="Invalid token subject",
             ) from error
 
-        async with db.session_ctx() as session:
-            result = await session.execute(
-                select(User)
-                .options(selectinload(User.entrance_test_session))
-                .where(User.id == user_id)
-            )
-            user = result.scalar_one_or_none()
+        async with storage_manager.session_ctx() as session:
+            user = await _load_user(session, user_id)
 
         if user is None:
             raise HTTPException(
@@ -76,6 +72,18 @@ def require_role(role: UserRole | None = None) -> Callable[..., Awaitable[AuthCo
         )
 
     return resolve_auth_context
+
+
+async def _load_user(
+    session: AsyncSession,
+    user_id: uuid.UUID,
+) -> User | None:
+    result = await session.execute(
+        select(User)
+        .options(selectinload(User.entrance_test_session))
+        .where(User.id == user_id)
+    )
+    return result.scalar_one_or_none()
 
 
 def parse_optional_uuid(raw_value: str | None, field_name: str) -> uuid.UUID | None:

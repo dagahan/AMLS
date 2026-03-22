@@ -173,6 +173,16 @@ function getResponseErrorMessage(
 }
 
 
+function isUnauthorizedStatus(statusCode: number): boolean {
+  return statusCode === 401 || statusCode === 403;
+}
+
+
+function getSessionExpiredMessage(): string {
+  return "Session expired. Please sign in again.";
+}
+
+
 function buildKnowledgeGraphNodeStyle(): CSSProperties {
   return {
     width: KNOWLEDGE_NODE_WIDTH,
@@ -265,7 +275,7 @@ function buildKnowledgeGraphElements(
         animated: true,
         style: {
           stroke: "var(--graph-edge)",
-          strokeWidth: 1.5,
+          strokeWidth: 1.9,
         },
       });
     });
@@ -310,6 +320,7 @@ export default function Home() {
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
   const [authError, setAuthError] = useState<string | null>(null);
+  const [authNotice, setAuthNotice] = useState<string | null>(null);
   const [graphError, setGraphError] = useState<string | null>(null);
   const [isAuthSubmitting, setIsAuthSubmitting] = useState(false);
   const [isGraphLoading, setIsGraphLoading] = useState(false);
@@ -354,6 +365,33 @@ export default function Home() {
   }, [preferencesLoaded, theme]);
 
 
+  const clearStoredSession = useCallback(() => {
+    setToken(null);
+    setGraphError(null);
+    setNodes([]);
+    setEdges([]);
+    window.localStorage.removeItem(AUTH_TOKEN_STORAGE_KEY);
+  }, [setEdges, setNodes]);
+
+
+  const handleUnauthorizedSession = useCallback((
+    source: string,
+    statusCode: number,
+    backendMessage: string,
+  ) => {
+    console.warn(`${HOME_LOG_SCOPE} Clearing unauthorized session`, {
+      backendMessage,
+      source,
+      statusCode,
+    });
+
+    clearStoredSession();
+    setAuthMode("login");
+    setAuthError(null);
+    setAuthNotice(getSessionExpiredMessage());
+  }, [clearStoredSession]);
+
+
   const fetchGraphData = useCallback(async (authToken: string) => {
     const startedAt = Date.now();
 
@@ -370,12 +408,14 @@ export default function Home() {
       const payload = await response.json().catch(() => null);
 
       if (!response.ok) {
-        if (response.status === 401) {
-          setToken(null);
-          window.localStorage.removeItem(AUTH_TOKEN_STORAGE_KEY);
+        const message = getResponseErrorMessage(payload, "Failed to fetch graph data");
+
+        if (isUnauthorizedStatus(response.status)) {
+          handleUnauthorizedSession("/api/graph", response.status, message);
+          return;
         }
 
-        throw new Error(getResponseErrorMessage(payload, "Failed to fetch graph data"));
+        throw new Error(message);
       }
 
       const graphData = payload as GraphDataResponse;
@@ -402,7 +442,7 @@ export default function Home() {
     } finally {
       setIsGraphLoading(false);
     }
-  }, [setEdges, setNodes]);
+  }, [handleUnauthorizedSession, setEdges, setNodes]);
 
 
   useEffect(() => {
@@ -427,6 +467,8 @@ export default function Home() {
     try {
       setIsAuthSubmitting(true);
       setAuthError(null);
+      setAuthNotice(null);
+      setAuthNotice(null);
 
       const response = await fetch("/api/auth", {
         method: "POST",
@@ -455,6 +497,8 @@ export default function Home() {
 
       setToken(authPayload.access_token);
       window.localStorage.setItem(AUTH_TOKEN_STORAGE_KEY, authPayload.access_token);
+      setAuthNotice(null);
+      setAuthNotice(null);
 
       console.log(`${HOME_LOG_SCOPE} Login successful`, {
         email,
@@ -462,7 +506,7 @@ export default function Home() {
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : "Login failed";
 
-      console.error(`${HOME_LOG_SCOPE} Login failed`, {
+      console.warn(`${HOME_LOG_SCOPE} Login failed`, {
         email,
         message,
       });
@@ -543,7 +587,7 @@ export default function Home() {
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : "Registration failed";
 
-      console.error(`${HOME_LOG_SCOPE} Registration failed`, {
+      console.warn(`${HOME_LOG_SCOPE} Registration failed`, {
         email,
         message,
       });
@@ -556,15 +600,21 @@ export default function Home() {
 
 
   const handleLogout = useCallback(() => {
-    setToken(null);
-    setGraphError(null);
+    clearStoredSession();
+    setAuthMode("login");
     setAuthError(null);
-    setNodes([]);
-    setEdges([]);
-    window.localStorage.removeItem(AUTH_TOKEN_STORAGE_KEY);
+    setAuthNotice(null);
 
     console.log(`${HOME_LOG_SCOPE} Session cleared`);
-  }, [setEdges, setNodes]);
+  }, [clearStoredSession]);
+
+
+  const handleEntranceUnauthorized = useCallback((
+    statusCode: number,
+    backendMessage: string,
+  ) => {
+    handleUnauthorizedSession("/api/entrance-test", statusCode, backendMessage);
+  }, [handleUnauthorizedSession]);
 
 
   const activeTabItem = TAB_ITEMS.find((item) => item.id === activeTab) ?? TAB_ITEMS[0];
@@ -673,6 +723,12 @@ export default function Home() {
                     </p>
                   </div>
 
+                  {authNotice ? (
+                    <div className="rounded-[1.3rem] border border-primary/20 bg-primary/10 px-4 py-3 text-sm text-primary">
+                      {authNotice}
+                    </div>
+                  ) : null}
+
                   {authMode === "login" ? (
                     <form onSubmit={handleLogin} className="space-y-5">
                       <div className="space-y-2">
@@ -713,6 +769,7 @@ export default function Home() {
                           onClick={() => {
                             setAuthMode("register");
                             setAuthError(null);
+                            setAuthNotice(null);
                           }}
                         >
                           Create an account
@@ -781,6 +838,7 @@ export default function Home() {
                           onClick={() => {
                             setAuthMode("login");
                             setAuthError(null);
+                            setAuthNotice(null);
                           }}
                         >
                           Sign in
@@ -811,7 +869,7 @@ export default function Home() {
 
   return (
     <div className="min-h-screen px-4 py-4 lg:px-6 lg:py-6">
-      <div className="mx-auto flex max-w-[1500px] flex-col gap-5">
+      <div className="mx-auto flex max-w-[1680px] flex-col gap-5">
         <header className="app-surface rounded-[2.2rem] px-6 py-5 lg:px-7">
           <div className="flex flex-col gap-5 xl:flex-row xl:items-center xl:justify-between">
             <div className="space-y-4">
@@ -867,7 +925,7 @@ export default function Home() {
         </header>
 
         {activeTab === "graph" ? (
-          <div className="grid gap-5 xl:grid-cols-[0.92fr_1.08fr]">
+          <div className="grid gap-5 xl:grid-cols-[0.78fr_1.22fr]">
             <section className="app-surface rounded-[2rem] px-6 py-6">
               <div className="flex h-full flex-col gap-6">
                 <div className="space-y-3">
@@ -930,7 +988,7 @@ export default function Home() {
 
             <section
               data-testid="knowledge-graph-view"
-              className="graph-stage graph-flow relative min-h-[640px] rounded-[2rem] p-3 sm:p-4"
+              className="graph-stage graph-flow relative min-h-[44rem] rounded-[2rem] p-3 sm:p-4 xl:min-h-[calc(100vh-11rem)]"
             >
               <div className="absolute left-4 top-4 z-10 flex flex-wrap gap-2">
                 <span className="rounded-full border border-primary/18 bg-primary/10 px-4 py-2 text-sm font-semibold text-primary">
@@ -997,7 +1055,10 @@ export default function Home() {
             data-testid="entrance-tab-panel"
             className="app-surface rounded-[2rem] p-1 sm:p-2"
           >
-            <EntranceTest token={token} />
+            <EntranceTest
+              token={token}
+              onUnauthorized={handleEntranceUnauthorized}
+            />
           </section>
         )}
       </div>

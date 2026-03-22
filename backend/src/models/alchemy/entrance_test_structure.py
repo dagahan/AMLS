@@ -3,7 +3,7 @@ from __future__ import annotations
 from sqlalchemy import BigInteger, Enum, Integer, LargeBinary, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
-from src.db.enums import EntranceTestStructureStatus
+from src.storage.db.enums import EntranceTestStructureStatus
 from src.models.alchemy.common import Base, IdMixin, TimestampMixin
 
 

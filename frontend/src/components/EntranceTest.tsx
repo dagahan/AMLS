@@ -1,6 +1,6 @@
 "use client";
 
-import { Background, Controls, type NodeTypes, ReactFlow } from "@xyflow/react";
+import { Background, Controls, MiniMap, type NodeTypes, ReactFlow } from "@xyflow/react";
 import { useCallback, useEffect, useState } from "react";
 import { CheckCircle2, CircleDot, Lock, Radar } from "lucide-react";
 import MathFlowNode from "@/components/MathFlowNode";
@@ -42,7 +42,7 @@ const RESULT_METRIC_ITEMS = [
   {
     key: "locked",
     label: "Locked",
-    accentClassName: "text-foreground",
+    accentClassName: "text-slate-700 dark:text-slate-100",
     icon: Lock,
   },
   {
@@ -56,24 +56,25 @@ const RESULT_METRIC_ITEMS = [
 const RESULT_LEGEND_ITEMS = [
   {
     label: "Learned",
-    className: "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900/60 dark:bg-emerald-950/40 dark:text-emerald-200",
+    className: "border-emerald-300 bg-emerald-100 text-emerald-800 dark:border-emerald-400/55 dark:bg-emerald-500/18 dark:text-emerald-100",
   },
   {
     label: "Ready",
-    className: "border-primary/20 bg-primary/10 text-primary",
+    className: "border-primary/30 bg-primary/14 text-primary dark:border-primary/55 dark:bg-primary/18 dark:text-blue-100",
   },
   {
     label: "Locked",
-    className: "border-border bg-muted/70 text-foreground",
+    className: "border-slate-300 bg-slate-100 text-slate-800 dark:border-slate-400/45 dark:bg-slate-700/24 dark:text-slate-100",
   },
   {
     label: "Frontier",
-    className: "border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-200",
+    className: "border-amber-300 bg-amber-100 text-amber-800 dark:border-amber-400/65 dark:bg-amber-400/18 dark:text-amber-100",
   },
 ] as const;
 
 interface EntranceTestProps {
   token: string;
+  onUnauthorized: (statusCode: number, backendMessage: string) => void;
 }
 
 
@@ -133,7 +134,15 @@ function formatProbabilityAsPercentage(probability: number): string {
 }
 
 
-export default function EntranceTest({ token }: EntranceTestProps) {
+function isUnauthorizedStatus(statusCode: number): boolean {
+  return statusCode === 401 || statusCode === 403;
+}
+
+
+export default function EntranceTest({
+  token,
+  onUnauthorized,
+}: EntranceTestProps) {
   const [session, setSession] = useState<EntranceTestSessionResponse | null>(null);
   const [currentProblem, setCurrentProblem] = useState<ProblemResponse | null>(null);
   const [result, setResult] = useState<EntranceTestResultResponse | null>(null);
@@ -145,6 +154,28 @@ export default function EntranceTest({ token }: EntranceTestProps) {
   const [submitting, setSubmitting] = useState(false);
 
 
+  const handleUnauthorizedResponse = useCallback((
+    statusCode: number,
+    payload: unknown,
+    requestName: string,
+  ): boolean => {
+    if (!isUnauthorizedStatus(statusCode)) {
+      return false;
+    }
+
+    const backendMessage = getResponseErrorMessage(payload, "Session expired");
+
+    console.warn(`${ENTRANCE_TEST_LOG_SCOPE} Unauthorized entrance-test request`, {
+      backendMessage,
+      requestName,
+      statusCode,
+    });
+
+    onUnauthorized(statusCode, backendMessage);
+    return true;
+  }, [onUnauthorized]);
+
+
   const fetchCurrentProblem = useCallback(async () => {
     const response = await fetch("/api/entrance-test/current-problem", {
       headers: { Authorization: `Bearer ${token}` },
@@ -153,6 +184,10 @@ export default function EntranceTest({ token }: EntranceTestProps) {
     const payload = await response.json().catch(() => null);
 
     if (!response.ok) {
+      if (handleUnauthorizedResponse(response.status, payload, "current-problem")) {
+        return;
+      }
+
       throw new Error(
         getResponseErrorMessage(payload, "Failed to fetch current problem"),
       );
@@ -161,7 +196,7 @@ export default function EntranceTest({ token }: EntranceTestProps) {
     const data = payload as EntranceTestCurrentProblemResponse;
 
     setCurrentProblem(data.problem);
-  }, [token]);
+  }, [handleUnauthorizedResponse, token]);
 
 
   const fetchResult = useCallback(async () => {
@@ -181,6 +216,10 @@ export default function EntranceTest({ token }: EntranceTestProps) {
       const payload = await response.json().catch(() => null);
 
       if (!response.ok) {
+        if (handleUnauthorizedResponse(response.status, payload, "result")) {
+          return null;
+        }
+
         const message = getResponseErrorMessage(payload, "Failed to fetch result");
 
         console.error(`${ENTRANCE_TEST_LOG_SCOPE} Personalized graph fetch failed`, {
@@ -211,7 +250,7 @@ export default function EntranceTest({ token }: EntranceTestProps) {
     } finally {
       setLoadingResult(false);
     }
-  }, [token]);
+  }, [handleUnauthorizedResponse, token]);
 
 
   const fetchSession = useCallback(async () => {
@@ -226,6 +265,10 @@ export default function EntranceTest({ token }: EntranceTestProps) {
       const payload = await response.json().catch(() => null);
 
       if (!response.ok) {
+        if (handleUnauthorizedResponse(response.status, payload, "session")) {
+          return;
+        }
+
         throw new Error(getResponseErrorMessage(payload, "Failed to fetch session"));
       }
 
@@ -254,7 +297,7 @@ export default function EntranceTest({ token }: EntranceTestProps) {
     } finally {
       setLoading(false);
     }
-  }, [fetchCurrentProblem, fetchResult, token]);
+  }, [fetchCurrentProblem, fetchResult, handleUnauthorizedResponse, token]);
 
 
   useEffect(() => {
@@ -308,6 +351,10 @@ export default function EntranceTest({ token }: EntranceTestProps) {
       const payload = await response.json().catch(() => null);
 
       if (!response.ok) {
+        if (handleUnauthorizedResponse(response.status, payload, "start")) {
+          return;
+        }
+
         throw new Error(getResponseErrorMessage(payload, "Failed to start test"));
       }
 
@@ -347,6 +394,10 @@ export default function EntranceTest({ token }: EntranceTestProps) {
       const payload = await response.json().catch(() => null);
 
       if (!response.ok) {
+        if (handleUnauthorizedResponse(response.status, payload, "answer")) {
+          return;
+        }
+
         throw new Error(getResponseErrorMessage(payload, "Failed to submit answer"));
       }
 
@@ -388,6 +439,10 @@ export default function EntranceTest({ token }: EntranceTestProps) {
       const payload = await response.json().catch(() => null);
 
       if (!response.ok) {
+        if (handleUnauthorizedResponse(response.status, payload, "complete")) {
+          return;
+        }
+
         throw new Error(getResponseErrorMessage(payload, "Failed to complete test"));
       }
 
@@ -588,7 +643,7 @@ export default function EntranceTest({ token }: EntranceTestProps) {
   if (session.status === "completed" && result && resultGraph) {
     return (
       <div className="flex h-full items-start justify-center p-4 lg:p-6">
-        <Card className="w-full max-w-7xl">
+        <Card className="w-full max-w-[110rem]">
           <CardHeader>
             <p className="section-kicker">Personalized result</p>
             <CardTitle>Entrance Test Completed</CardTitle>
@@ -648,7 +703,7 @@ export default function EntranceTest({ token }: EntranceTestProps) {
               data-testid="entrance-test-result-graph"
               className="graph-stage graph-flow overflow-hidden rounded-[1.9rem]"
             >
-              <div className="h-[34rem] w-full">
+              <div className="h-[42rem] w-full lg:h-[min(78vh,62rem)]">
                 <ReactFlow
                   nodes={resultGraph.nodes}
                   edges={resultGraph.edges}
@@ -660,6 +715,16 @@ export default function EntranceTest({ token }: EntranceTestProps) {
                   panOnDrag
                 >
                   <Background color="var(--surface-grid)" gap={30} size={1} />
+                  <MiniMap
+                    pannable
+                    zoomable
+                    nodeColor="var(--primary)"
+                    maskColor="transparent"
+                    style={{
+                      background: "var(--card)",
+                      border: "1px solid var(--border)",
+                    }}
+                  />
                   <Controls />
                 </ReactFlow>
               </div>

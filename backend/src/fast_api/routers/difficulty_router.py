@@ -1,22 +1,15 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
-
 from fastapi import APIRouter, Depends
 
-from src.db.enums import DifficultyLevel
 from src.fast_api.dependencies import require_role
-from src.models.pydantic import (
-    AuthContext,
-    DifficultyResponse,
-)
+from src.models.pydantic import AuthContext, DifficultyResponse
 from src.services.catalog import DifficultyService
+from src.storage.storage_manager import StorageManager
+from src.storage.db.enums import DifficultyLevel
 
-if TYPE_CHECKING:
-    from src.db.database import DataBase
 
-
-def get_difficulty_router(db: "DataBase") -> APIRouter:
+def get_difficulty_router(_storage_manager: StorageManager) -> APIRouter:
     router = APIRouter()
     difficulty_service = DifficultyService()
 

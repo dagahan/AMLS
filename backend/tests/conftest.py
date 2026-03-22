@@ -21,14 +21,14 @@ if str(BACKEND_DIR) not in sys.path:
 
 from src.config import bootstrap_config
 from src.core.utils import PasswordTools
-from src.db.database import DataBase
-from src.db.enums import UserRole
-from src.db.reference_problem_bank import load_reference_problem_bank
-from src.db.reference_sync import sync_reference_data
 from src.fast_api.fastapi_server import create_application
 from src.models.alchemy import Base, EntranceTestStructure, User
 from src.models.pydantic import TokenPairResponse
-from src.valkey.valkey_client import get_valkey_client
+from src.storage.storage_manager import StorageManager
+from src.storage.db.database import DataBase
+from src.storage.db.enums import UserRole
+from src.storage.db.reference_problem_bank import load_reference_problem_bank
+from src.storage.db.reference_sync import sync_reference_data
 
 
 @pytest.fixture(scope="session", autouse=True)
@@ -40,6 +40,7 @@ def bootstrap_environment() -> Iterator[None]:
 @pytest.fixture(scope="session", autouse=True)
 def reset_database(bootstrap_environment: None) -> Iterator[None]:
     database = DataBase()
+    storage_manager = StorageManager(database)
     sync_dsn = database.sync_engine_config.replace("+psycopg", "")
     admin_dsn = sync_dsn.rsplit("/", maxsplit=1)[0] + "/postgres"
 
@@ -56,7 +57,7 @@ def reset_database(bootstrap_environment: None) -> Iterator[None]:
             cursor.execute(f'DROP DATABASE IF EXISTS "{database.db_name}"')
             cursor.execute(f'CREATE DATABASE "{database.db_name}"')
 
-    get_valkey_client().flushdb()
+    storage_manager.get_valkey_sync().flushdb()
 
     if _has_alembic_revisions():
         alembic_config = Config(str(BACKEND_DIR / "alembic.ini"))
@@ -73,16 +74,21 @@ def reset_database(bootstrap_environment: None) -> Iterator[None]:
 
 
 @pytest_asyncio.fixture
-async def database(reset_database: None) -> AsyncIterator[DataBase]:
-    database = DataBase()
-    await database.init_alchemy_engine()
-    yield database
-    await database.dispose()
+async def storage_manager(reset_database: None) -> AsyncIterator[StorageManager]:
+    manager = StorageManager()
+    await manager.connect()
+    yield manager
+    await manager.close()
+
+
+@pytest_asyncio.fixture
+async def database(storage_manager: StorageManager) -> AsyncIterator[DataBase]:
+    yield storage_manager.get_database()
 
 
 @pytest_asyncio.fixture(autouse=True)
-async def prepare_test_state(database: DataBase) -> AsyncIterator[None]:
-    get_valkey_client().flushdb()
+async def prepare_test_state(storage_manager: StorageManager, database: DataBase) -> AsyncIterator[None]:
+    storage_manager.get_valkey_sync().flushdb()
 
     await sync_reference_data(database)
     await load_reference_problem_bank(database)
@@ -95,8 +101,8 @@ async def prepare_test_state(database: DataBase) -> AsyncIterator[None]:
 
 
 @pytest_asyncio.fixture
-async def client(database: DataBase) -> AsyncIterator[AsyncClient]:
-    application = create_application(database)
+async def client(storage_manager: StorageManager) -> AsyncIterator[AsyncClient]:
+    application = create_application(storage_manager)
     transport = ASGITransport(app=application)
     async with AsyncClient(
         transport=transport,

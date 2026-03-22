@@ -16,6 +16,7 @@ import type {
 vi.mock("@xyflow/react", () => ({
   Background: () => <div data-testid="graph-background" />,
   Controls: () => <div data-testid="graph-controls" />,
+  MiniMap: () => <div data-testid="graph-minimap" />,
   ReactFlow: ({
     nodes,
     edges,
@@ -69,8 +70,8 @@ const activeProblemPayload: ProblemResponse = {
     name: "Systems",
   },
   difficulty: {
-    id: "difficulty-1",
-    name: "medium",
+    key: "upper_intermediate",
+    name: "Upper Intermediate",
     coefficient: 1.2,
   },
   problem_type: {
@@ -199,14 +200,33 @@ const entranceTestResultPayload: EntranceTestResultResponse = {
 const completedAnswerPayload: EntranceTestAnswerResponse = {
   session: completedSessionPayload,
   response: {
-    id: "response-1",
+    response_id: "response-1",
     problem_id: activeProblemPayload.id,
     answer_option_id: "answer-right",
-    is_correct: true,
-    created_at: "2026-03-22T08:10:00.000Z",
+    answer_option_type: "right",
   },
   next_problem: null,
   final_result: entranceTestResultPayload.final_result,
+};
+
+const latexProblemPayload: ProblemResponse = {
+  ...activeProblemPayload,
+  condition: "Solve $\\frac{1}{x - 1} = \\frac{1}{2}$.",
+  answer_options: [
+    {
+      id: "answer-right-latex",
+      text: "$x = 3$",
+    },
+    {
+      id: "answer-wrong-latex",
+      text: "$x = -1$",
+    },
+  ],
+};
+
+const latexCurrentProblemResponsePayload: EntranceTestCurrentProblemResponse = {
+  session: activeSessionPayload,
+  problem: latexProblemPayload,
 };
 
 
@@ -225,6 +245,7 @@ describe("EntranceTest", () => {
     vi.stubGlobal("fetch", vi.fn());
     vi.spyOn(console, "log").mockImplementation(() => undefined);
     vi.spyOn(console, "error").mockImplementation(() => undefined);
+    vi.spyOn(console, "warn").mockImplementation(() => undefined);
   });
 
 
@@ -234,7 +255,7 @@ describe("EntranceTest", () => {
     fetchMock.mockResolvedValueOnce(createJsonResponse(completedSessionPayload));
     fetchMock.mockResolvedValueOnce(createJsonResponse(entranceTestResultPayload));
 
-    render(<EntranceTest token="student-token" />);
+    render(<EntranceTest token="student-token" onUnauthorized={vi.fn()} />);
 
     expect(await screen.findByText("Entrance Test Completed")).toBeInTheDocument();
     expect(screen.getByText("Estimated Knowledge State")).toBeInTheDocument();
@@ -264,7 +285,7 @@ describe("EntranceTest", () => {
     fetchMock.mockResolvedValueOnce(createJsonResponse(completedAnswerPayload, 201));
     fetchMock.mockResolvedValueOnce(createJsonResponse(entranceTestResultPayload));
 
-    render(<EntranceTest token="student-token" />);
+    render(<EntranceTest token="student-token" onUnauthorized={vi.fn()} />);
 
     expect(await screen.findByText("Choose the correct next step.")).toBeInTheDocument();
 
@@ -285,5 +306,37 @@ describe("EntranceTest", () => {
     });
 
     expect(screen.getByTestId("entrance-test-result-graph")).toBeInTheDocument();
+  });
+
+
+  it("renders TeX-delimited question and answer text in the active entrance-test view", async () => {
+    const fetchMock = vi.mocked(fetch);
+
+    fetchMock.mockResolvedValueOnce(createJsonResponse(activeSessionPayload));
+    fetchMock.mockResolvedValueOnce(createJsonResponse(latexCurrentProblemResponsePayload));
+
+    render(<EntranceTest token="student-token" onUnauthorized={vi.fn()} />);
+
+    expect(
+      await screen.findByText("Solve $\\frac{1}{x - 1} = \\frac{1}{2}$."),
+    ).toBeInTheDocument();
+    expect(screen.getByText("$x = 3$")).toBeInTheDocument();
+    expect(screen.getByText("$x = -1$")).toBeInTheDocument();
+  });
+
+
+  it("reports unauthorized entrance-test responses to the shell callback", async () => {
+    const onUnauthorized = vi.fn();
+    const fetchMock = vi.mocked(fetch);
+
+    fetchMock.mockResolvedValueOnce(
+      createJsonResponse({ detail: "Session expired" }, 401),
+    );
+
+    render(<EntranceTest token="student-token" onUnauthorized={onUnauthorized} />);
+
+    await waitFor(() => {
+      expect(onUnauthorized).toHaveBeenCalledWith(401, "Session expired");
+    });
   });
 });

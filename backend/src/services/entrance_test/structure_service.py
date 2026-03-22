@@ -10,7 +10,7 @@ from sqlalchemy import select
 
 from src.config import get_app_config
 from src.core.utils import StringTools
-from src.db.enums import EntranceTestStructureStatus
+from src.storage.db.enums import EntranceTestStructureStatus
 from src.math_models.entrance_assessment import (
     ForestStructureError,
     build_forest_artifact,
@@ -49,11 +49,6 @@ class EntranceTestStructureCompilationFailedError(RuntimeError):
 
 class EntranceTestStructureService:
     def __init__(self) -> None:
-        self.branch_penalty_exponent = float(
-            get_app_config().business.require(
-                "entrance_assessment.branch_penalty_exponent"
-            )
-        )
         self.artifact_kind = "exact_forest_v1"
 
 
@@ -159,6 +154,17 @@ class EntranceTestStructureService:
 
 
     async def load_latest_compiled_structure(
+        self,
+        session: "AsyncSession",
+    ) -> EntranceTestStructureState:
+        snapshot = await self.build_live_snapshot(session)
+        return await self.load_compiled_structure(
+            session=session,
+            structure_version=snapshot.structure_version,
+        )
+
+
+    async def ensure_latest_compiled_structure(
         self,
         session: "AsyncSession",
     ) -> EntranceTestStructureState:
@@ -304,7 +310,7 @@ class EntranceTestStructureService:
         source_value = "|".join(
             [
                 self.artifact_kind,
-                str(self.branch_penalty_exponent),
+                str(self._get_branch_penalty_exponent()),
                 "problem_types",
                 *[str(problem_type_id) for problem_type_id in problem_type_ids],
                 "edges",
@@ -330,7 +336,7 @@ class EntranceTestStructureService:
         graph_artifact = build_graph_artifact(
             problem_type_ids=tuple(snapshot.problem_type_ids),
             prerequisite_edges=tuple(snapshot.prerequisite_edges),
-            branch_penalty_exponent=self.branch_penalty_exponent,
+            branch_penalty_exponent=self._get_branch_penalty_exponent(),
         )
         try:
             forest_artifact = build_forest_artifact(graph_artifact)
@@ -425,6 +431,15 @@ class EntranceTestStructureService:
                 feasible_state_count=forest_artifact.feasible_state_count,
                 initial_entropy=forest_artifact.initial_entropy,
             ),
+        )
+
+
+    @staticmethod
+    def _get_branch_penalty_exponent() -> float:
+        return float(
+            get_app_config().business.require(
+                "entrance_assessment.branch_penalty_exponent"
+            )
         )
 
 

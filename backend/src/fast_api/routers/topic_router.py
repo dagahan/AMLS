@@ -1,11 +1,9 @@
 from __future__ import annotations
 
 import uuid
-from typing import TYPE_CHECKING
 
 from fastapi import APIRouter, Depends, Query
 
-from src.db.enums import UserRole
 from src.fast_api.dependencies import parse_optional_uuid, require_role
 from src.models.pydantic import (
     AuthContext,
@@ -18,14 +16,13 @@ from src.models.pydantic import (
     TopicUpdate,
 )
 from src.services.catalog import TopicService
+from src.storage.storage_manager import StorageManager
+from src.storage.db.enums import UserRole
 
-if TYPE_CHECKING:
-    from src.db.database import DataBase
 
-
-def get_topic_router(db: "DataBase") -> APIRouter:
+def get_topic_router(storage_manager: StorageManager) -> APIRouter:
     router = APIRouter()
-    topic_service = TopicService(db)
+    topic_service = TopicService(storage_manager)
 
 
     @router.get("/topics", response_model=list[TopicResponse], status_code=200)

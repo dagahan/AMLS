@@ -1,33 +1,31 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 from fastapi import HTTPException, status
 from sqlalchemy import select
 
 from src.core.utils import PasswordTools
-from src.db.enums import UserRole
 from src.models.alchemy import User
 from src.models.pydantic import AccessPayload, ClientContext, RegisterRequest, TokenPairResponse
 from src.services.auth.sessions_manager import SessionsManager
 from src.services.entrance_test import EntranceTestService
 from src.services.jwt.jwt_parser import JwtParser
+from src.storage.storage_manager import StorageManager
+from src.storage.db.enums import UserRole
 from src.transaction_manager.transaction_manager import execute_atomic_step, transactional
-
-if TYPE_CHECKING:
-    from src.db.database import DataBase
 
 
 class AuthService:
-    def __init__(self, db: "DataBase") -> None:
-        self.db = db
-        self.jwt_parser = JwtParser()
-        self.sessions_manager = SessionsManager()
-        self.entrance_test_service = EntranceTestService(db)
+    def __init__(self, storage_manager: StorageManager) -> None:
+        self.storage_manager = storage_manager
+        self.jwt_parser = JwtParser(storage_manager)
+        self.sessions_manager = SessionsManager(storage_manager)
+        self.entrance_test_service = EntranceTestService(storage_manager)
 
 
     async def authenticate_user(self, email: str, password: str) -> User:
-        async with self.db.session_ctx() as session:
+        async with self.storage_manager.session_ctx() as session:
             result = await session.execute(select(User).where(User.email == email))
             user = result.scalar_one_or_none()
 
@@ -56,7 +54,7 @@ class AuthService:
 
 
     async def _create_user_record(self, data: RegisterRequest) -> User:
-        async with self.db.session_ctx() as session:
+        async with self.storage_manager.session_ctx() as session:
             result = await session.execute(select(User).where(User.email == data.email))
             existing_user = result.scalar_one_or_none()
             if existing_user is not None:
@@ -82,7 +80,7 @@ class AuthService:
 
 
     async def _delete_user_record(self, user_id: object) -> None:
-        async with self.db.session_ctx() as session:
+        async with self.storage_manager.session_ctx() as session:
             user = await session.get(User, user_id)
             if user is not None:
                 await session.delete(user)

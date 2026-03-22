@@ -6,7 +6,7 @@ from alembic import context
 from sqlalchemy import engine_from_config, pool
 
 from src.config import bootstrap_config
-from src.db.database import DataBase
+from src.storage.db.database import DataBase
 from src.models.alchemy import Base
 import src.models.alchemy as loaded_models
 

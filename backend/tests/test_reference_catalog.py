@@ -10,12 +10,12 @@ from sqlalchemy import func, select
 
 from src.config import get_app_config
 from src.core.utils import PasswordTools
-from src.db.database import DataBase
-from src.db.enums import EntranceTestStatus, ProblemAnswerOptionType, UserRole
-from src.db.problem_type_tree import build_problem_type_tree_lines, build_problem_type_tree_text
-from src.db.reference_dataset import PROBLEM_TYPE_DATA, TOPIC_DATA
-from src.db.reference_problem_bank import build_reference_problem_bank, load_reference_problem_bank
-from src.db.reference_sync import sync_reference_data
+from src.storage.db.database import DataBase
+from src.storage.db.enums import EntranceTestStatus, ProblemAnswerOptionType, UserRole
+from src.storage.db.problem_type_tree import build_problem_type_tree_lines, build_problem_type_tree_text
+from src.storage.db.reference_dataset import PROBLEM_TYPE_DATA, TOPIC_DATA
+from src.storage.db.reference_problem_bank import build_reference_problem_bank, load_reference_problem_bank
+from src.storage.db.reference_sync import sync_reference_data
 from src.models.alchemy import (
     EntranceTestSession,
     Problem,

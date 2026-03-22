@@ -12,12 +12,13 @@ from src.config import get_app_config
 from src.core.utils import TimeTools
 from src.models.pydantic import AccessPayload, RefreshPayload
 from src.services.auth.sessions_manager import SessionsManager
+from src.storage.storage_manager import StorageManager
 
 
 class JwtParser:
-    def __init__(self) -> None:
+    def __init__(self, storage_manager: StorageManager) -> None:
         self.app_config = get_app_config()
-        self.sessions_manager = SessionsManager()
+        self.sessions_manager = SessionsManager(storage_manager)
         self.private_key = self._read_key("JWT_PRIVATE_KEY_PATH")
         self.public_key = self._read_key("JWT_PUBLIC_KEY_PATH")
         self.access_token_expire_minutes = int(self.app_config.infra.require("ACCESS_TOKEN_EXPIRE_MINUTES"))

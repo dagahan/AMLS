@@ -8,8 +8,22 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import Home from "@/app/page";
 
 vi.mock("@/components/EntranceTest", () => ({
-  default: ({ token }: { token: string }) => (
-    <div data-testid="entrance-test-mock">Entrance mock for {token}</div>
+  default: ({
+    token,
+    onUnauthorized,
+  }: {
+    token: string;
+    onUnauthorized: (statusCode: number, backendMessage: string) => void;
+  }) => (
+    <div data-testid="entrance-test-mock">
+      Entrance mock for {token}
+      <button
+        type="button"
+        onClick={() => onUnauthorized(403, "Student role required")}
+      >
+        Trigger unauthorized
+      </button>
+    </div>
   ),
 }));
 
@@ -135,6 +149,7 @@ describe("Home page shell", () => {
     );
     vi.spyOn(console, "log").mockImplementation(() => undefined);
     vi.spyOn(console, "error").mockImplementation(() => undefined);
+    vi.spyOn(console, "warn").mockImplementation(() => undefined);
   });
 
 
@@ -170,5 +185,23 @@ describe("Home page shell", () => {
 
     await user.click(screen.getByRole("button", { name: /Knowledge Graph/i }));
     expect(await screen.findByTestId("knowledge-graph-view")).toBeInTheDocument();
+  });
+
+
+  it("clears the saved token and returns to sign in when the entrance-test view reports an unauthorized session", async () => {
+    const user = userEvent.setup();
+
+    window.localStorage.setItem("auth_token", "student-token");
+
+    render(<Home />);
+
+    await user.click(await screen.findByRole("button", { name: /Entrance Test/i }));
+    await user.click(screen.getByRole("button", { name: "Trigger unauthorized" }));
+
+    await waitFor(() => {
+      expect(window.localStorage.getItem("auth_token")).toBeNull();
+      expect(screen.getByText("Session expired. Please sign in again.")).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Sign in" })).toBeInTheDocument();
+    });
   });
 });

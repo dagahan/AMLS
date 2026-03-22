@@ -6,16 +6,23 @@ from typing import TYPE_CHECKING
 from loguru import logger
 
 from src.models.pydantic import EntranceTestRuntimePayload
-from src.valkey.valkey_client import get_async_valkey_client
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
+
     from valkey.asyncio import Valkey as AsyncValkey
 
 
 class EntranceTestRuntimeStorage:
-    @staticmethod
-    def _get_client() -> AsyncValkey:
-        return get_async_valkey_client()
+    def __init__(
+        self,
+        valkey_client_factory: Callable[[], AsyncValkey],
+    ) -> None:
+        self.valkey_client_factory = valkey_client_factory
+
+
+    def _get_client(self) -> AsyncValkey:
+        return self.valkey_client_factory()
 
 
     async def get_runtime_payload(

@@ -7,7 +7,7 @@ from sqlalchemy import Enum, ForeignKey, Text
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from src.db.enums import DifficultyLevel, ProblemAnswerOptionType
+from src.storage.db.enums import DifficultyLevel, ProblemAnswerOptionType
 from src.models.alchemy.common import Base, IdMixin, TimestampMixin
 
 if TYPE_CHECKING:

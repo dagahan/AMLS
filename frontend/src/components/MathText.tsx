@@ -17,6 +17,16 @@ interface MathTextProps {
 }
 
 
+function containsTeXDelimiters(content: string): boolean {
+  return (
+    /\\\([\s\S]+?\\\)/.test(content)
+    || /\\\[[\s\S]+?\\\]/.test(content)
+    || /\$\$[\s\S]+?\$\$/.test(content)
+    || /\$[^$\n]+?\$/.test(content)
+  );
+}
+
+
 function getMathJaxEngine(): MathJaxEngine | null {
   if (typeof window === "undefined") {
     return null;
@@ -42,8 +52,9 @@ export default function MathText({
   useEffect(() => {
     const mathJax = getMathJaxEngine();
     const element = elementRef.current;
+    const shouldTypeset = containsTeXDelimiters(content);
 
-    if (!mathJax?.typesetPromise || !element) {
+    if (!mathJax?.typesetPromise || !element || !shouldTypeset) {
       return;
     }
 

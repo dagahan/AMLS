@@ -6,8 +6,8 @@ import numpy as np
 import pytest
 
 from src.config import get_app_config
-from src.db.database import DataBase
-from src.db.reference_dataset import PROBLEM_TYPE_DATA
+from src.storage.db.database import DataBase
+from src.storage.db.reference_dataset import PROBLEM_TYPE_DATA
 from src.math_models.entrance_assessment import (
     Outcome,
     apply_answer_step,

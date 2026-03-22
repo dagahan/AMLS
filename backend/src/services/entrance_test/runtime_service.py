@@ -7,22 +7,24 @@ import numpy as np
 
 from src.math_models.entrance_assessment.types import RuntimeSnapshot
 from src.models.pydantic import EntranceTestRuntimePayload
-from src.valkey import EntranceTestRuntimeStorage
+from src.storage.storage_manager import StorageManager
 
 
 class EntranceTestRuntimeService:
     runtime_kind = "exact_forest_v1"
 
 
-    def __init__(self) -> None:
-        self.storage = EntranceTestRuntimeStorage()
+    def __init__(self, storage_manager: StorageManager) -> None:
+        self.storage_manager = storage_manager
 
 
     async def load_runtime_payload(
         self,
         entrance_test_session_id: uuid.UUID,
     ) -> EntranceTestRuntimePayload | None:
-        runtime_payload = await self.storage.get_runtime_payload(entrance_test_session_id)
+        runtime_payload = await self.storage_manager.get_entrance_test_runtime_storage().get_runtime_payload(
+            entrance_test_session_id
+        )
         if runtime_payload is None:
             return None
 
@@ -32,7 +34,9 @@ class EntranceTestRuntimeService:
                 entrance_test_session_id,
                 runtime_payload.runtime_kind,
             )
-            await self.storage.delete_runtime_payload(entrance_test_session_id)
+            await self.storage_manager.get_entrance_test_runtime_storage().delete_runtime_payload(
+                entrance_test_session_id
+            )
             return None
 
         return runtime_payload
@@ -59,7 +63,10 @@ class EntranceTestRuntimeService:
             structure_version=structure_version,
             runtime_snapshot=runtime_snapshot,
         )
-        await self.storage.set_runtime_payload(entrance_test_session_id, runtime_payload)
+        await self.storage_manager.get_entrance_test_runtime_storage().set_runtime_payload(
+            entrance_test_session_id,
+            runtime_payload,
+        )
         return runtime_payload
 
 
@@ -67,7 +74,9 @@ class EntranceTestRuntimeService:
         self,
         entrance_test_session_id: uuid.UUID,
     ) -> None:
-        await self.storage.delete_runtime_payload(entrance_test_session_id)
+        await self.storage_manager.get_entrance_test_runtime_storage().delete_runtime_payload(
+            entrance_test_session_id
+        )
 
 
     def build_runtime_payload(

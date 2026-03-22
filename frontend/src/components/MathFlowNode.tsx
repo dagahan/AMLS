@@ -25,10 +25,11 @@ export default function MathFlowNode({
   return (
     <div
       data-tone={data.tone ?? "default"}
+      data-frontier={data.isFrontier ? "true" : "false"}
       className="flow-node"
       style={{
         boxShadow: data.isFrontier
-          ? "0 0 0 4px var(--graph-status-frontier-ring)"
+          ? "var(--graph-node-shadow), 0 0 0 4px var(--graph-status-frontier-ring), 0 0 32px var(--graph-status-frontier-glow)"
           : "var(--graph-node-shadow)",
       }}
     >

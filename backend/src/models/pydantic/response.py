@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from uuid import UUID
 
-from src.db.enums import DifficultyLevel, ProblemAnswerOptionType
+from src.storage.db.enums import DifficultyLevel, ProblemAnswerOptionType
 from src.models.pydantic.common import AmlsSchema
 
 

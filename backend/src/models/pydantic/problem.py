@@ -2,7 +2,7 @@ from uuid import UUID
 
 from pydantic import Field, model_validator
 
-from src.db.enums import DifficultyLevel, ProblemAnswerOptionType
+from src.storage.db.enums import DifficultyLevel, ProblemAnswerOptionType
 from src.models.pydantic.common import AmlsSchema
 from src.models.pydantic.difficulty import DifficultyResponse
 from src.models.pydantic.problem_type import ProblemTypeResponse

@@ -1,13 +1,11 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
-
 from fastapi import APIRouter, Depends, Request
 
 from src.fast_api.dependencies import build_client_context, require_role
-from src.models.pydantic import AuthContext
 from src.models.pydantic import (
     AccessValidationResponse,
+    AuthContext,
     AuthUserResponse,
     LoginRequest,
     RefreshRequest,
@@ -18,14 +16,12 @@ from src.models.pydantic import (
     build_user_response,
 )
 from src.services.auth.auth_service import AuthService
-
-if TYPE_CHECKING:
-    from src.db.database import DataBase
+from src.storage.storage_manager import StorageManager
 
 
-def get_auth_router(db: "DataBase") -> APIRouter:
+def get_auth_router(storage_manager: StorageManager) -> APIRouter:
     router = APIRouter(prefix="/auth", tags=["auth"])
-    auth_service = AuthService(db)
+    auth_service = AuthService(storage_manager)
 
 
     @router.post("/register", response_model=UserResponse, status_code=201)

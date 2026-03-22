@@ -3,7 +3,7 @@ from __future__ import annotations
 from fastapi import HTTPException, status
 
 from src.config import get_app_config
-from src.db.enums import DifficultyLevel
+from src.storage.db.enums import DifficultyLevel
 from src.models.pydantic import DifficultyResponse
 
 

@@ -8,7 +8,7 @@ from sqlalchemy import DateTime, Enum, Float, ForeignKey, Integer
 from sqlalchemy.dialects.postgresql import ARRAY, JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from src.db.enums import EntranceTestStatus
+from src.storage.db.enums import EntranceTestStatus
 from src.models.alchemy.common import Base, IdMixin, TimestampMixin
 
 if TYPE_CHECKING:

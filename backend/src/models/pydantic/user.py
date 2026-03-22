@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 from uuid import UUID
 
-from src.db.enums import UserRole
+from src.storage.db.enums import UserRole
 from src.models.pydantic.common import AmlsSchema
 from src.models.pydantic.entrance_test import (
     EntranceTestSessionResponse,

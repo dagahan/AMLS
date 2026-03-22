@@ -8,8 +8,8 @@ from loguru import logger
 from sqlalchemy import delete, or_, select
 
 from src.config import bootstrap_config
-from src.db.database import DataBase
-from src.db.reference_dataset import PROBLEM_TYPE_DATA, TOPIC_DATA
+from src.storage.db.database import DataBase
+from src.storage.db.reference_dataset import PROBLEM_TYPE_DATA, TOPIC_DATA
 from src.models.alchemy import (
     Problem,
     ProblemType,

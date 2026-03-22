@@ -7,7 +7,7 @@ from fastapi import HTTPException, status
 from sqlalchemy import Select, select
 from sqlalchemy.orm import selectinload
 
-from src.db.enums import DifficultyLevel
+from src.storage.db.enums import DifficultyLevel
 from src.models.alchemy import Problem, ProblemType, Subtopic
 
 if TYPE_CHECKING:

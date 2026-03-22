@@ -8,7 +8,7 @@ from sqlalchemy import DateTime, Enum, Float, ForeignKey, func
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from src.db.enums import DifficultyLevel, ProblemAnswerOptionType
+from src.storage.db.enums import DifficultyLevel, ProblemAnswerOptionType
 from src.models.alchemy.common import Base, IdMixin
 
 if TYPE_CHECKING:

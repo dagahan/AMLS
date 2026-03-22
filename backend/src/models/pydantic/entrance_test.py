@@ -4,7 +4,7 @@ from datetime import datetime
 from typing import TYPE_CHECKING
 from uuid import UUID
 
-from src.db.enums import (
+from src.storage.db.enums import (
     DifficultyLevel,
     EntranceTestResultNodeStatus,
     EntranceTestStructureStatus,

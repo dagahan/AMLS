@@ -9,15 +9,15 @@ from sqlalchemy import delete, func, select
 
 from src.config import get_app_config
 from src.core.utils import PasswordTools
-from src.db.database import DataBase
-from src.db.enums import (
+from src.storage.db.database import DataBase
+from src.storage.db.enums import (
     EntranceTestResultNodeStatus,
     EntranceTestStatus,
     EntranceTestStructureStatus,
     ProblemAnswerOptionType,
     UserRole,
 )
-from src.db.reference_dataset import PROBLEM_TYPE_DATA
+from src.storage.db.reference_dataset import PROBLEM_TYPE_DATA
 from src.fast_api.fastapi_server import create_application
 from src.math_models.entrance_assessment import initialize_runtime
 from src.models.alchemy import (
@@ -40,6 +40,7 @@ from src.services.entrance_test import (
     EntranceTestStructureService,
 )
 from src.services.problem.loader import build_problem_statement
+from src.storage.storage_manager import StorageManager
 
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
@@ -51,9 +52,25 @@ EXPECTED_FEASIBLE_STATE_COUNT = 8_492_446_687_900_032
 
 
 def test_create_application_does_not_require_running_event_loop() -> None:
-    application = create_application(DataBase())
+    storage_manager = StorageManager()
+    application = create_application(storage_manager)
 
     assert application is not None
+    assert application.state.storage is storage_manager
+
+
+def test_storage_manager_reuses_sync_and_s3_clients() -> None:
+    storage_manager = StorageManager()
+
+    assert storage_manager.get_valkey_sync() is storage_manager.get_valkey_sync()
+    assert storage_manager.get_s3_client() is storage_manager.get_s3_client()
+
+
+@pytest.mark.asyncio
+async def test_storage_manager_reuses_async_valkey_client_in_same_loop(
+    storage_manager: StorageManager,
+) -> None:
+    assert storage_manager.get_valkey_async() is storage_manager.get_valkey_async()
 
 
 @pytest.mark.asyncio
@@ -96,7 +113,7 @@ async def test_runtime_service_saves_loads_and_deletes_big_graph_runtime(
         raise RuntimeError("Database session factory is not initialized")
 
     structure_service = EntranceTestStructureService()
-    runtime_service = EntranceTestRuntimeService()
+    runtime_service = EntranceTestRuntimeService(StorageManager(database))
     temperature_sharpening = float(
         get_app_config().business.require("entrance_assessment.temperature_sharpening")
     )

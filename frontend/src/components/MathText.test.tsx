@@ -37,4 +37,24 @@ describe("MathText", () => {
       expect(typesetPromise).toHaveBeenCalledTimes(1);
     });
   });
+
+
+  it("skips MathJax typesetting for plain text without TeX delimiters", async () => {
+    const typesetPromise = vi.fn().mockResolvedValue(undefined);
+
+    (window as Window & { MathJax?: MathJaxTestEngine }).MathJax = {
+      startup: {
+        promise: Promise.resolve(),
+      },
+      typesetPromise,
+    };
+
+    render(<MathText content="Plain text only" />);
+
+    expect(screen.getByText("Plain text only")).toBeInTheDocument();
+
+    await waitFor(() => {
+      expect(typesetPromise).not.toHaveBeenCalled();
+    });
+  });
 });

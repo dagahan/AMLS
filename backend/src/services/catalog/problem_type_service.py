@@ -15,20 +15,19 @@ from src.models.pydantic import (
     ProblemTypeResponse,
     ProblemTypeUpdate,
 )
+from src.storage.storage_manager import StorageManager
 
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
 
-    from src.db.database import DataBase
-
 
 class ProblemTypeService:
-    def __init__(self, db: "DataBase") -> None:
-        self.db = db
+    def __init__(self, storage_manager: StorageManager) -> None:
+        self.storage_manager = storage_manager
 
 
     async def list_problem_types(self) -> list[ProblemTypeResponse]:
-        async with self.db.session_ctx() as session:
+        async with self.storage_manager.session_ctx() as session:
             problem_types_by_id = await self._load_problem_types_by_id(session)
             prerequisite_ids_by_problem_type = await self._load_prerequisite_ids_by_problem_type(session)
         return self._build_problem_type_responses(
@@ -38,7 +37,7 @@ class ProblemTypeService:
 
 
     async def get_problem_type(self, problem_type_id: uuid.UUID) -> ProblemTypeResponse:
-        async with self.db.session_ctx() as session:
+        async with self.storage_manager.session_ctx() as session:
             problem_type = await self._get_problem_type_or_404(session, problem_type_id)
             prerequisite_ids_by_problem_type = await self._load_prerequisite_ids_by_problem_type(session)
         return ProblemTypeResponse(
@@ -49,7 +48,7 @@ class ProblemTypeService:
 
 
     async def create_problem_type(self, data: ProblemTypeCreate) -> ProblemTypeResponse:
-        async with self.db.session_ctx() as session:
+        async with self.storage_manager.session_ctx() as session:
             await self._ensure_problem_type_name_is_unique(session, data.name)
             await self._ensure_problem_types_exist(session, data.prerequisite_ids)
 
@@ -75,7 +74,7 @@ class ProblemTypeService:
         problem_type_id: uuid.UUID,
         data: ProblemTypeUpdate,
     ) -> ProblemTypeResponse:
-        async with self.db.session_ctx() as session:
+        async with self.storage_manager.session_ctx() as session:
             problem_type = await self._get_problem_type_or_404(session, problem_type_id)
 
             if data.name is not None:
@@ -103,13 +102,13 @@ class ProblemTypeService:
 
 
     async def delete_problem_type(self, problem_type_id: uuid.UUID) -> None:
-        async with self.db.session_ctx() as session:
+        async with self.storage_manager.session_ctx() as session:
             problem_type = await self._get_problem_type_or_404(session, problem_type_id)
             await session.delete(problem_type)
 
 
     async def get_problem_type_graph(self) -> ProblemTypeGraphResponse:
-        async with self.db.session_ctx() as session:
+        async with self.storage_manager.session_ctx() as session:
             problem_types_by_id = await self._load_problem_types_by_id(session)
             prerequisite_ids_by_problem_type = await self._load_prerequisite_ids_by_problem_type(session)
 
@@ -137,7 +136,7 @@ class ProblemTypeService:
 
     async def _replace_prerequisites(
         self,
-        session: "AsyncSession",
+        session: AsyncSession,
         problem_type_id: uuid.UUID,
         prerequisite_ids: list[uuid.UUID],
     ) -> None:
@@ -170,7 +169,7 @@ class ProblemTypeService:
 
     async def _validate_prerequisite_graph(
         self,
-        session: "AsyncSession",
+        session: AsyncSession,
         problem_type_id: uuid.UUID,
         prerequisite_ids: list[uuid.UUID],
     ) -> None:
@@ -208,7 +207,7 @@ class ProblemTypeService:
 
     async def _load_problem_types_by_id(
         self,
-        session: "AsyncSession",
+        session: AsyncSession,
     ) -> dict[uuid.UUID, ProblemType]:
         result = await session.execute(select(ProblemType))
         problem_types = result.scalars().all()
@@ -220,7 +219,7 @@ class ProblemTypeService:
 
     async def _load_prerequisite_ids_by_problem_type(
         self,
-        session: "AsyncSession",
+        session: AsyncSession,
     ) -> dict[uuid.UUID, list[uuid.UUID]]:
         result = await session.execute(
             select(
@@ -316,7 +315,7 @@ class ProblemTypeService:
 
     async def _get_problem_type_or_404(
         self,
-        session: "AsyncSession",
+        session: AsyncSession,
         problem_type_id: uuid.UUID,
     ) -> ProblemType:
         result = await session.execute(select(ProblemType).where(ProblemType.id == problem_type_id))
@@ -331,7 +330,7 @@ class ProblemTypeService:
 
     async def _ensure_problem_type_name_is_unique(
         self,
-        session: "AsyncSession",
+        session: AsyncSession,
         name: str,
         current_id: uuid.UUID | None = None,
     ) -> None:
@@ -346,7 +345,7 @@ class ProblemTypeService:
 
     async def _ensure_problem_types_exist(
         self,
-        session: "AsyncSession",
+        session: AsyncSession,
         problem_type_ids: list[uuid.UUID],
     ) -> None:
         if not problem_type_ids:

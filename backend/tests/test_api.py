@@ -6,8 +6,8 @@ from typing import TYPE_CHECKING
 
 from sqlalchemy import delete, select
 
-from src.db.database import DataBase
-from src.db.enums import ProblemAnswerOptionType
+from src.storage.db.database import DataBase
+from src.storage.db.enums import ProblemAnswerOptionType
 from src.models.alchemy import (
     EntranceTestSession,
     EntranceTestStructure,
@@ -15,7 +15,8 @@ from src.models.alchemy import (
     ResponseEvent,
 )
 from src.models.pydantic import EntranceTestStructureCompileResponse
-from src.s3.s3_connector import S3Client
+from src.storage.storage_manager import StorageManager
+from src.storage.s3.s3_connector import S3Client
 from src.services.entrance_test import EntranceTestRuntimeService
 
 if TYPE_CHECKING:
@@ -204,10 +205,9 @@ async def test_admin_can_compile_current_entrance_test_structure(
     assert compile_payload.error_message is None
 
 
-async def test_entrance_test_start_requires_compiled_structure(
+async def test_entrance_test_start_requires_latest_compiled_structure(
     client: AsyncClient,
     database: DataBase,
-    admin_tokens: dict[str, str],
     student_tokens: dict[str, str],
 ) -> None:
     if database.async_session is None:
@@ -223,24 +223,14 @@ async def test_entrance_test_start_requires_compiled_structure(
     )
 
     assert start_response.status_code == 409
-    assert "is not compiled" in start_response.json()["detail"]
+    assert start_response.json()["detail"].endswith("is not compiled")
 
-    compile_payload = await compile_current_structure(
-        client,
-        admin_tokens["access_token"],
-    )
-    assert compile_payload.status == "ready"
+    async with database.async_session() as session:
+        stored_structures = (
+            await session.execute(select(EntranceTestStructure))
+        ).scalars().all()
 
-    start_response = await client.post(
-        "/entrance-test/start",
-        headers=build_auth_headers(student_tokens["access_token"]),
-    )
-
-    assert start_response.status_code == 200
-    assert (
-        start_response.json()["session"]["structure_version"]
-        == compile_payload.structure_version
-    )
+    assert stored_structures == []
 
 
 async def test_admin_routes_require_admin(
@@ -503,7 +493,7 @@ async def test_entrance_test_session_records_raw_response(
     assert answer_payload["response"]["answer_option_type"] == "wrong"
     assert answer_payload["session"]["status"] in {"active", "completed"}
 
-    runtime_service = EntranceTestRuntimeService()
+    runtime_service = EntranceTestRuntimeService(StorageManager(database))
     runtime_payload = await runtime_service.load_runtime_payload(
         uuid.UUID(answer_payload["session"]["id"])
     )

@@ -1,23 +1,19 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Literal
+from typing import Literal
 
 from fastapi import APIRouter, Depends, File, Form, Request, Response, UploadFile
 
-from src.db.enums import UserRole
 from src.fast_api.dependencies import build_storage_file_url, require_role
 from src.models.pydantic import AuthContext
 from src.models.pydantic.storage import UploadedImageResponse
 from src.models.pydantic.user import UserResponse
 from src.storage.storage_manager import StorageManager
-
-if TYPE_CHECKING:
-    from src.db.database import DataBase
+from src.storage.db.enums import UserRole
 
 
-def get_storage_router(db: "DataBase") -> APIRouter:
+def get_storage_router(storage_manager: StorageManager) -> APIRouter:
     router = APIRouter(tags=["storage"])
-    storage_manager = StorageManager(db)
 
 
     @router.post(

@@ -1,4 +1,4 @@
-from src.db.enums import DifficultyLevel
+from src.storage.db.enums import DifficultyLevel
 from src.models.pydantic.common import AmlsSchema
 
 

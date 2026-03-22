@@ -1,29 +1,25 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
-
 from fastapi import APIRouter, Depends
 
-from src.db.enums import UserRole
 from src.fast_api.dependencies import require_role
 from src.models.pydantic import (
     AuthContext,
     EntranceTestAnswerRequest,
     EntranceTestAnswerResponse,
-    EntranceTestStructureCompileResponse,
     EntranceTestCurrentProblemResponse,
     EntranceTestResultResponse,
     EntranceTestSessionResponse,
+    EntranceTestStructureCompileResponse,
 )
 from src.services.entrance_test import EntranceTestService
+from src.storage.storage_manager import StorageManager
+from src.storage.db.enums import UserRole
 
-if TYPE_CHECKING:
-    from src.db.database import DataBase
 
-
-def get_entrance_test_router(db: "DataBase") -> APIRouter:
+def get_entrance_test_router(storage_manager: StorageManager) -> APIRouter:
     router = APIRouter(tags=["entrance-test"])
-    entrance_test_service = EntranceTestService(db)
+    entrance_test_service = EntranceTestService(storage_manager)
 
 
     @router.post(

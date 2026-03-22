@@ -9,17 +9,11 @@ from src.models.pydantic import RecordedResponseState, ResponseCreate
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
 
-    from src.db.database import DataBase
-
 
 class ResponseRecorderService:
-    def __init__(self, db: "DataBase") -> None:
-        self.db = db
-
-
     async def record_response(
         self,
-        session: "AsyncSession",
+        session: AsyncSession,
         user_id: uuid.UUID,
         data: ResponseCreate,
     ) -> RecordedResponseState:

@@ -9,7 +9,7 @@ from loguru import logger
 from sqlalchemy import Select, select
 
 from src.config import get_app_config
-from src.db.enums import EntranceTestStatus, ProblemAnswerOptionType, UserRole
+from src.storage.db.enums import EntranceTestStatus, ProblemAnswerOptionType, UserRole
 from src.math_models.entrance_assessment import (
     Outcome,
     apply_answer_step,
@@ -52,25 +52,25 @@ from src.services.entrance_test.structure_service import (
 from src.services.problem.loader import load_problem_or_404
 from src.services.problem.mapper import build_problem_response
 from src.services.response import ResponseRecorderService
+from src.storage.storage_manager import StorageManager
 from src.transaction_manager.transaction_manager import execute_atomic_step, transactional
 
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
 
-    from src.db.database import DataBase
     from src.math_models.entrance_assessment.types import RuntimeSnapshot
     from src.models.pydantic import EntranceTestStructureState
 
 
 class EntranceTestService:
-    def __init__(self, db: "DataBase") -> None:
-        self.db = db
+    def __init__(self, storage_manager: StorageManager) -> None:
+        self.storage_manager = storage_manager
         self.structure_service = EntranceTestStructureService()
-        self.runtime_service = EntranceTestRuntimeService()
+        self.runtime_service = EntranceTestRuntimeService(storage_manager)
         self.evaluator_service = EntranceTestEvaluatorService()
         self.problem_picker_service = EntranceTestProblemPickerService()
         self.result_projection_service = EntranceTestResultProjectionService()
-        self.response_recorder_service = ResponseRecorderService(db)
+        self.response_recorder_service = ResponseRecorderService()
 
 
     async def create_pending_session_in_session(
@@ -98,13 +98,13 @@ class EntranceTestService:
 
 
     async def get_session(self, user_id: uuid.UUID) -> EntranceTestSessionResponse:
-        async with self.db.session_ctx() as session:
+        async with self.storage_manager.session_ctx() as session:
             entrance_test_session = await self._load_session(session, user_id)
             return build_entrance_test_session_response(entrance_test_session)
 
 
     async def get_result(self, user_id: uuid.UUID) -> EntranceTestResultResponse:
-        async with self.db.session_ctx() as session:
+        async with self.storage_manager.session_ctx() as session:
             entrance_test_session = await self._load_session(session, user_id)
             if entrance_test_session.status != EntranceTestStatus.COMPLETED:
                 raise HTTPException(
@@ -125,7 +125,7 @@ class EntranceTestService:
 
 
     async def compile_current_structure(self) -> EntranceTestStructureCompileResponse:
-        async with self.db.session_ctx() as session:
+        async with self.storage_manager.session_ctx() as session:
             try:
                 return await self.structure_service.compile_current_structure(session)
             except ValueError as error:
@@ -137,7 +137,7 @@ class EntranceTestService:
 
 
     async def start_session(self, user_id: uuid.UUID) -> EntranceTestCurrentProblemResponse:
-        async with self.db.session_ctx() as session:
+        async with self.storage_manager.session_ctx() as session:
             entrance_test_session = await self._load_session(session, user_id, lock=True)
             if entrance_test_session.status == EntranceTestStatus.SKIPPED:
                 raise HTTPException(
@@ -208,7 +208,7 @@ class EntranceTestService:
 
 
     async def get_current_problem(self, user_id: uuid.UUID) -> EntranceTestCurrentProblemResponse:
-        async with self.db.session_ctx() as session:
+        async with self.storage_manager.session_ctx() as session:
             entrance_test_session = await self._load_session(session, user_id)
             session_response = build_entrance_test_session_response(entrance_test_session)
             current_problem = await self._load_optional_current_problem(
@@ -246,7 +246,7 @@ class EntranceTestService:
 
 
     async def skip_session(self, user_id: uuid.UUID) -> EntranceTestSessionResponse:
-        async with self.db.session_ctx() as session:
+        async with self.storage_manager.session_ctx() as session:
             entrance_test_session = await self._load_session(session, user_id, lock=True)
             if entrance_test_session.status == EntranceTestStatus.COMPLETED:
                 raise HTTPException(
@@ -270,7 +270,7 @@ class EntranceTestService:
 
 
     async def complete_session(self, user_id: uuid.UUID) -> EntranceTestSessionResponse:
-        async with self.db.session_ctx() as session:
+        async with self.storage_manager.session_ctx() as session:
             entrance_test_session = await self._load_session(session, user_id, lock=True)
             if entrance_test_session.status == EntranceTestStatus.SKIPPED:
                 raise HTTPException(
@@ -302,7 +302,7 @@ class EntranceTestService:
         user_id: uuid.UUID,
         data: EntranceTestAnswerRequest,
     ) -> StoredEntranceTestAnswerState:
-        async with self.db.session_ctx() as session:
+        async with self.storage_manager.session_ctx() as session:
             entrance_test_session = await self._load_session(session, user_id, lock=True)
             if entrance_test_session.status != EntranceTestStatus.ACTIVE:
                 raise HTTPException(
@@ -492,7 +492,7 @@ class EntranceTestService:
         self,
         stored_state: StoredEntranceTestAnswerState,
     ) -> None:
-        async with self.db.session_ctx() as session:
+        async with self.storage_manager.session_ctx() as session:
             response_event = await session.get(
                 ResponseEvent,
                 stored_state.response_state.response_id,
@@ -582,7 +582,7 @@ class EntranceTestService:
         session: "AsyncSession",
     ) -> "EntranceTestStructureState":
         try:
-            return await self.structure_service.load_latest_compiled_structure(session)
+            return await self.structure_service.ensure_latest_compiled_structure(session)
         except (
             ValueError,
             EntranceTestStructureNotCompiledError,

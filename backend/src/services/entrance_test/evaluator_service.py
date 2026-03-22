@@ -7,7 +7,7 @@ from fastapi import HTTPException, status
 from loguru import logger
 
 from src.config import get_app_config
-from src.db.enums import ProblemAnswerOptionType
+from src.storage.db.enums import ProblemAnswerOptionType
 from src.math_models.entrance_assessment import Outcome
 from src.models.pydantic import EntranceTestEvaluationState
 from src.services.problem.loader import load_problem_or_404

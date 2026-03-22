@@ -8,9 +8,9 @@ from loguru import logger
 from sqlalchemy import delete, func, select
 
 from src.config import bootstrap_config
-from src.db.database import DataBase
-from src.db.enums import DifficultyLevel, EntranceTestStatus, ProblemAnswerOptionType
-from src.db.reference_dataset import PROBLEM_TYPE_DATA
+from src.storage.db.database import DataBase
+from src.storage.db.enums import DifficultyLevel, EntranceTestStatus, ProblemAnswerOptionType
+from src.storage.db.reference_dataset import PROBLEM_TYPE_DATA
 from src.models.alchemy import (
     EntranceTestSession,
     Problem,
