@@ -74,6 +74,15 @@ class RuntimeSnapshot(EntranceAssessmentSchema):
     leader_problem_type_indices: tuple[int, ...]
 
 
+    @property
+    def normalized_entropy(self) -> float:
+        if self.initial_entropy <= 0.0:
+            return 0.0
+
+        normalized_entropy = self.current_entropy / self.initial_entropy
+        return max(0.0, min(1.0, normalized_entropy))
+
+
 class SelectionResult(EntranceAssessmentSchema):
     problem_type_index: int | None
     problem_type_id: ProblemTypeId | None

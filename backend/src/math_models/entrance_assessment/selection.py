@@ -21,7 +21,6 @@ def select_next_problem_type(
         dtype=np.float64,
     )
     asked_indices = set(runtime.asked_problem_type_indices)
-
     candidate_indices = [
         node_index
         for node_index in range(node_count)
@@ -34,7 +33,9 @@ def select_next_problem_type(
 
     for node_index in candidate_indices:
         marginal_probability = float(marginal_probabilities[node_index])
-        utilities[node_index] = 4.0 * marginal_probability * (1.0 - marginal_probability)
+        utilities[node_index] = 4.0 * marginal_probability * (
+            1.0 - marginal_probability
+        )
 
     if not candidate_indices:
         return SelectionResult(
@@ -45,16 +46,19 @@ def select_next_problem_type(
             max_utility=0.0,
         )
 
-    best_index = max(
+    best_index = min(
         candidate_indices,
-        key=lambda node_index: float(utilities[node_index]),
+        key=lambda node_index: (
+            -float(utilities[node_index]),
+            abs(float(marginal_probabilities[node_index]) - 0.5),
+            str(graph_artifact.node_ids[node_index]),
+        ),
     )
-    best_utility = float(utilities[best_index])
 
     return SelectionResult(
         problem_type_index=best_index,
         problem_type_id=graph_artifact.node_ids[best_index],
         marginal_probabilities=marginal_probabilities,
         utilities=utilities,
-        max_utility=best_utility,
+        max_utility=float(utilities[best_index]),
     )

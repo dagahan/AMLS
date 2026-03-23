@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 from collections import deque
-from math import inf
+from time import perf_counter
 import uuid
 
+from loguru import logger
 import numpy as np
 
 from src.math_models.entrance_assessment.types import GraphArtifact, IntVector
@@ -14,66 +15,72 @@ def build_graph_artifact(
     prerequisite_edges: tuple[tuple[uuid.UUID, uuid.UUID], ...],
     branch_penalty_exponent: float,
 ) -> GraphArtifact:
+    started_at = perf_counter()
     node_ids = tuple(problem_type_ids)
-    index_by_id = {problem_type_id: index for index, problem_type_id in enumerate(node_ids)}
+    index_by_id = {
+        problem_type_id: index
+        for index, problem_type_id in enumerate(node_ids)
+    }
     node_count = len(node_ids)
-
-    prerequisites: list[set[int]] = [set() for _ in range(node_count)]
-    dependents: list[set[int]] = [set() for _ in range(node_count)]
+    prerequisites_lists: list[list[int]] = [[] for _ in range(node_count)]
+    dependents_lists: list[list[int]] = [[] for _ in range(node_count)]
 
     for problem_type_id, prerequisite_problem_type_id in prerequisite_edges:
         child_index = index_by_id[problem_type_id]
         parent_index = index_by_id[prerequisite_problem_type_id]
-        prerequisites[child_index].add(parent_index)
-        dependents[parent_index].add(child_index)
+        prerequisites_lists[child_index].append(parent_index)
+        dependents_lists[parent_index].append(child_index)
 
-    topological_order = _build_topological_order(node_count, prerequisites, dependents)
-    ancestors_by_index = _build_ancestors_by_index(prerequisites, topological_order)
-    descendants_by_index = _build_descendants_by_index(dependents, topological_order)
-    ancestor_distances_to_index = tuple(
-        _build_reverse_distances(start_index=index, prerequisites=prerequisites)
-        for index in range(node_count)
+    prerequisites_by_index = tuple(
+        tuple(sorted(indices))
+        for indices in prerequisites_lists
     )
-    descendant_distances_from_index = tuple(
-        _build_forward_distances(start_index=index, dependents=dependents)
-        for index in range(node_count)
+    dependents_by_index = tuple(
+        tuple(sorted(indices))
+        for indices in dependents_lists
     )
     indegree_by_index = np.asarray(
-        [len(prerequisite_indices) for prerequisite_indices in prerequisites],
+        [len(indices) for indices in prerequisites_by_index],
         dtype=np.int64,
     )
-    descendant_branch_support_from_index = tuple(
-        _build_descendant_branch_support(
-            start_index=index,
-            dependents=dependents,
-            indegree_by_index=indegree_by_index,
-            topological_order=topological_order,
-            branch_penalty_exponent=branch_penalty_exponent,
-        )
-        for index in range(node_count)
+    topological_order = _build_topological_order(
+        prerequisites_by_index=prerequisites_by_index,
+        dependents_by_index=dependents_by_index,
+        indegree_by_index=indegree_by_index,
+        node_ids=node_ids,
+    )
+    ancestors_by_index, ancestor_distances_to_index = _build_ancestor_maps(
+        prerequisites_by_index=prerequisites_by_index,
+        topological_order=topological_order,
+    )
+    descendants_by_index, descendant_distances_from_index = _build_descendant_maps(
+        dependents_by_index=dependents_by_index,
+        topological_order=topological_order,
+    )
+    descendant_branch_support_from_index = _build_descendant_branch_support(
+        dependents_by_index=dependents_by_index,
+        topological_order=topological_order,
+        branch_penalty_exponent=branch_penalty_exponent,
+    )
+    elapsed_ms = (perf_counter() - started_at) * 1000
+
+    logger.info(
+        "Built graph artifact: node_count={}, edge_count={}, branch_penalty_exponent={}, elapsed_ms={:.3f}",
+        node_count,
+        len(prerequisite_edges),
+        branch_penalty_exponent,
+        elapsed_ms,
     )
 
     return GraphArtifact(
         node_ids=node_ids,
         index_by_id=index_by_id,
-        prerequisites_by_index=tuple(
-            tuple(sorted(prerequisite_indices))
-            for prerequisite_indices in prerequisites
-        ),
-        dependents_by_index=tuple(
-            tuple(sorted(dependent_indices))
-            for dependent_indices in dependents
-        ),
+        prerequisites_by_index=prerequisites_by_index,
+        dependents_by_index=dependents_by_index,
         indegree_by_index=indegree_by_index,
         topological_order=topological_order,
-        ancestors_by_index=tuple(
-            tuple(sorted(ancestor_indices))
-            for ancestor_indices in ancestors_by_index
-        ),
-        descendants_by_index=tuple(
-            tuple(sorted(descendant_indices))
-            for descendant_indices in descendants_by_index
-        ),
+        ancestors_by_index=ancestors_by_index,
+        descendants_by_index=descendants_by_index,
         ancestor_distances_to_index=ancestor_distances_to_index,
         descendant_distances_from_index=descendant_distances_from_index,
         descendant_branch_support_from_index=descendant_branch_support_from_index,
@@ -81,122 +88,149 @@ def build_graph_artifact(
 
 
 def _build_topological_order(
-    node_count: int,
-    prerequisites: list[set[int]],
-    dependents: list[set[int]],
+    prerequisites_by_index: tuple[tuple[int, ...], ...],
+    dependents_by_index: tuple[tuple[int, ...], ...],
+    indegree_by_index: IntVector,
+    node_ids: tuple[uuid.UUID, ...],
 ) -> tuple[int, ...]:
-    in_degree = [len(prerequisite_indices) for prerequisite_indices in prerequisites]
-    queue = deque(sorted(index for index in range(node_count) if in_degree[index] == 0))
-    order: list[int] = []
+    queue = deque(
+        index
+        for index, indegree in enumerate(indegree_by_index)
+        if indegree == 0
+    )
+    remaining_indegree = indegree_by_index.copy()
+    topological_order: list[int] = []
 
     while queue:
         current_index = queue.popleft()
-        order.append(current_index)
+        topological_order.append(current_index)
 
-        for dependent_index in sorted(dependents[current_index]):
-            in_degree[dependent_index] -= 1
-            if in_degree[dependent_index] == 0:
+        for dependent_index in dependents_by_index[current_index]:
+            remaining_indegree[dependent_index] -= 1
+            if remaining_indegree[dependent_index] == 0:
                 queue.append(dependent_index)
 
-    if len(order) != node_count:
+    if len(topological_order) != len(node_ids):
         raise ValueError("Problem type graph must be acyclic")
 
-    return tuple(order)
+    logger.debug(
+        "Built topological order: node_count={}, first_indices={}, last_indices={}",
+        len(topological_order),
+        topological_order[:5],
+        topological_order[-5:],
+    )
+    return tuple(topological_order)
 
 
-def _build_ancestors_by_index(
-    prerequisites: list[set[int]],
+def _build_ancestor_maps(
+    prerequisites_by_index: tuple[tuple[int, ...], ...],
     topological_order: tuple[int, ...],
-) -> tuple[set[int], ...]:
-    ancestors: list[set[int]] = [set() for _ in range(len(prerequisites))]
+) -> tuple[tuple[tuple[int, ...], ...], tuple[dict[int, int], ...]]:
+    node_count = len(prerequisites_by_index)
+    ancestors_by_index: list[tuple[int, ...]] = [tuple() for _ in range(node_count)]
+    ancestor_distances_to_index: list[dict[int, int]] = [
+        {}
+        for _ in range(node_count)
+    ]
 
     for node_index in topological_order:
-        for parent_index in prerequisites[node_index]:
-            ancestors[node_index].add(parent_index)
-            ancestors[node_index].update(ancestors[parent_index])
+        ancestor_distances: dict[int, int] = {}
 
-    return tuple(ancestors)
+        for prerequisite_index in prerequisites_by_index[node_index]:
+            ancestor_distances[prerequisite_index] = 1
+
+            for ancestor_index, distance in ancestor_distances_to_index[
+                prerequisite_index
+            ].items():
+                candidate_distance = distance + 1
+                previous_distance = ancestor_distances.get(ancestor_index)
+                if previous_distance is None or candidate_distance < previous_distance:
+                    ancestor_distances[ancestor_index] = candidate_distance
+
+        ordered_ancestors = tuple(
+            sorted(
+                ancestor_distances,
+                key=lambda index: (ancestor_distances[index], index),
+            )
+        )
+        ancestors_by_index[node_index] = ordered_ancestors
+        ancestor_distances_to_index[node_index] = ancestor_distances
+
+    return tuple(ancestors_by_index), tuple(ancestor_distances_to_index)
 
 
-def _build_descendants_by_index(
-    dependents: list[set[int]],
+def _build_descendant_maps(
+    dependents_by_index: tuple[tuple[int, ...], ...],
     topological_order: tuple[int, ...],
-) -> tuple[set[int], ...]:
-    descendants: list[set[int]] = [set() for _ in range(len(dependents))]
+) -> tuple[tuple[tuple[int, ...], ...], tuple[dict[int, int], ...]]:
+    node_count = len(dependents_by_index)
+    descendants_by_index: list[tuple[int, ...]] = [tuple() for _ in range(node_count)]
+    descendant_distances_from_index: list[dict[int, int]] = [
+        {}
+        for _ in range(node_count)
+    ]
 
     for node_index in reversed(topological_order):
-        for child_index in dependents[node_index]:
-            descendants[node_index].add(child_index)
-            descendants[node_index].update(descendants[child_index])
+        descendant_distances: dict[int, int] = {}
 
-    return tuple(descendants)
+        for dependent_index in dependents_by_index[node_index]:
+            descendant_distances[dependent_index] = 1
 
+            for descendant_index, distance in descendant_distances_from_index[
+                dependent_index
+            ].items():
+                candidate_distance = distance + 1
+                previous_distance = descendant_distances.get(descendant_index)
+                if previous_distance is None or candidate_distance < previous_distance:
+                    descendant_distances[descendant_index] = candidate_distance
 
-def _build_reverse_distances(
-    start_index: int,
-    prerequisites: list[set[int]],
-) -> dict[int, int]:
-    distances: dict[int, int] = {}
-    queue = deque([(start_index, 0)])
+        ordered_descendants = tuple(
+            sorted(
+                descendant_distances,
+                key=lambda index: (descendant_distances[index], index),
+            )
+        )
+        descendants_by_index[node_index] = ordered_descendants
+        descendant_distances_from_index[node_index] = descendant_distances
 
-    while queue:
-        current_index, current_distance = queue.popleft()
-        for parent_index in prerequisites[current_index]:
-            if parent_index in distances:
-                continue
-            next_distance = current_distance + 1
-            distances[parent_index] = next_distance
-            queue.append((parent_index, next_distance))
-
-    return distances
-
-
-def _build_forward_distances(
-    start_index: int,
-    dependents: list[set[int]],
-) -> dict[int, int]:
-    distances: dict[int, int] = {}
-    queue = deque([(start_index, 0)])
-
-    while queue:
-        current_index, current_distance = queue.popleft()
-        for child_index in dependents[current_index]:
-            if child_index in distances:
-                continue
-            next_distance = current_distance + 1
-            distances[child_index] = next_distance
-            queue.append((child_index, next_distance))
-
-    return distances
+    return tuple(descendants_by_index), tuple(descendant_distances_from_index)
 
 
 def _build_descendant_branch_support(
-    start_index: int,
-    dependents: list[set[int]],
-    indegree_by_index: IntVector,
+    dependents_by_index: tuple[tuple[int, ...], ...],
     topological_order: tuple[int, ...],
     branch_penalty_exponent: float,
-) -> dict[int, float]:
-    support_by_index: dict[int, float] = {}
+) -> tuple[dict[int, float], ...]:
+    node_count = len(dependents_by_index)
+    descendant_branch_support_from_index: list[dict[int, float]] = [
+        {}
+        for _ in range(node_count)
+    ]
 
-    for node_index in topological_order:
-        if node_index == start_index:
-            base_support = 1.0
-        else:
-            base_support = support_by_index.get(node_index, 0.0)
-            if base_support <= 0.0:
-                continue
+    for node_index in reversed(topological_order):
+        branch_support_by_descendant: dict[int, float] = {}
+        child_count = max(len(dependents_by_index[node_index]), 1)
 
-        for child_index in dependents[node_index]:
-            child_in_degree = int(indegree_by_index[child_index])
-            penalty = 1.0
-            if child_in_degree > 0:
-                penalty = 1.0 / (float(child_in_degree) ** branch_penalty_exponent)
+        for dependent_index in dependents_by_index[node_index]:
+            local_branch_factor = 1.0 / (child_count ** branch_penalty_exponent)
+            branch_support_by_descendant[dependent_index] = local_branch_factor
 
-            candidate_support = base_support * penalty
-            current_support = support_by_index.get(child_index, -inf)
-            if candidate_support > current_support:
-                support_by_index[child_index] = candidate_support
+            for descendant_index, branch_support in descendant_branch_support_from_index[
+                dependent_index
+            ].items():
+                branch_support_by_descendant[descendant_index] = (
+                    local_branch_factor * branch_support
+                )
 
-    support_by_index.pop(start_index, None)
-    return support_by_index
+        descendant_branch_support_from_index[node_index] = branch_support_by_descendant
+
+    logger.debug(
+        "Built descendant branch support maps: node_count={}, avg_descendants={:.3f}",
+        node_count,
+        sum(
+            len(branch_support)
+            for branch_support in descendant_branch_support_from_index
+        )
+        / max(node_count, 1),
+    )
+    return tuple(descendant_branch_support_from_index)

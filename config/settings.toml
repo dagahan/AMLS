@@ -7,10 +7,9 @@ descendant_support_wrong = 0.90
 ancestor_decay = 0.70
 descendant_decay = 0.90
 branch_penalty_exponent = 1.0
-temperature_sharpening = 1.5
-entropy_stop = 0.90
-utility_stop = 0.18
-leader_probability_stop = 0.80
+temperature_sharpening = 4.0
+entropy_stop = 0.35
+utility_stop = 0.60
 max_questions = 25
 epsilon = 0.000000001
 

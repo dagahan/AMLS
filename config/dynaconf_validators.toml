@@ -36,7 +36,6 @@ S3_TLS_VERIFY = {must_exist=true, is_in=[0, 1]}
 'business.entrance_assessment.temperature_sharpening' = {must_exist=true, gte=0}
 'business.entrance_assessment.entropy_stop' = {must_exist=true, gte=0}
 'business.entrance_assessment.utility_stop' = {must_exist=true, gte=0}
-'business.entrance_assessment.leader_probability_stop' = {must_exist=true, gte=0, lte=1}
 'business.entrance_assessment.max_questions' = {must_exist=true, gte=1}
 'business.entrance_assessment.epsilon' = {must_exist=true, gt=0}
 'business.difficulties.elementary.name' = {must_exist=true, len_min=1}

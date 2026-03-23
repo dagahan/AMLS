@@ -10,10 +10,9 @@ def calculate_node_score_increment(
     instance_difficulty_weight: float,
     epsilon: float,
 ) -> FloatVector:
-    denominator = float(np.abs(support_profile).sum()) + epsilon
-    normalized_profile = (
-        (2.0 * float(instance_difficulty_weight))
-        * np.asarray(support_profile, dtype=np.float64)
-        / denominator
+    _ = epsilon
+    return np.asarray(
+        np.asarray(support_profile, dtype=np.float64)
+        * float(instance_difficulty_weight),
+        dtype=np.float64,
     )
-    return np.asarray(normalized_profile, dtype=np.float64)

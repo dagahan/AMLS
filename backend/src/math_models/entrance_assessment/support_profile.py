@@ -1,10 +1,14 @@
 from __future__ import annotations
 
-from math import exp
+from math import isclose
 
 import numpy as np
 
-from src.math_models.entrance_assessment.types import FloatVector, GraphArtifact, Outcome
+from src.math_models.entrance_assessment.types import (
+    FloatVector,
+    GraphArtifact,
+    Outcome,
+)
 
 
 def build_support_profile(
@@ -20,89 +24,85 @@ def build_support_profile(
     descendant_decay: float,
 ) -> FloatVector:
     node_count = len(graph_artifact.node_ids)
-    profile = np.zeros(node_count, dtype=np.float64)
+    support_profile = np.zeros(node_count, dtype=np.float64)
+
+    direct_weight: float
+    ancestor_weight: float
+    descendant_weight: float
 
     if outcome == Outcome.CORRECT:
-        _apply_correct_profile(
-            graph_artifact=graph_artifact,
-            answered_problem_type_index=answered_problem_type_index,
-            profile=profile,
-            ancestor_support_correct=ancestor_support_correct,
-            descendant_support_correct=descendant_support_correct,
-            ancestor_decay=ancestor_decay,
-            descendant_decay=descendant_decay,
-        )
-        return profile
+        direct_weight = 1.0
+        ancestor_weight = float(ancestor_support_correct)
+        descendant_weight = float(descendant_support_correct)
+    elif outcome == Outcome.INCORRECT:
+        direct_weight = -1.0
+        ancestor_weight = -float(ancestor_support_wrong)
+        descendant_weight = -float(descendant_support_wrong)
+    else:
+        scale = float(i_dont_know_scalar)
+        direct_weight = -scale
+        ancestor_weight = -float(ancestor_support_wrong) * scale
+        descendant_weight = -float(descendant_support_wrong) * scale
 
-    _apply_incorrect_profile(
-        graph_artifact=graph_artifact,
-        answered_problem_type_index=answered_problem_type_index,
-        profile=profile,
-        ancestor_support_wrong=ancestor_support_wrong,
-        descendant_support_wrong=descendant_support_wrong,
-        ancestor_decay=ancestor_decay,
-        descendant_decay=descendant_decay,
+    support_profile[answered_problem_type_index] = direct_weight
+
+    _add_normalized_support(
+        support_profile=support_profile,
+        target_indices=graph_artifact.ancestors_by_index[answered_problem_type_index],
+        distances=graph_artifact.ancestor_distances_to_index[
+            answered_problem_type_index
+        ],
+        branch_support={},
+        coefficient=ancestor_weight,
+        decay=float(ancestor_decay),
+        epsilon=1e-12,
+    )
+    _add_normalized_support(
+        support_profile=support_profile,
+        target_indices=graph_artifact.descendants_by_index[
+            answered_problem_type_index
+        ],
+        distances=graph_artifact.descendant_distances_from_index[
+            answered_problem_type_index
+        ],
+        branch_support=graph_artifact.descendant_branch_support_from_index[
+            answered_problem_type_index
+        ],
+        coefficient=descendant_weight,
+        decay=float(descendant_decay),
+        epsilon=1e-12,
     )
 
-    if outcome == Outcome.I_DONT_KNOW:
-        profile *= i_dont_know_scalar
-
-    return profile
+    return support_profile
 
 
-def _apply_correct_profile(
-    graph_artifact: GraphArtifact,
-    answered_problem_type_index: int,
-    profile: FloatVector,
-    ancestor_support_correct: float,
-    descendant_support_correct: float,
-    ancestor_decay: float,
-    descendant_decay: float,
+def _add_normalized_support(
+    support_profile: FloatVector,
+    target_indices: tuple[int, ...],
+    distances: dict[int, int],
+    branch_support: dict[int, float],
+    coefficient: float,
+    decay: float,
+    epsilon: float,
 ) -> None:
-    profile[answered_problem_type_index] = 1.0
+    if not target_indices or isclose(coefficient, 0.0, abs_tol=epsilon):
+        return
 
-    for ancestor_index, distance in graph_artifact.ancestor_distances_to_index[
-        answered_problem_type_index
-    ].items():
-        profile[ancestor_index] = ancestor_support_correct * exp(
-            -ancestor_decay * float(distance)
-        )
+    raw_values: list[float] = []
+    total_raw_value = 0.0
 
-    for descendant_index, distance in graph_artifact.descendant_distances_from_index[
-        answered_problem_type_index
-    ].items():
-        branch_support = graph_artifact.descendant_branch_support_from_index[
-            answered_problem_type_index
-        ].get(descendant_index, 0.0)
-        profile[descendant_index] = descendant_support_correct * exp(
-            -descendant_decay * float(distance)
-        ) * branch_support
+    for target_index in target_indices:
+        distance = max(distances[target_index], 1)
+        distance_weight = decay ** (distance - 1)
+        branch_weight = branch_support.get(target_index, 1.0)
+        raw_value = distance_weight * branch_weight
+        raw_values.append(raw_value)
+        total_raw_value += raw_value
 
+    if total_raw_value <= epsilon:
+        return
 
-def _apply_incorrect_profile(
-    graph_artifact: GraphArtifact,
-    answered_problem_type_index: int,
-    profile: FloatVector,
-    ancestor_support_wrong: float,
-    descendant_support_wrong: float,
-    ancestor_decay: float,
-    descendant_decay: float,
-) -> None:
-    profile[answered_problem_type_index] = -1.0
+    normalized_scale = coefficient / total_raw_value
 
-    for ancestor_index, distance in graph_artifact.ancestor_distances_to_index[
-        answered_problem_type_index
-    ].items():
-        profile[ancestor_index] = -(ancestor_support_wrong * exp(-ancestor_decay * float(distance)))
-
-    for descendant_index, distance in graph_artifact.descendant_distances_from_index[
-        answered_problem_type_index
-    ].items():
-        branch_support = graph_artifact.descendant_branch_support_from_index[
-            answered_problem_type_index
-        ].get(descendant_index, 0.0)
-        profile[descendant_index] = -(
-            descendant_support_wrong
-            * exp(-descendant_decay * float(distance))
-            * branch_support
-        )
+    for target_index, raw_value in zip(target_indices, raw_values, strict=True):
+        support_profile[target_index] += raw_value * normalized_scale

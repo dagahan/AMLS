@@ -8,10 +8,6 @@ import numpy as np
 from src.math_models.entrance_assessment.evidence_update import (
     apply_node_score_increment,
 )
-from src.math_models.entrance_assessment.fringes import (
-    compute_inner_fringe_indices,
-    compute_outer_fringe_indices,
-)
 from src.math_models.entrance_assessment.probability import solve_forest_posterior
 from src.math_models.entrance_assessment.selection import select_next_problem_type
 from src.math_models.entrance_assessment.state_scoring import (
@@ -27,6 +23,8 @@ from src.math_models.entrance_assessment.types import (
     RuntimeSnapshot,
     StepResult,
 )
+
+DEFAULT_MASTERED_PROBABILITY = 0.85
 
 
 def initialize_runtime(
@@ -180,14 +178,39 @@ def build_final_result(
     graph_artifact: GraphArtifact,
     runtime: RuntimeSnapshot,
 ) -> FinalAssessmentResult:
-    learned_indices = tuple(sorted(runtime.leader_problem_type_indices))
-    inner_fringe_indices = compute_inner_fringe_indices(
-        graph_artifact=graph_artifact,
-        learned_problem_type_indices=learned_indices,
+    learned_indices = tuple(
+        index
+        for index, marginal_probability in enumerate(runtime.marginal_probabilities)
+        if float(marginal_probability) >= DEFAULT_MASTERED_PROBABILITY
     )
-    outer_fringe_indices = compute_outer_fringe_indices(
-        graph_artifact=graph_artifact,
-        learned_problem_type_indices=learned_indices,
+    learned_index_set = set(learned_indices)
+    outer_fringe_indices = tuple(
+        node_index
+        for node_index in range(len(graph_artifact.node_ids))
+        if node_index not in learned_index_set
+        and all(
+            prerequisite_index in learned_index_set
+            for prerequisite_index in graph_artifact.prerequisites_by_index[node_index]
+        )
+    )
+    outer_fringe_index_set = set(outer_fringe_indices)
+    inner_fringe_indices = tuple(
+        node_index
+        for node_index in learned_indices
+        if any(
+            dependent_index in outer_fringe_index_set
+            for dependent_index in graph_artifact.dependents_by_index[node_index]
+        )
+    )
+
+    logger.info(
+        "Built entrance assessment final result: leader_state_index={}, leader_state_probability={}, learned_count={}, inner_fringe_count={}, outer_fringe_count={}, normalized_entropy={}",
+        runtime.leader_state_index,
+        runtime.leader_state_probability,
+        len(learned_indices),
+        len(inner_fringe_indices),
+        len(outer_fringe_indices),
+        runtime.normalized_entropy,
     )
 
     return FinalAssessmentResult(
