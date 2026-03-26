@@ -9,6 +9,7 @@ dependencies = [
     "bcrypt==5.0.0",
     "botocore==1.35.36",
     "colorama==0.4.6",
+    "dynaconf==3.2.12",
     "email-validator==2.2.0",
     "fastapi==0.116.0",
     "greenlet==3.3.2",
@@ -72,6 +73,8 @@ plugins = [
 [[tool.mypy.overrides]]
 module = [
     "colorama",
+    "dynaconf",
+    "dynaconf.validator",
     "jose",
     "jose.exceptions",
     "loguru",

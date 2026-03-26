@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import uuid
-from typing import TYPE_CHECKING
 
 from fastapi import HTTPException, status
 
@@ -20,17 +19,15 @@ from src.services.problem.loader import (
     load_problem_or_404,
 )
 from src.services.problem.problem_query_service import ProblemQueryService
+from src.storage.storage_manager import StorageManager
 from src.transaction_manager.transaction_manager import execute_atomic_step, transactional
-
-if TYPE_CHECKING:
-    from src.db.database import DataBase
 
 
 class AdminProblemService:
-    def __init__(self, db: "DataBase") -> None:
-        self.db = db
+    def __init__(self, storage_manager: StorageManager) -> None:
+        self.storage_manager = storage_manager
         self.mathjax_validator = MathJaxValidator()
-        self.problem_query_service = ProblemQueryService(db)
+        self.problem_query_service = ProblemQueryService(storage_manager)
 
 
     @transactional
@@ -71,14 +68,14 @@ class AdminProblemService:
             answer_options=data.answer_options,
         )
 
-        async with self.db.session_ctx() as session:
+        async with self.storage_manager.session_ctx() as session:
             await ensure_subtopic_exists(session, data.subtopic_id)
-            await ensure_difficulty_exists(session, data.difficulty_id)
+            ensure_difficulty_exists(data.difficulty)
             await ensure_problem_type_exists(session, data.problem_type_id)
 
             problem = Problem(
                 subtopic_id=data.subtopic_id,
-                difficulty_id=data.difficulty_id,
+                difficulty=data.difficulty,
                 problem_type_id=data.problem_type_id,
                 condition=data.condition,
                 solution=data.solution,
@@ -98,16 +95,16 @@ class AdminProblemService:
             answer_options=data.answer_options,
         )
 
-        async with self.db.session_ctx() as session:
+        async with self.storage_manager.session_ctx() as session:
             problem = await load_problem_or_404(session, problem_id)
 
             if data.subtopic_id is not None:
                 await ensure_subtopic_exists(session, data.subtopic_id)
                 problem.subtopic_id = data.subtopic_id
 
-            if data.difficulty_id is not None:
-                await ensure_difficulty_exists(session, data.difficulty_id)
-                problem.difficulty_id = data.difficulty_id
+            if data.difficulty is not None:
+                ensure_difficulty_exists(data.difficulty)
+                problem.difficulty = data.difficulty
 
             if data.problem_type_id is not None:
                 await ensure_problem_type_exists(session, data.problem_type_id)
@@ -121,19 +118,19 @@ class AdminProblemService:
 
 
     async def _delete_problem_record(self, problem_id: uuid.UUID) -> None:
-        async with self.db.session_ctx() as session:
+        async with self.storage_manager.session_ctx() as session:
             problem = await load_problem_or_404(session, problem_id)
             await session.delete(problem)
 
 
     async def _get_problem_snapshot(self, problem_id: uuid.UUID) -> ProblemSnapshot:
-        async with self.db.session_ctx() as session:
+        async with self.storage_manager.session_ctx() as session:
             problem = await load_problem_or_404(session, problem_id)
 
         return ProblemSnapshot(
             id=problem.id,
             subtopic_id=problem.subtopic_id,
-            difficulty_id=problem.difficulty_id,
+            difficulty=problem.difficulty,
             problem_type_id=problem.problem_type_id,
             condition=problem.condition,
             solution=problem.solution,
@@ -147,13 +144,13 @@ class AdminProblemService:
 
 
     async def _restore_problem_snapshot(self, snapshot: ProblemSnapshot) -> None:
-        async with self.db.session_ctx() as session:
+        async with self.storage_manager.session_ctx() as session:
             problem = await session.get(Problem, snapshot.id)
             if problem is None:
                 problem = Problem(
                     id=snapshot.id,
                     subtopic_id=snapshot.subtopic_id,
-                    difficulty_id=snapshot.difficulty_id,
+                    difficulty=snapshot.difficulty,
                     problem_type_id=snapshot.problem_type_id,
                     condition=snapshot.condition,
                     solution=snapshot.solution,
@@ -163,7 +160,7 @@ class AdminProblemService:
                 session.add(problem)
             else:
                 problem.subtopic_id = snapshot.subtopic_id
-                problem.difficulty_id = snapshot.difficulty_id
+                problem.difficulty = snapshot.difficulty
                 problem.problem_type_id = snapshot.problem_type_id
                 problem.condition = snapshot.condition
                 problem.solution = snapshot.solution

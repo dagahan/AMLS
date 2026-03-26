@@ -1,28 +1,19 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
-
 from fastapi import APIRouter
 
 from src.models.pydantic import HealthResponse
-from src.valkey.valkey_client import get_valkey_client
-
-if TYPE_CHECKING:
-    from src.db.database import DataBase
+from src.storage.storage_manager import StorageManager
 
 
-def get_health_router(db: "DataBase") -> APIRouter:
+def get_health_router(storage_manager: StorageManager) -> APIRouter:
     router = APIRouter(prefix="/health", tags=["health"])
-    valkey_client = get_valkey_client()
 
 
     @router.get("", response_model=HealthResponse)
     async def health_check() -> HealthResponse:
-        database_status = "healthy" if await db.test_connection() else "unhealthy"
-        try:
-            valkey_status = "healthy" if valkey_client.ping() else "unhealthy"
-        except Exception:
-            valkey_status = "unhealthy"
+        database_status = "healthy" if await storage_manager.check_database() else "unhealthy"
+        valkey_status = "healthy" if storage_manager.check_valkey() else "unhealthy"
 
         overall_status = "healthy" if database_status == "healthy" and valkey_status == "healthy" else "unhealthy"
         return HealthResponse(

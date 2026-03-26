@@ -27,7 +27,7 @@ class EntranceTestProblemPickerService:
         result = await session.execute(
             build_problem_statement()
             .where(Problem.problem_type_id == problem_type_id)
-            .order_by(Problem.created_at, Problem.id)
+            .order_by(Problem.condition, Problem.id)
         )
         problems = result.scalars().all()
         if not problems:

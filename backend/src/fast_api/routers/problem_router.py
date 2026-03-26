@@ -1,11 +1,9 @@
 from __future__ import annotations
 
 import uuid
-from typing import TYPE_CHECKING
 
 from fastapi import APIRouter, Depends, Query
 
-from src.db.enums import UserRole
 from src.fast_api.dependencies import parse_optional_uuid, require_role
 from src.models.pydantic import (
     AdminProblemResponse,
@@ -17,22 +15,21 @@ from src.models.pydantic import (
 )
 from src.services.problem.admin_problem_service import AdminProblemService
 from src.services.problem.problem_query_service import ProblemQueryService
+from src.storage.storage_manager import StorageManager
+from src.storage.db.enums import DifficultyLevel, UserRole
 
-if TYPE_CHECKING:
-    from src.db.database import DataBase
 
-
-def get_problem_router(db: "DataBase") -> APIRouter:
+def get_problem_router(storage_manager: StorageManager) -> APIRouter:
     router = APIRouter()
-    admin_problem_service = AdminProblemService(db)
-    problem_query_service = ProblemQueryService(db)
+    admin_problem_service = AdminProblemService(storage_manager)
+    problem_query_service = ProblemQueryService(storage_manager)
 
 
     @router.get("/problems", response_model=list[ProblemResponse], status_code=200)
     async def list_problems(
         topic_id: str | None = Query(default=None),
         subtopic_id: str | None = Query(default=None),
-        difficulty_id: str | None = Query(default=None),
+        difficulty: DifficultyLevel | None = Query(default=None),
         problem_type_id: str | None = Query(default=None),
         limit: int = Query(default=20, ge=1, le=100),
         offset: int = Query(default=0, ge=0),
@@ -41,7 +38,7 @@ def get_problem_router(db: "DataBase") -> APIRouter:
         return await problem_query_service.list_problems(
             topic_id=parse_optional_uuid(topic_id, "topic_id"),
             subtopic_id=parse_optional_uuid(subtopic_id, "subtopic_id"),
-            difficulty_id=parse_optional_uuid(difficulty_id, "difficulty_id"),
+            difficulty=difficulty,
             problem_type_id=parse_optional_uuid(problem_type_id, "problem_type_id"),
             limit=limit,
             offset=offset,
@@ -68,7 +65,7 @@ def get_problem_router(db: "DataBase") -> APIRouter:
     async def list_admin_problems(
         topic_id: str | None = Query(default=None),
         subtopic_id: str | None = Query(default=None),
-        difficulty_id: str | None = Query(default=None),
+        difficulty: DifficultyLevel | None = Query(default=None),
         problem_type_id: str | None = Query(default=None),
         limit: int = Query(default=20, ge=1, le=100),
         offset: int = Query(default=0, ge=0),
@@ -77,7 +74,7 @@ def get_problem_router(db: "DataBase") -> APIRouter:
         return await problem_query_service.list_admin_problems(
             topic_id=parse_optional_uuid(topic_id, "topic_id"),
             subtopic_id=parse_optional_uuid(subtopic_id, "subtopic_id"),
-            difficulty_id=parse_optional_uuid(difficulty_id, "difficulty_id"),
+            difficulty=difficulty,
             problem_type_id=parse_optional_uuid(problem_type_id, "problem_type_id"),
             limit=limit,
             offset=offset,

@@ -15,33 +15,32 @@ from src.models.pydantic import (
     TopicResponse,
     TopicUpdate,
 )
+from src.storage.storage_manager import StorageManager
 
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
 
-    from src.db.database import DataBase
-
 
 class TopicService:
-    def __init__(self, db: "DataBase") -> None:
-        self.db = db
+    def __init__(self, storage_manager: StorageManager) -> None:
+        self.storage_manager = storage_manager
 
 
     async def list_topics(self) -> list[TopicResponse]:
-        async with self.db.session_ctx() as session:
+        async with self.storage_manager.session_ctx() as session:
             result = await session.execute(select(Topic).order_by(Topic.name))
             topics = result.scalars().all()
         return [TopicResponse.model_validate(item) for item in topics]
 
 
     async def get_topic(self, topic_id: uuid.UUID) -> TopicResponse:
-        async with self.db.session_ctx() as session:
+        async with self.storage_manager.session_ctx() as session:
             topic = await self._get_topic_or_404(session, topic_id)
             return TopicResponse.model_validate(topic)
 
 
     async def list_subtopics(self, topic_id: uuid.UUID | None = None) -> list[SubtopicResponse]:
-        async with self.db.session_ctx() as session:
+        async with self.storage_manager.session_ctx() as session:
             statement = select(Subtopic).order_by(Subtopic.name)
             if topic_id is not None:
                 statement = statement.where(Subtopic.topic_id == topic_id)
@@ -51,13 +50,13 @@ class TopicService:
 
 
     async def get_subtopic(self, subtopic_id: uuid.UUID) -> SubtopicResponse:
-        async with self.db.session_ctx() as session:
+        async with self.storage_manager.session_ctx() as session:
             subtopic = await self._get_subtopic_or_404(session, subtopic_id)
             return SubtopicResponse.model_validate(subtopic)
 
 
     async def create_topic(self, data: TopicCreate) -> TopicResponse:
-        async with self.db.session_ctx() as session:
+        async with self.storage_manager.session_ctx() as session:
             await self._ensure_topic_name_is_unique(session, data.name)
             topic = Topic(name=data.name)
             session.add(topic)
@@ -67,7 +66,7 @@ class TopicService:
 
 
     async def update_topic(self, topic_id: uuid.UUID, data: TopicUpdate) -> TopicResponse:
-        async with self.db.session_ctx() as session:
+        async with self.storage_manager.session_ctx() as session:
             topic = await self._get_topic_or_404(session, topic_id)
             if data.name is not None:
                 await self._ensure_topic_name_is_unique(session, data.name, current_id=topic.id)
@@ -78,13 +77,13 @@ class TopicService:
 
 
     async def delete_topic(self, topic_id: uuid.UUID) -> None:
-        async with self.db.session_ctx() as session:
+        async with self.storage_manager.session_ctx() as session:
             topic = await self._get_topic_or_404(session, topic_id)
             await session.delete(topic)
 
 
     async def create_subtopic(self, data: SubtopicCreate) -> SubtopicResponse:
-        async with self.db.session_ctx() as session:
+        async with self.storage_manager.session_ctx() as session:
             await self._get_topic_or_404(session, data.topic_id)
             await self._ensure_subtopic_name_is_unique(session, data.topic_id, data.name)
             subtopic = Subtopic(topic_id=data.topic_id, name=data.name)
@@ -100,7 +99,7 @@ class TopicService:
         subtopic_id: uuid.UUID,
         data: SubtopicUpdate,
     ) -> SubtopicResponse:
-        async with self.db.session_ctx() as session:
+        async with self.storage_manager.session_ctx() as session:
             subtopic = await self._get_subtopic_or_404(session, subtopic_id)
             taxonomy_mapping_changed = False
 
@@ -137,12 +136,12 @@ class TopicService:
 
 
     async def delete_subtopic(self, subtopic_id: uuid.UUID) -> None:
-        async with self.db.session_ctx() as session:
+        async with self.storage_manager.session_ctx() as session:
             subtopic = await self._get_subtopic_or_404(session, subtopic_id)
             await session.delete(subtopic)
 
 
-    async def _get_topic_or_404(self, session: "AsyncSession", topic_id: uuid.UUID) -> Topic:
+    async def _get_topic_or_404(self, session: AsyncSession, topic_id: uuid.UUID) -> Topic:
         result = await session.execute(select(Topic).where(Topic.id == topic_id))
         topic = result.scalar_one_or_none()
         if topic is None:
@@ -150,7 +149,7 @@ class TopicService:
         return topic
 
 
-    async def _get_subtopic_or_404(self, session: "AsyncSession", subtopic_id: uuid.UUID) -> Subtopic:
+    async def _get_subtopic_or_404(self, session: AsyncSession, subtopic_id: uuid.UUID) -> Subtopic:
         result = await session.execute(select(Subtopic).where(Subtopic.id == subtopic_id))
         subtopic = result.scalar_one_or_none()
         if subtopic is None:
@@ -160,7 +159,7 @@ class TopicService:
 
     async def _ensure_topic_name_is_unique(
         self,
-        session: "AsyncSession",
+        session: AsyncSession,
         name: str,
         current_id: uuid.UUID | None = None,
     ) -> None:
@@ -172,7 +171,7 @@ class TopicService:
 
     async def _ensure_subtopic_name_is_unique(
         self,
-        session: "AsyncSession",
+        session: AsyncSession,
         topic_id: uuid.UUID,
         name: str,
         current_id: uuid.UUID | None = None,

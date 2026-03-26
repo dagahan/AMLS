@@ -5,10 +5,10 @@ from datetime import datetime
 from typing import TYPE_CHECKING
 
 from sqlalchemy import DateTime, Enum, Float, ForeignKey, Integer
-from sqlalchemy.dialects.postgresql import ARRAY, UUID
+from sqlalchemy.dialects.postgresql import ARRAY, JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from src.db.enums import EntranceTestStatus
+from src.storage.db.enums import EntranceTestStatus
 from src.models.alchemy.common import Base, IdMixin, TimestampMixin
 
 if TYPE_CHECKING:
@@ -59,6 +59,10 @@ class EntranceTestSession(Base, IdMixin, TimestampMixin):
         ARRAY(UUID(as_uuid=True)),
         default=list,
         nullable=False,
+    )
+    business_config_snapshot: Mapped[dict[str, object] | None] = mapped_column(
+        JSONB,
+        nullable=True,
     )
     started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

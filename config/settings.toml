@@ -1,0 +1,38 @@
+[entrance_assessment]
+i_dont_know_scalar = 1.15
+temperature_sharpening = 2.0
+projected_learned_mastery_probability = 0.85
+projected_unlearned_mastery_probability = 0.15
+projection_confidence_stop = 0.86
+frontier_confidence_stop = 0.82
+entropy_stop = 0.30
+utility_stop = 0.45
+max_questions = 24
+
+[entrance_assessment.response_model]
+mastered_right = 0.93
+mastered_wrong = 0.05
+mastered_i_dont_know = 0.02
+unmastered_right = 0.08
+unmastered_wrong = 0.57
+unmastered_i_dont_know = 0.35
+
+[difficulties.elementary]
+name = "Elementary"
+coefficient = 0.5
+
+[difficulties.intermediate]
+name = "Intermediate"
+coefficient = 0.75
+
+[difficulties.upper_intermediate]
+name = "Upper Intermediate"
+coefficient = 1.0
+
+[difficulties.advanced]
+name = "Advanced"
+coefficient = 1.5
+
+[difficulties.proficient]
+name = "Proficient"
+coefficient = 2.0

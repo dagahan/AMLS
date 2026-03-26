@@ -4,7 +4,7 @@ import asyncio
 import json
 from pathlib import Path
 
-from src.core.utils import EnvTools
+from src.config import get_app_config
 from src.models.pydantic.problem import ProblemAnswerOptionPayload
 
 
@@ -17,8 +17,11 @@ class LatexValidationError(Exception):
 
 class MathJaxValidator:
     def __init__(self) -> None:
-        self.node_binary = EnvTools.load_env_var("NODE_BINARY") or "node"
-        self.script_path = EnvTools.resolve_project_path("backend/scripts/validate_latex.mjs")
+        app_config = get_app_config()
+        self.node_binary = str(app_config.infra.get("NODE_BINARY", "node"))
+        self.script_path = app_config.resolve_path(
+            "backend/src/latex/validate_latex.mjs"
+        )
 
 
     async def validate_problem_content(

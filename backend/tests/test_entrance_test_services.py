@@ -7,16 +7,17 @@ from typing import TYPE_CHECKING
 import pytest
 from sqlalchemy import delete, func, select
 
-from src.core.utils import EnvTools, PasswordTools
-from src.db.database import DataBase
-from src.db.enums import (
+from src.config import get_app_config
+from src.core.utils import PasswordTools
+from src.storage.db.database import DataBase
+from src.storage.db.enums import (
     EntranceTestResultNodeStatus,
     EntranceTestStatus,
     EntranceTestStructureStatus,
     ProblemAnswerOptionType,
     UserRole,
 )
-from src.db.reference_dataset import PROBLEM_TYPE_DATA
+from src.storage.db.reference_dataset import PROBLEM_TYPE_DATA
 from src.fast_api.fastapi_server import create_application
 from src.math_models.entrance_assessment import initialize_runtime
 from src.models.alchemy import (
@@ -39,6 +40,7 @@ from src.services.entrance_test import (
     EntranceTestStructureService,
 )
 from src.services.problem.loader import build_problem_statement
+from src.storage.storage_manager import StorageManager
 
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
@@ -50,9 +52,25 @@ EXPECTED_FEASIBLE_STATE_COUNT = 8_492_446_687_900_032
 
 
 def test_create_application_does_not_require_running_event_loop() -> None:
-    application = create_application(DataBase())
+    storage_manager = StorageManager()
+    application = create_application(storage_manager)
 
     assert application is not None
+    assert application.state.storage is storage_manager
+
+
+def test_storage_manager_reuses_sync_and_s3_clients() -> None:
+    storage_manager = StorageManager()
+
+    assert storage_manager.get_valkey_sync() is storage_manager.get_valkey_sync()
+    assert storage_manager.get_s3_client() is storage_manager.get_s3_client()
+
+
+@pytest.mark.asyncio
+async def test_storage_manager_reuses_async_valkey_client_in_same_loop(
+    storage_manager: StorageManager,
+) -> None:
+    assert storage_manager.get_valkey_async() is storage_manager.get_valkey_async()
 
 
 @pytest.mark.asyncio
@@ -77,7 +95,7 @@ async def test_structure_service_compiles_and_loads_big_reference_structure(
         ).scalar_one()
 
     assert compile_response.status == EntranceTestStructureStatus.READY
-    assert compile_response.artifact_kind == "exact_forest_v1"
+    assert compile_response.artifact_kind == "exact_forest_bayes_v2"
     assert compile_response.problem_type_count == len(PROBLEM_TYPE_DATA)
     assert compile_response.edge_count == EXPECTED_EDGE_COUNT
     assert compile_response.feasible_state_count == EXPECTED_FEASIBLE_STATE_COUNT
@@ -95,9 +113,9 @@ async def test_runtime_service_saves_loads_and_deletes_big_graph_runtime(
         raise RuntimeError("Database session factory is not initialized")
 
     structure_service = EntranceTestStructureService()
-    runtime_service = EntranceTestRuntimeService()
+    runtime_service = EntranceTestRuntimeService(StorageManager(database))
     temperature_sharpening = float(
-        EnvTools.required_load_env_var("ENTRANCE_ASSESSMENT_TEMPERATURE_SHARPENING")
+        get_app_config().business.require("entrance_assessment.temperature_sharpening")
     )
 
     async with database.async_session() as session:
@@ -121,7 +139,7 @@ async def test_runtime_service_saves_loads_and_deletes_big_graph_runtime(
     )
 
     assert runtime_payload is not None
-    assert runtime_payload.runtime_kind == "exact_forest_v1"
+    assert runtime_payload.runtime_kind == "exact_forest_bayes_v2"
     assert runtime_payload.structure_version == structure_state.structure_version
     assert loaded_runtime_snapshot is not None
     assert len(loaded_runtime_snapshot.node_scores) == len(PROBLEM_TYPE_DATA)
@@ -328,10 +346,9 @@ async def test_structure_service_fails_when_big_graph_is_no_longer_a_forest(
         compile_response = await structure_service.compile_current_structure(session)
 
     assert compile_response.status == EntranceTestStructureStatus.FAILED
-    assert compile_response.artifact_kind == "exact_forest_v1"
-    assert compile_response.error_message == (
-        "Entrance test structure must be a forest with at most one prerequisite per problem type"
-    )
+    assert compile_response.artifact_kind == "exact_forest_bayes_v2"
+    assert compile_response.error_message is not None
+    assert "requires a forest" in compile_response.error_message
 
 
 @pytest.mark.asyncio
@@ -415,3 +432,79 @@ async def test_result_projection_service_builds_graph_statuses_and_group_summari
     assert result_payload.edges
     assert result_payload.topic_summaries
     assert result_payload.subtopic_summaries
+
+
+@pytest.mark.asyncio
+async def test_result_projection_service_keeps_historic_completed_result_without_confidence(
+    database: DataBase,
+) -> None:
+    if database.async_session is None:
+        raise RuntimeError("Database session factory is not initialized")
+
+    projection_service = EntranceTestResultProjectionService()
+
+    async with database.async_session() as session:
+        root_problem_type = (
+            await session.execute(
+                select(ProblemType)
+                .where(
+                    ~ProblemType.id.in_(
+                        select(ProblemTypePrerequisite.problem_type_id)
+                    )
+                )
+                .order_by(ProblemType.name, ProblemType.id)
+            )
+        ).scalars().first()
+        assert root_problem_type is not None
+
+        child_problem_type_id = (
+            await session.execute(
+                select(ProblemTypePrerequisite.problem_type_id)
+                .where(
+                    ProblemTypePrerequisite.prerequisite_problem_type_id
+                    == root_problem_type.id
+                )
+                .order_by(ProblemTypePrerequisite.problem_type_id)
+            )
+        ).scalars().first()
+        assert child_problem_type_id is not None
+
+        student = User(
+            email=f"historic-projection-{uuid.uuid4().hex}@example.org",
+            first_name="Historic",
+            last_name="Projection",
+            avatar_url=None,
+            hashed_password=PasswordTools.hash_password("Student123!"),
+            role=UserRole.STUDENT,
+            is_active=True,
+        )
+        session.add(student)
+        await session.flush()
+
+        entrance_test_session = EntranceTestSession(
+            user_id=student.id,
+            status=EntranceTestStatus.COMPLETED,
+            structure_version=1,
+            current_problem_id=None,
+            final_state_index=456,
+            final_state_probability=None,
+            learned_problem_type_ids=[root_problem_type.id],
+            inner_fringe_problem_type_ids=[root_problem_type.id],
+            outer_fringe_problem_type_ids=[child_problem_type_id],
+            completed_at=datetime.now(UTC),
+        )
+        session.add(entrance_test_session)
+        await session.flush()
+
+        result_payload = await projection_service.build_result(
+            session=session,
+            entrance_test_session=entrance_test_session,
+        )
+
+    assert result_payload.final_result.state_index == 456
+    assert result_payload.final_result.state_probability is None
+    assert root_problem_type.id in {
+        node.id
+        for node in result_payload.nodes
+        if node.status == EntranceTestResultNodeStatus.LEARNED
+    }

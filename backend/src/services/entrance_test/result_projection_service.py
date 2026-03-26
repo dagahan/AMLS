@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING, TypedDict
 from loguru import logger
 from sqlalchemy import func, select
 
-from src.db.enums import EntranceTestResultNodeStatus
+from src.storage.db.enums import EntranceTestResultNodeStatus
 from src.models.alchemy import Problem, ProblemType, ProblemTypePrerequisite, Subtopic, Topic
 from src.models.pydantic import (
     EntranceTestFinalResultResponse,

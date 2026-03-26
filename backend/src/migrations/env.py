@@ -5,12 +5,12 @@ from logging.config import fileConfig
 from alembic import context
 from sqlalchemy import engine_from_config, pool
 
-from src.core.utils import EnvTools
-from src.db.database import DataBase
+from src.config import bootstrap_config
+from src.storage.db.database import DataBase
 from src.models.alchemy import Base
 import src.models.alchemy as loaded_models
 
-EnvTools.bootstrap_env()
+bootstrap_config()
 MODELS_MODULE = loaded_models
 
 config = context.config

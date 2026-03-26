@@ -1,5 +1,4 @@
 from src.models.alchemy.common import Base, IdMixin, TimestampMixin
-from src.models.alchemy.difficulty import Difficulty
 from src.models.alchemy.entrance_test import EntranceTestSession
 from src.models.alchemy.entrance_test_structure import EntranceTestStructure
 from src.models.alchemy.problem import Problem, ProblemAnswerOption
@@ -10,7 +9,6 @@ from src.models.alchemy.user import User
 
 __all__ = [
     "Base",
-    "Difficulty",
     "EntranceTestSession",
     "EntranceTestStructure",
     "IdMixin",

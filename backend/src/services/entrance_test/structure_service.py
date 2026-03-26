@@ -8,16 +8,22 @@ from loguru import logger
 import numpy as np
 from sqlalchemy import select
 
-from src.core.utils import EnvTools, StringTools
-from src.db.enums import EntranceTestStructureStatus
+from src.core.utils import StringTools
+from src.storage.db.enums import EntranceTestStructureStatus
 from src.math_models.entrance_assessment import (
     ForestStructureError,
     build_forest_artifact,
     build_graph_artifact,
 )
-from src.math_models.entrance_assessment.types import ForestArtifact, GraphArtifact
-from src.models.alchemy import EntranceTestStructure, Problem, ProblemTypePrerequisite
+from src.models.alchemy import (
+    EntranceTestStructure,
+    Problem,
+    ProblemType,
+    ProblemTypePrerequisite,
+)
 from src.models.pydantic import (
+    ForestArtifact,
+    GraphArtifact,
     EntranceTestCompiledForestPayload,
     EntranceTestCompiledGraphPayload,
     EntranceTestCompiledStructurePayload,
@@ -48,12 +54,7 @@ class EntranceTestStructureCompilationFailedError(RuntimeError):
 
 class EntranceTestStructureService:
     def __init__(self) -> None:
-        self.branch_penalty_exponent = float(
-            EnvTools.required_load_env_var(
-                "ENTRANCE_ASSESSMENT_BRANCH_PENALTY_EXPONENT"
-            )
-        )
-        self.artifact_kind = "exact_forest_v1"
+        self.artifact_kind = "exact_forest_bayes_v2"
 
 
     async def build_live_snapshot(
@@ -103,6 +104,7 @@ class EntranceTestStructureService:
         if (
             stored_structure is not None
             and stored_structure.source_hash == snapshot.source_hash
+            and stored_structure.artifact_kind == self.artifact_kind
             and stored_structure.status == EntranceTestStructureStatus.READY
             and stored_structure.compiled_payload is not None
         ):
@@ -168,6 +170,17 @@ class EntranceTestStructureService:
         )
 
 
+    async def ensure_latest_compiled_structure(
+        self,
+        session: "AsyncSession",
+    ) -> EntranceTestStructureState:
+        snapshot = await self.build_live_snapshot(session)
+        return await self.load_compiled_structure(
+            session=session,
+            structure_version=snapshot.structure_version,
+        )
+
+
     async def load_compiled_structure(
         self,
         session: "AsyncSession",
@@ -177,6 +190,11 @@ class EntranceTestStructureService:
         if stored_structure is None:
             raise EntranceTestStructureNotCompiledError(
                 f"Entrance test structure version {structure_version} is not compiled"
+            )
+
+        if stored_structure.artifact_kind != self.artifact_kind:
+            raise EntranceTestStructureNotCompiledError(
+                f"Entrance test structure version {structure_version} is not compiled for {self.artifact_kind}"
             )
 
         if (
@@ -211,9 +229,10 @@ class EntranceTestStructureService:
         session: "AsyncSession",
     ) -> tuple[uuid.UUID, ...]:
         result = await session.execute(
-            select(Problem.problem_type_id)
-            .group_by(Problem.problem_type_id)
-            .order_by(Problem.problem_type_id)
+            select(ProblemType.id)
+            .join(Problem, Problem.problem_type_id == ProblemType.id)
+            .group_by(ProblemType.id, ProblemType.name)
+            .order_by(ProblemType.name, ProblemType.id)
         )
         return tuple(result.scalars().all())
 
@@ -303,7 +322,6 @@ class EntranceTestStructureService:
         source_value = "|".join(
             [
                 self.artifact_kind,
-                str(self.branch_penalty_exponent),
                 "problem_types",
                 *[str(problem_type_id) for problem_type_id in problem_type_ids],
                 "edges",
@@ -329,7 +347,6 @@ class EntranceTestStructureService:
         graph_artifact = build_graph_artifact(
             problem_type_ids=tuple(snapshot.problem_type_ids),
             prerequisite_edges=tuple(snapshot.prerequisite_edges),
-            branch_penalty_exponent=self.branch_penalty_exponent,
         )
         try:
             forest_artifact = build_forest_artifact(graph_artifact)
@@ -388,26 +405,6 @@ class EntranceTestStructureService:
                 ],
                 indegree_by_index=graph_artifact.indegree_by_index.astype(np.int64).tolist(),
                 topological_order=list(graph_artifact.topological_order),
-                ancestors_by_index=[
-                    list(indices)
-                    for indices in graph_artifact.ancestors_by_index
-                ],
-                descendants_by_index=[
-                    list(indices)
-                    for indices in graph_artifact.descendants_by_index
-                ],
-                ancestor_distances_to_index=[
-                    dict(distances)
-                    for distances in graph_artifact.ancestor_distances_to_index
-                ],
-                descendant_distances_from_index=[
-                    dict(distances)
-                    for distances in graph_artifact.descendant_distances_from_index
-                ],
-                descendant_branch_support_from_index=[
-                    dict(branch_support)
-                    for branch_support in graph_artifact.descendant_branch_support_from_index
-                ],
             ),
             forest_artifact=EntranceTestCompiledForestPayload(
                 parent_by_index=list(forest_artifact.parent_by_index),
@@ -469,26 +466,6 @@ class EntranceTestStructureService:
                 dtype=np.int64,
             ),
             topological_order=tuple(payload.graph_artifact.topological_order),
-            ancestors_by_index=tuple(
-                tuple(indices)
-                for indices in payload.graph_artifact.ancestors_by_index
-            ),
-            descendants_by_index=tuple(
-                tuple(indices)
-                for indices in payload.graph_artifact.descendants_by_index
-            ),
-            ancestor_distances_to_index=tuple(
-                dict(distances)
-                for distances in payload.graph_artifact.ancestor_distances_to_index
-            ),
-            descendant_distances_from_index=tuple(
-                dict(distances)
-                for distances in payload.graph_artifact.descendant_distances_from_index
-            ),
-            descendant_branch_support_from_index=tuple(
-                dict(branch_support)
-                for branch_support in payload.graph_artifact.descendant_branch_support_from_index
-            ),
         )
         forest_artifact = ForestArtifact(
             parent_by_index=tuple(payload.forest_artifact.parent_by_index),

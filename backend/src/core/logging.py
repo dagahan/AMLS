@@ -1,10 +1,12 @@
 import inspect
 import logging
+import os
 import sys
+import time
 
 from loguru import logger
 
-from src.core.utils import EnvTools, FileSystemTools
+from src.core.utils import FileSystemTools
 
 
 class InterceptHandler(logging.Handler):
@@ -25,9 +27,11 @@ class InterceptHandler(logging.Handler):
 
 class LogSetup:
     @staticmethod
-    def configure() -> None:
+    def configure(time_zone_name: str = "UTC") -> None:
         FileSystemTools.ensure_directory_exists("debug")
-        EnvTools.set_env_var("TZ", EnvTools.load_env_var("TZ") or "UTC")
+        os.environ["TZ"] = time_zone_name
+        if hasattr(time, "tzset"):
+            time.tzset()
 
         logger.remove()
         logger.add(
@@ -51,4 +55,3 @@ class LogSetup:
             level="DEBUG",
             catch=True,
         )
-

@@ -6,16 +6,19 @@ from typing import Any
 
 from loguru import logger
 
-from src.core.utils import EnvTools, StringTools, TimeTools
+from src.config import get_app_config
+from src.core.utils import StringTools, TimeTools
 from src.models.pydantic import ClientContext, SessionData
-from src.valkey.valkey_client import get_valkey_client
+from src.storage.storage_manager import StorageManager
 
 
 class SessionsManager:
-    def __init__(self) -> None:
-        self.session_max_life_days = int(EnvTools.required_load_env_var("SESSIONS_MAX_LIFE_DAYS"))
-        self.session_inactive_days = int(EnvTools.required_load_env_var("SESSIONS_INACTIVE_DAYS"))
-        self.valkey = get_valkey_client()
+    def __init__(self, storage_manager: StorageManager) -> None:
+        app_config = get_app_config()
+        self.storage_manager = storage_manager
+        self.session_max_life_days = int(app_config.infra.require("SESSIONS_MAX_LIFE_DAYS"))
+        self.session_inactive_days = int(app_config.infra.require("SESSIONS_INACTIVE_DAYS"))
+        self.valkey: Any = storage_manager.get_valkey_sync()
 
 
     def _days_to_seconds(self, days: int) -> int:
