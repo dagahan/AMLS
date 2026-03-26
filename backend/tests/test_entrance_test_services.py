@@ -95,7 +95,7 @@ async def test_structure_service_compiles_and_loads_big_reference_structure(
         ).scalar_one()
 
     assert compile_response.status == EntranceTestStructureStatus.READY
-    assert compile_response.artifact_kind == "exact_forest_v1"
+    assert compile_response.artifact_kind == "exact_forest_bayes_v2"
     assert compile_response.problem_type_count == len(PROBLEM_TYPE_DATA)
     assert compile_response.edge_count == EXPECTED_EDGE_COUNT
     assert compile_response.feasible_state_count == EXPECTED_FEASIBLE_STATE_COUNT
@@ -139,7 +139,7 @@ async def test_runtime_service_saves_loads_and_deletes_big_graph_runtime(
     )
 
     assert runtime_payload is not None
-    assert runtime_payload.runtime_kind == "exact_forest_v1"
+    assert runtime_payload.runtime_kind == "exact_forest_bayes_v2"
     assert runtime_payload.structure_version == structure_state.structure_version
     assert loaded_runtime_snapshot is not None
     assert len(loaded_runtime_snapshot.node_scores) == len(PROBLEM_TYPE_DATA)
@@ -346,10 +346,9 @@ async def test_structure_service_fails_when_big_graph_is_no_longer_a_forest(
         compile_response = await structure_service.compile_current_structure(session)
 
     assert compile_response.status == EntranceTestStructureStatus.FAILED
-    assert compile_response.artifact_kind == "exact_forest_v1"
-    assert compile_response.error_message == (
-        "Entrance test structure must be a forest with at most one prerequisite per problem type"
-    )
+    assert compile_response.artifact_kind == "exact_forest_bayes_v2"
+    assert compile_response.error_message is not None
+    assert "requires a forest" in compile_response.error_message
 
 
 @pytest.mark.asyncio
@@ -433,3 +432,79 @@ async def test_result_projection_service_builds_graph_statuses_and_group_summari
     assert result_payload.edges
     assert result_payload.topic_summaries
     assert result_payload.subtopic_summaries
+
+
+@pytest.mark.asyncio
+async def test_result_projection_service_keeps_historic_completed_result_without_confidence(
+    database: DataBase,
+) -> None:
+    if database.async_session is None:
+        raise RuntimeError("Database session factory is not initialized")
+
+    projection_service = EntranceTestResultProjectionService()
+
+    async with database.async_session() as session:
+        root_problem_type = (
+            await session.execute(
+                select(ProblemType)
+                .where(
+                    ~ProblemType.id.in_(
+                        select(ProblemTypePrerequisite.problem_type_id)
+                    )
+                )
+                .order_by(ProblemType.name, ProblemType.id)
+            )
+        ).scalars().first()
+        assert root_problem_type is not None
+
+        child_problem_type_id = (
+            await session.execute(
+                select(ProblemTypePrerequisite.problem_type_id)
+                .where(
+                    ProblemTypePrerequisite.prerequisite_problem_type_id
+                    == root_problem_type.id
+                )
+                .order_by(ProblemTypePrerequisite.problem_type_id)
+            )
+        ).scalars().first()
+        assert child_problem_type_id is not None
+
+        student = User(
+            email=f"historic-projection-{uuid.uuid4().hex}@example.org",
+            first_name="Historic",
+            last_name="Projection",
+            avatar_url=None,
+            hashed_password=PasswordTools.hash_password("Student123!"),
+            role=UserRole.STUDENT,
+            is_active=True,
+        )
+        session.add(student)
+        await session.flush()
+
+        entrance_test_session = EntranceTestSession(
+            user_id=student.id,
+            status=EntranceTestStatus.COMPLETED,
+            structure_version=1,
+            current_problem_id=None,
+            final_state_index=456,
+            final_state_probability=None,
+            learned_problem_type_ids=[root_problem_type.id],
+            inner_fringe_problem_type_ids=[root_problem_type.id],
+            outer_fringe_problem_type_ids=[child_problem_type_id],
+            completed_at=datetime.now(UTC),
+        )
+        session.add(entrance_test_session)
+        await session.flush()
+
+        result_payload = await projection_service.build_result(
+            session=session,
+            entrance_test_session=entrance_test_session,
+        )
+
+    assert result_payload.final_result.state_index == 456
+    assert result_payload.final_result.state_probability is None
+    assert root_problem_type.id in {
+        node.id
+        for node in result_payload.nodes
+        if node.status == EntranceTestResultNodeStatus.LEARNED
+    }

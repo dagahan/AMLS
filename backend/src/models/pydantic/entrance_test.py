@@ -11,8 +11,8 @@ from src.storage.db.enums import (
     EntranceTestStatus,
     ProblemAnswerOptionType,
 )
-from src.math_models.entrance_assessment.types import (
-    FinalAssessmentResult,
+from src.models.pydantic.entrance_assessment import (
+    FinalResult,
     ForestArtifact,
     GraphArtifact,
     Outcome,
@@ -55,7 +55,7 @@ class EntranceTestAnswerResponse(AmlsSchema):
 
 class EntranceTestFinalResultResponse(AmlsSchema):
     state_index: int
-    state_probability: float
+    state_probability: float | None
     learned_problem_type_ids: list[UUID]
     inner_fringe_ids: list[UUID]
     outer_fringe_ids: list[UUID]
@@ -116,7 +116,7 @@ class EntranceTestRuntimePayload(AmlsSchema):
     current_entropy: float
     current_temperature: float
     asked_problem_type_indices: list[int]
-    leader_state_index: int
+    leader_state_index: int | None
     leader_state_probability: float
     leader_problem_type_indices: list[int]
     structure_version: int
@@ -137,11 +137,6 @@ class EntranceTestCompiledGraphPayload(AmlsSchema):
     dependents_by_index: list[list[int]]
     indegree_by_index: list[int]
     topological_order: list[int]
-    ancestors_by_index: list[list[int]]
-    descendants_by_index: list[list[int]]
-    ancestor_distances_to_index: list[dict[int, int]]
-    descendant_distances_from_index: list[dict[int, int]]
-    descendant_branch_support_from_index: list[dict[int, float]]
 
 
 class EntranceTestCompiledForestPayload(AmlsSchema):
@@ -218,7 +213,7 @@ def build_entrance_test_session_response(
 
 
 def build_entrance_test_final_result_response(
-    final_result: FinalAssessmentResult,
+    final_result: FinalResult,
 ) -> EntranceTestFinalResultResponse:
     return EntranceTestFinalResultResponse(
         state_index=final_result.state_index,
@@ -232,7 +227,7 @@ def build_entrance_test_final_result_response(
 def build_entrance_test_persisted_result_response(
     session: "EntranceTestSession",
 ) -> EntranceTestFinalResultResponse | None:
-    if session.final_state_index is None or session.final_state_probability is None:
+    if session.final_state_index is None:
         return None
 
     return EntranceTestFinalResultResponse(

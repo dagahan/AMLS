@@ -5,13 +5,12 @@ import uuid
 from loguru import logger
 import numpy as np
 
-from src.math_models.entrance_assessment.types import RuntimeSnapshot
-from src.models.pydantic import EntranceTestRuntimePayload
+from src.models.pydantic import EntranceTestRuntimePayload, RuntimeSnapshot
 from src.storage.storage_manager import StorageManager
 
 
 class EntranceTestRuntimeService:
-    runtime_kind = "exact_forest_v1"
+    runtime_kind = "exact_forest_bayes_v2"
 
 
     def __init__(self, storage_manager: StorageManager) -> None:

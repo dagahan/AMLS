@@ -1,28 +1,57 @@
 from __future__ import annotations
 
+from datetime import UTC, datetime
 import os
 import uuid
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
+import pytest
 from sqlalchemy import delete, select
 
+from src.config import get_app_config
+from src.math_models.entrance_assessment import (
+    Outcome,
+    ResponseModel,
+    apply_answer_step,
+    initialize_runtime,
+)
 from src.storage.db.database import DataBase
-from src.storage.db.enums import ProblemAnswerOptionType
+from src.storage.db.enums import EntranceTestStatus, ProblemAnswerOptionType
 from src.models.alchemy import (
     EntranceTestSession,
     EntranceTestStructure,
     ProblemAnswerOption,
+    ProblemTypePrerequisite,
     ResponseEvent,
 )
 from src.models.pydantic import EntranceTestStructureCompileResponse
 from src.storage.storage_manager import StorageManager
 from src.storage.s3.s3_connector import S3Client
-from src.services.entrance_test import EntranceTestRuntimeService
+from src.services.entrance_test import (
+    EntranceTestRuntimeService,
+    EntranceTestStructureService,
+)
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
+
     from httpx import AsyncClient
     from pytest import MonkeyPatch
     from sqlalchemy.ext.asyncio import AsyncSession
+
+
+MID_LEVEL_RIGHT_NAMES = {
+    "analyze digit properties of integers",
+    "count permutations and combinations",
+    "read tables, charts, and statistical data",
+    "solve irrational equations",
+    "solve rational equations",
+    "solve remainder problems",
+    "solve systems of equations",
+    "use complement probability",
+    "use medians, bisectors, and altitudes",
+    "use parity arguments",
+}
 
 
 def build_auth_headers(access_token: str) -> dict[str, str]:
@@ -82,6 +111,20 @@ async def get_problem_answer_ids(session: AsyncSession, problem_id: str) -> tupl
     return str(correct_option.id), str(wrong_option.id)
 
 
+async def get_problem_answer_lookup(
+    session: AsyncSession,
+    problem_id: str,
+) -> dict[ProblemAnswerOptionType, str]:
+    result = await session.execute(
+        select(ProblemAnswerOption).where(ProblemAnswerOption.problem_id == uuid.UUID(problem_id))
+    )
+    answer_options = result.scalars().all()
+    return {
+        answer_option.type: str(answer_option.id)
+        for answer_option in answer_options
+    }
+
+
 async def compile_current_structure(
     client: AsyncClient,
     access_token: str,
@@ -92,6 +135,217 @@ async def compile_current_structure(
     )
     assert response.status_code == 200
     return EntranceTestStructureCompileResponse.model_validate(response.json())
+
+
+def select_mid_level_answer_type(problem_type_name: str) -> ProblemAnswerOptionType:
+    normalized_name = problem_type_name.lower()
+
+    if problem_type_name in MID_LEVEL_RIGHT_NAMES:
+        return ProblemAnswerOptionType.RIGHT
+
+    if "parameter" in normalized_name:
+        return ProblemAnswerOptionType.I_DONT_KNOW
+    if "volume" in normalized_name:
+        return ProblemAnswerOptionType.I_DONT_KNOW
+    if "surface area" in normalized_name:
+        return ProblemAnswerOptionType.I_DONT_KNOW
+    if "tangent, chord, and secant" in normalized_name:
+        return ProblemAnswerOptionType.I_DONT_KNOW
+    if "location of roots" in normalized_name:
+        return ProblemAnswerOptionType.I_DONT_KNOW
+
+    return ProblemAnswerOptionType.WRONG
+
+
+async def run_bayesian_regression_session(
+    client: AsyncClient,
+    database: DataBase,
+    storage_manager: StorageManager,
+    access_token: str,
+    answer_strategy: "Callable[[str], ProblemAnswerOptionType]",
+) -> dict[str, Any]:
+    if database.async_session is None:
+        raise RuntimeError("Database session factory is not initialized")
+
+    structure_service = EntranceTestStructureService()
+    runtime_service = EntranceTestRuntimeService(storage_manager)
+    max_questions = int(
+        get_app_config().business.require("entrance_assessment.max_questions")
+    )
+
+    async with database.async_session() as session:
+        structure_state = await structure_service.load_latest_compiled_structure(session)
+
+    headers = build_auth_headers(access_token)
+    start_response = await client.post("/entrance-test/start", headers=headers)
+    assert start_response.status_code == 200
+    start_payload = start_response.json()
+    session_id = start_payload["session"]["id"]
+    current_problem = start_payload["problem"]
+    first_problem_name = current_problem["problem_type"]["name"]
+
+    for step_index in range(1, max_questions + 1):
+        async with database.async_session() as session:
+            answer_lookup = await get_problem_answer_lookup(session, current_problem["id"])
+
+        selected_answer_type = answer_strategy(current_problem["problem_type"]["name"])
+        answer_response = await client.post(
+            "/entrance-test/answers",
+            json={
+                "problem_id": current_problem["id"],
+                "answer_option_id": answer_lookup[selected_answer_type],
+            },
+            headers=headers,
+        )
+        assert answer_response.status_code == 201
+        answer_payload = answer_response.json()
+
+        if answer_payload["session"]["status"] == "completed":
+            result_response = await client.get("/entrance-test/result", headers=headers)
+            assert result_response.status_code == 200
+            replay_summary = await replay_bayesian_regression_session(
+                database=database,
+                structure_state=structure_state,
+                session_id=uuid.UUID(session_id),
+            )
+            return {
+                "session_id": session_id,
+                "first_problem_name": first_problem_name,
+                "completed_step_count": step_index,
+                "stop_reason": replay_summary["stop_reason"],
+                "final_result": answer_payload["final_result"],
+                "result_payload": result_response.json(),
+                "entropy_progression": replay_summary["entropy_progression"],
+                "utility_progression": replay_summary["utility_progression"],
+                "runtime_cleared": (
+                    await runtime_service.load_runtime_payload(uuid.UUID(session_id))
+                )
+                is None,
+            }
+
+        current_problem = answer_payload["next_problem"]
+
+    raise AssertionError("Bayesian regression session did not complete within max_questions")
+
+
+async def replay_bayesian_regression_session(
+    database: DataBase,
+    structure_state: Any,
+    session_id: uuid.UUID,
+) -> dict[str, Any]:
+    if database.async_session is None:
+        raise RuntimeError("Database session factory is not initialized")
+
+    async with database.async_session() as session:
+        entrance_test_session = await session.get(EntranceTestSession, session_id)
+        assert entrance_test_session is not None
+        assessment_config = _load_assessment_config(entrance_test_session)
+        response_model = _build_response_model(assessment_config)
+        response_events = (
+            await session.execute(
+                select(ResponseEvent)
+                .where(ResponseEvent.entrance_test_session_id == session_id)
+                .order_by(ResponseEvent.created_at, ResponseEvent.id)
+            )
+        ).scalars().all()
+
+    runtime_snapshot = initialize_runtime(
+        structure_state.forest_artifact,
+        float(assessment_config["temperature_sharpening"]),
+    )
+    entropy_progression: list[float] = []
+    utility_progression: list[float] = []
+    stop_reason: str | None = None
+
+    for response_event in response_events:
+        assert response_event.problem_type_id is not None
+        assert response_event.answer_option_type is not None
+        assert response_event.difficulty_weight is not None
+
+        step_result = apply_answer_step(
+            graph_artifact=structure_state.graph_artifact,
+            forest_artifact=structure_state.forest_artifact,
+            runtime=runtime_snapshot,
+            answered_problem_type_id=response_event.problem_type_id,
+            outcome=_map_answer_option_type_to_outcome(
+                response_event.answer_option_type
+            ),
+            instance_difficulty_weight=float(response_event.difficulty_weight),
+            response_model=response_model,
+            i_dont_know_scalar=float(assessment_config["i_dont_know_scalar"]),
+            temperature_sharpening=float(assessment_config["temperature_sharpening"]),
+            entropy_stop=float(assessment_config["entropy_stop"]),
+            utility_stop=float(assessment_config["utility_stop"]),
+            leader_probability_stop=_coerce_optional_float(
+                assessment_config.get("leader_probability_stop")
+            ),
+            max_questions=int(assessment_config["max_questions"]),
+            available_problem_type_ids=set(structure_state.graph_artifact.node_ids),
+            learned_mastery_probability=float(
+                assessment_config.get("projected_learned_mastery_probability", 0.85)
+            ),
+            unlearned_mastery_probability=float(
+                assessment_config.get("projected_unlearned_mastery_probability", 0.15)
+            ),
+            projection_confidence_stop=float(
+                assessment_config.get("projection_confidence_stop", 0.86)
+            ),
+            frontier_confidence_stop=float(
+                assessment_config.get("frontier_confidence_stop", 0.82)
+            ),
+        )
+        runtime_snapshot = step_result.runtime
+        entropy_progression.append(runtime_snapshot.normalized_entropy)
+        utility_progression.append(step_result.selection.max_utility)
+        stop_reason = step_result.stop_reason
+
+    return {
+        "entropy_progression": entropy_progression,
+        "utility_progression": utility_progression,
+        "stop_reason": stop_reason,
+    }
+
+
+def _load_assessment_config(
+    entrance_test_session: EntranceTestSession,
+) -> dict[str, Any]:
+    business_config_snapshot = entrance_test_session.business_config_snapshot
+    assert isinstance(business_config_snapshot, dict)
+    assessment_config = business_config_snapshot.get("entrance_assessment")
+    assert isinstance(assessment_config, dict)
+    return assessment_config
+
+
+def _build_response_model(
+    assessment_config: dict[str, Any],
+) -> ResponseModel:
+    raw_response_model = assessment_config.get("response_model")
+    assert isinstance(raw_response_model, dict)
+    return ResponseModel(
+        mastered_right=float(raw_response_model["mastered_right"]),
+        mastered_wrong=float(raw_response_model["mastered_wrong"]),
+        mastered_i_dont_know=float(raw_response_model["mastered_i_dont_know"]),
+        unmastered_right=float(raw_response_model["unmastered_right"]),
+        unmastered_wrong=float(raw_response_model["unmastered_wrong"]),
+        unmastered_i_dont_know=float(raw_response_model["unmastered_i_dont_know"]),
+    )
+
+
+def _map_answer_option_type_to_outcome(
+    answer_option_type: ProblemAnswerOptionType,
+) -> Outcome:
+    if answer_option_type == ProblemAnswerOptionType.RIGHT:
+        return Outcome.CORRECT
+    if answer_option_type == ProblemAnswerOptionType.WRONG:
+        return Outcome.INCORRECT
+    return Outcome.I_DONT_KNOW
+
+
+def _coerce_optional_float(raw_value: Any) -> float | None:
+    if raw_value is None:
+        return None
+
+    return float(raw_value)
 
 
 async def test_protected_routes_require_authentication(client: AsyncClient) -> None:
@@ -188,6 +442,62 @@ async def test_entrance_test_result_requires_completed_session(
     )
 
 
+async def test_historic_completed_result_with_cleared_confidence_still_loads(
+    client: AsyncClient,
+    database: DataBase,
+    student_tokens: dict[str, str],
+) -> None:
+    if database.async_session is None:
+        raise RuntimeError("Database session factory is not initialized")
+
+    current_user_id = await get_current_user_id(client, student_tokens["access_token"])
+
+    async with database.async_session() as session:
+        result = await session.execute(
+            select(EntranceTestSession).where(
+                EntranceTestSession.user_id == uuid.UUID(current_user_id)
+            )
+        )
+        entrance_test_session = result.scalar_one()
+
+        prerequisite_row = (
+            await session.execute(
+                select(
+                    ProblemTypePrerequisite.prerequisite_problem_type_id,
+                    ProblemTypePrerequisite.problem_type_id,
+                )
+                .order_by(
+                    ProblemTypePrerequisite.prerequisite_problem_type_id,
+                    ProblemTypePrerequisite.problem_type_id,
+                )
+            )
+        ).first()
+        assert prerequisite_row is not None
+        learned_problem_type_id, ready_problem_type_id = prerequisite_row
+
+        entrance_test_session.status = EntranceTestStatus.COMPLETED
+        entrance_test_session.current_problem_id = None
+        entrance_test_session.final_state_index = 321
+        entrance_test_session.final_state_probability = None
+        entrance_test_session.learned_problem_type_ids = [learned_problem_type_id]
+        entrance_test_session.inner_fringe_problem_type_ids = [learned_problem_type_id]
+        entrance_test_session.outer_fringe_problem_type_ids = [ready_problem_type_id]
+        entrance_test_session.started_at = datetime.now(UTC)
+        entrance_test_session.completed_at = datetime.now(UTC)
+        await session.commit()
+
+    headers = build_auth_headers(student_tokens["access_token"])
+    session_response = await client.get("/entrance-test", headers=headers)
+    result_response = await client.get("/entrance-test/result", headers=headers)
+
+    assert session_response.status_code == 200
+    assert result_response.status_code == 200
+    assert session_response.json()["final_result"]["state_probability"] is None
+    assert result_response.json()["final_result"]["state_probability"] is None
+    assert result_response.json()["final_result"]["state_index"] == 321
+    assert len(result_response.json()["nodes"]) >= 1
+
+
 async def test_admin_can_compile_current_entrance_test_structure(
     client: AsyncClient,
     admin_tokens: dict[str, str],
@@ -198,7 +508,7 @@ async def test_admin_can_compile_current_entrance_test_structure(
     )
 
     assert compile_payload.status == "ready"
-    assert compile_payload.artifact_kind == "exact_forest_v1"
+    assert compile_payload.artifact_kind == "exact_forest_bayes_v2"
     assert compile_payload.problem_type_count == 94
     assert compile_payload.edge_count == 86
     assert compile_payload.feasible_state_count == 8492446687900032
@@ -614,7 +924,11 @@ async def test_entrance_assessment_advances_to_next_problem_until_completion(
     }
     completed_payload = None
 
-    for answer_step in range(25):
+    max_questions = int(
+        get_app_config().business.require("entrance_assessment.max_questions")
+    )
+
+    for answer_step in range(max_questions):
         async with database.async_session() as session:
             current_right_answer_id, current_wrong_answer_id = await get_problem_answer_ids(
                 session,
@@ -700,6 +1014,92 @@ async def test_entrance_assessment_advances_to_next_problem_until_completion(
             uuid.UUID(problem_id)
             for problem_id in answered_problem_ids
         }
+
+
+async def test_bayesian_mid_level_big_graph_regression(
+    client: AsyncClient,
+    database: DataBase,
+    storage_manager: StorageManager,
+    admin_tokens: dict[str, str],
+    student_tokens: dict[str, str],
+) -> None:
+    await compile_current_structure(client, admin_tokens["access_token"])
+    summary = await run_bayesian_regression_session(
+        client=client,
+        database=database,
+        storage_manager=storage_manager,
+        access_token=student_tokens["access_token"],
+        answer_strategy=select_mid_level_answer_type,
+    )
+
+    final_result = summary["final_result"]
+    result_payload = summary["result_payload"]
+    max_questions = int(
+        get_app_config().business.require("entrance_assessment.max_questions")
+    )
+
+    assert summary["first_problem_name"] == "use medians, bisectors, and altitudes"
+    assert 1 <= summary["completed_step_count"] <= max_questions
+    assert summary["stop_reason"] in {"converged_projection", "max_questions"}
+    assert summary["runtime_cleared"] is True
+    assert 0.0 <= final_result["state_probability"] <= 1.0
+    assert len(final_result["learned_problem_type_ids"]) > 0
+    assert len(final_result["inner_fringe_ids"]) > 0
+    assert len(final_result["outer_fringe_ids"]) > 0
+    assert summary["entropy_progression"]
+    assert summary["utility_progression"]
+    assert summary["entropy_progression"][0] > summary["entropy_progression"][-1]
+    assert all(0.0 <= value <= 1.0 for value in summary["entropy_progression"])
+    assert all(0.0 <= value <= 1.0 for value in summary["utility_progression"])
+    assert sum(1 for node in result_payload["nodes"] if node["status"] == "learned") == len(
+        final_result["learned_problem_type_ids"]
+    )
+    assert sum(1 for node in result_payload["nodes"] if node["status"] == "ready") == len(
+        final_result["outer_fringe_ids"]
+    )
+
+
+async def test_bayesian_all_right_big_graph_regression(
+    client: AsyncClient,
+    database: DataBase,
+    storage_manager: StorageManager,
+    admin_tokens: dict[str, str],
+    student_tokens: dict[str, str],
+) -> None:
+    await compile_current_structure(client, admin_tokens["access_token"])
+    summary = await run_bayesian_regression_session(
+        client=client,
+        database=database,
+        storage_manager=storage_manager,
+        access_token=student_tokens["access_token"],
+        answer_strategy=lambda _: ProblemAnswerOptionType.RIGHT,
+    )
+
+    final_result = summary["final_result"]
+    result_payload = summary["result_payload"]
+    max_questions = int(
+        get_app_config().business.require("entrance_assessment.max_questions")
+    )
+
+    assert summary["first_problem_name"] == "use medians, bisectors, and altitudes"
+    assert 1 <= summary["completed_step_count"] <= max_questions
+    assert summary["stop_reason"] in {"converged_projection", "max_questions"}
+    assert summary["runtime_cleared"] is True
+    assert 0.0 <= final_result["state_probability"] <= 1.0
+    assert len(final_result["learned_problem_type_ids"]) > 0
+    assert len(final_result["inner_fringe_ids"]) > 0
+    assert len(final_result["outer_fringe_ids"]) > 0
+    assert summary["entropy_progression"]
+    assert summary["utility_progression"]
+    assert summary["entropy_progression"][0] > summary["entropy_progression"][-1]
+    assert all(0.0 <= value <= 1.0 for value in summary["entropy_progression"])
+    assert all(0.0 <= value <= 1.0 for value in summary["utility_progression"])
+    assert sum(1 for node in result_payload["nodes"] if node["status"] == "learned") == len(
+        final_result["learned_problem_type_ids"]
+    )
+    assert sum(1 for node in result_payload["nodes"] if node["status"] == "ready") == len(
+        final_result["outer_fringe_ids"]
+    )
 
 
 async def test_active_session_keeps_using_its_compiled_structure_version(

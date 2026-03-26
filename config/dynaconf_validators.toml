@@ -26,18 +26,20 @@ S3_SECRET_KEY = {must_exist=true, len_min=1}
 S3_REGION = {must_exist=true, len_min=1}
 S3_TLS_VERIFY = {must_exist=true, is_in=[0, 1]}
 'business.entrance_assessment.i_dont_know_scalar' = {must_exist=true, gt=0}
-'business.entrance_assessment.ancestor_support_correct' = {must_exist=true, gt=0}
-'business.entrance_assessment.ancestor_support_wrong' = {must_exist=true, gt=0}
-'business.entrance_assessment.descendant_support_correct' = {must_exist=true, gt=0}
-'business.entrance_assessment.descendant_support_wrong' = {must_exist=true, gt=0}
-'business.entrance_assessment.ancestor_decay' = {must_exist=true, gt=0}
-'business.entrance_assessment.descendant_decay' = {must_exist=true, gt=0}
-'business.entrance_assessment.branch_penalty_exponent' = {must_exist=true, gte=0}
 'business.entrance_assessment.temperature_sharpening' = {must_exist=true, gte=0}
+'business.entrance_assessment.projected_learned_mastery_probability' = {must_exist=true, gt=0, lte=1}
+'business.entrance_assessment.projected_unlearned_mastery_probability' = {must_exist=true, gte=0, lt=1}
+'business.entrance_assessment.projection_confidence_stop' = {must_exist=true, gt=0, lte=1}
+'business.entrance_assessment.frontier_confidence_stop' = {must_exist=true, gt=0, lte=1}
 'business.entrance_assessment.entropy_stop' = {must_exist=true, gte=0}
 'business.entrance_assessment.utility_stop' = {must_exist=true, gte=0}
 'business.entrance_assessment.max_questions' = {must_exist=true, gte=1}
-'business.entrance_assessment.epsilon' = {must_exist=true, gt=0}
+'business.entrance_assessment.response_model.mastered_right' = {must_exist=true, gt=0, lte=1}
+'business.entrance_assessment.response_model.mastered_wrong' = {must_exist=true, gt=0, lte=1}
+'business.entrance_assessment.response_model.mastered_i_dont_know' = {must_exist=true, gt=0, lte=1}
+'business.entrance_assessment.response_model.unmastered_right' = {must_exist=true, gt=0, lte=1}
+'business.entrance_assessment.response_model.unmastered_wrong' = {must_exist=true, gt=0, lte=1}
+'business.entrance_assessment.response_model.unmastered_i_dont_know' = {must_exist=true, gt=0, lte=1}
 'business.difficulties.elementary.name' = {must_exist=true, len_min=1}
 'business.difficulties.elementary.coefficient' = {must_exist=true, gt=0}
 'business.difficulties.intermediate.name' = {must_exist=true, len_min=1}

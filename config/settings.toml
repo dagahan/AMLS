@@ -1,17 +1,21 @@
 [entrance_assessment]
-i_dont_know_scalar = 1.4
-ancestor_support_correct = 0.85
-ancestor_support_wrong = 0.12
-descendant_support_correct = 0.25
-descendant_support_wrong = 0.90
-ancestor_decay = 0.70
-descendant_decay = 0.90
-branch_penalty_exponent = 1.0
-temperature_sharpening = 4.0
-entropy_stop = 0.35
-utility_stop = 0.60
-max_questions = 25
-epsilon = 0.000000001
+i_dont_know_scalar = 1.15
+temperature_sharpening = 2.0
+projected_learned_mastery_probability = 0.85
+projected_unlearned_mastery_probability = 0.15
+projection_confidence_stop = 0.86
+frontier_confidence_stop = 0.82
+entropy_stop = 0.30
+utility_stop = 0.45
+max_questions = 24
+
+[entrance_assessment.response_model]
+mastered_right = 0.93
+mastered_wrong = 0.05
+mastered_i_dont_know = 0.02
+unmastered_right = 0.08
+unmastered_wrong = 0.57
+unmastered_i_dont_know = 0.35
 
 [difficulties.elementary]
 name = "Elementary"

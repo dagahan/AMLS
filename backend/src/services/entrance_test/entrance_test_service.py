@@ -33,6 +33,7 @@ from src.models.pydantic import (
     EntranceTestResultResponse,
     EntranceTestRuntimePayload,
     EntranceTestSessionResponse,
+    ResponseModel,
     ResponseCreate,
     StoredEntranceTestAnswerState,
     build_entrance_test_final_result_response,
@@ -58,8 +59,7 @@ from src.transaction_manager.transaction_manager import execute_atomic_step, tra
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
 
-    from src.math_models.entrance_assessment.types import RuntimeSnapshot
-    from src.models.pydantic import EntranceTestStructureState
+    from src.models.pydantic import EntranceTestStructureState, RuntimeSnapshot
 
 
 class EntranceTestService:
@@ -369,13 +369,8 @@ class EntranceTestService:
                 answered_problem_type_id=evaluation_state.problem_type_id,
                 outcome=evaluation_state.outcome,
                 instance_difficulty_weight=evaluation_state.difficulty_weight,
+                response_model=self._build_response_model(assessment_config),
                 i_dont_know_scalar=float(assessment_config["i_dont_know_scalar"]),
-                ancestor_support_correct=float(assessment_config["ancestor_support_correct"]),
-                ancestor_support_wrong=float(assessment_config["ancestor_support_wrong"]),
-                descendant_support_correct=float(assessment_config["descendant_support_correct"]),
-                descendant_support_wrong=float(assessment_config["descendant_support_wrong"]),
-                ancestor_decay=float(assessment_config["ancestor_decay"]),
-                descendant_decay=float(assessment_config["descendant_decay"]),
                 temperature_sharpening=float(assessment_config["temperature_sharpening"]),
                 entropy_stop=float(assessment_config["entropy_stop"]),
                 utility_stop=float(assessment_config["utility_stop"]),
@@ -383,8 +378,19 @@ class EntranceTestService:
                     assessment_config.get("leader_probability_stop")
                 ),
                 max_questions=int(assessment_config["max_questions"]),
-                epsilon=float(assessment_config["epsilon"]),
                 available_problem_type_ids=set(structure_state.graph_artifact.node_ids),
+                learned_mastery_probability=self._get_projected_learned_mastery_probability(
+                    assessment_config
+                ),
+                unlearned_mastery_probability=self._get_projected_unlearned_mastery_probability(
+                    assessment_config
+                ),
+                projection_confidence_stop=self._get_projection_confidence_stop(
+                    assessment_config
+                ),
+                frontier_confidence_stop=self._get_frontier_confidence_stop(
+                    assessment_config
+                ),
             )
             await self.runtime_service.save_runtime_snapshot(
                 entrance_test_session.id,
@@ -400,6 +406,12 @@ class EntranceTestService:
                 final_result = build_final_result(
                     graph_artifact=structure_state.graph_artifact,
                     runtime=step_result.runtime,
+                    learned_mastery_probability=self._get_projected_learned_mastery_probability(
+                        assessment_config
+                    ),
+                    unlearned_mastery_probability=self._get_projected_unlearned_mastery_probability(
+                        assessment_config
+                    ),
                 )
                 final_result_response = build_entrance_test_final_result_response(
                     final_result
@@ -412,7 +424,7 @@ class EntranceTestService:
                 entrance_test_session.current_problem_id = None
                 entrance_test_session.completed_at = datetime.now(UTC)
                 logger.info(
-                    "Persisted completed entrance test result after answer: session_id={}, state_index={}, state_probability={}, learned_count={}, inner_fringe_count={}, outer_fringe_count={}",
+                    "Persisted completed entrance test result after answer: session_id={}, state_index={}, confidence={}, learned_count={}, inner_fringe_count={}, outer_fringe_count={}",
                     entrance_test_session.id,
                     final_result_response.state_index,
                     final_result_response.state_probability,
@@ -433,6 +445,12 @@ class EntranceTestService:
                     final_result = build_final_result(
                         graph_artifact=structure_state.graph_artifact,
                         runtime=step_result.runtime,
+                        learned_mastery_probability=self._get_projected_learned_mastery_probability(
+                            assessment_config
+                        ),
+                        unlearned_mastery_probability=self._get_projected_unlearned_mastery_probability(
+                            assessment_config
+                        ),
                     )
                     final_result_response = build_entrance_test_final_result_response(
                         final_result
@@ -445,7 +463,7 @@ class EntranceTestService:
                     entrance_test_session.current_problem_id = None
                     entrance_test_session.completed_at = datetime.now(UTC)
                     logger.info(
-                        "Persisted completed entrance test result after exhausted problems: session_id={}, state_index={}, state_probability={}, learned_count={}, inner_fringe_count={}, outer_fringe_count={}",
+                        "Persisted completed entrance test result after exhausted problems: session_id={}, state_index={}, confidence={}, learned_count={}, inner_fringe_count={}, outer_fringe_count={}",
                         entrance_test_session.id,
                         final_result_response.state_index,
                         final_result_response.state_probability,
@@ -631,8 +649,15 @@ class EntranceTestService:
         selection = select_next_problem_type(
             graph_artifact=structure_state.graph_artifact,
             runtime=runtime_snapshot,
+            learned_mastery_probability=self._get_projected_learned_mastery_probability(
+                assessment_config
+            ),
+            unlearned_mastery_probability=self._get_projected_unlearned_mastery_probability(
+                assessment_config
+            ),
         )
         stop, stop_reason = should_stop(
+            graph_artifact=structure_state.graph_artifact,
             runtime=runtime_snapshot,
             selection=selection,
             entropy_stop=float(assessment_config["entropy_stop"]),
@@ -641,6 +666,18 @@ class EntranceTestService:
                 assessment_config.get("leader_probability_stop")
             ),
             max_questions=int(assessment_config["max_questions"]),
+            learned_mastery_probability=self._get_projected_learned_mastery_probability(
+                assessment_config
+            ),
+            unlearned_mastery_probability=self._get_projected_unlearned_mastery_probability(
+                assessment_config
+            ),
+            projection_confidence_stop=self._get_projection_confidence_stop(
+                assessment_config
+            ),
+            frontier_confidence_stop=self._get_frontier_confidence_stop(
+                assessment_config
+            ),
         )
         logger.info(
             "Selected entrance test current problem: session_id={}, structure_version={}, entropy={}, utility={}, stop_reason={}, selected_problem_type_id={}",
@@ -656,6 +693,12 @@ class EntranceTestService:
             final_result = build_final_result(
                 graph_artifact=structure_state.graph_artifact,
                 runtime=runtime_snapshot,
+                learned_mastery_probability=self._get_projected_learned_mastery_probability(
+                    assessment_config
+                ),
+                unlearned_mastery_probability=self._get_projected_unlearned_mastery_probability(
+                    assessment_config
+                ),
             )
             final_result_response = build_entrance_test_final_result_response(final_result)
             self._persist_final_result(
@@ -667,7 +710,7 @@ class EntranceTestService:
             entrance_test_session.completed_at = datetime.now(UTC)
             await self.runtime_service.delete_runtime_snapshot(entrance_test_session.id)
             logger.info(
-                "Persisted completed entrance test result at session transition: session_id={}, state_index={}, state_probability={}, learned_count={}, inner_fringe_count={}, outer_fringe_count={}",
+                "Persisted completed entrance test result at session transition: session_id={}, state_index={}, confidence={}, learned_count={}, inner_fringe_count={}, outer_fringe_count={}",
                 entrance_test_session.id,
                 final_result_response.state_index,
                 final_result_response.state_probability,
@@ -740,13 +783,8 @@ class EntranceTestService:
                 answered_problem_type_id=problem_type_id,
                 outcome=outcome,
                 instance_difficulty_weight=difficulty_weight,
+                response_model=self._build_response_model(assessment_config),
                 i_dont_know_scalar=float(assessment_config["i_dont_know_scalar"]),
-                ancestor_support_correct=float(assessment_config["ancestor_support_correct"]),
-                ancestor_support_wrong=float(assessment_config["ancestor_support_wrong"]),
-                descendant_support_correct=float(assessment_config["descendant_support_correct"]),
-                descendant_support_wrong=float(assessment_config["descendant_support_wrong"]),
-                ancestor_decay=float(assessment_config["ancestor_decay"]),
-                descendant_decay=float(assessment_config["descendant_decay"]),
                 temperature_sharpening=float(assessment_config["temperature_sharpening"]),
                 entropy_stop=float(assessment_config["entropy_stop"]),
                 utility_stop=float(assessment_config["utility_stop"]),
@@ -754,8 +792,19 @@ class EntranceTestService:
                     assessment_config.get("leader_probability_stop")
                 ),
                 max_questions=int(assessment_config["max_questions"]),
-                epsilon=float(assessment_config["epsilon"]),
                 available_problem_type_ids=set(structure_state.graph_artifact.node_ids),
+                learned_mastery_probability=self._get_projected_learned_mastery_probability(
+                    assessment_config
+                ),
+                unlearned_mastery_probability=self._get_projected_unlearned_mastery_probability(
+                    assessment_config
+                ),
+                projection_confidence_stop=self._get_projection_confidence_stop(
+                    assessment_config
+                ),
+                frontier_confidence_stop=self._get_frontier_confidence_stop(
+                    assessment_config
+                ),
             )
             runtime_snapshot = step_result.runtime
 
@@ -892,3 +941,152 @@ class EntranceTestService:
         if raw_value is None:
             return None
         return float(raw_value)
+
+
+    @staticmethod
+    def _get_projected_learned_mastery_probability(
+        assessment_config: dict[str, Any],
+    ) -> float:
+        raw_value = assessment_config.get(
+            "projected_learned_mastery_probability",
+            0.85,
+        )
+        return float(raw_value)
+
+
+    @staticmethod
+    def _get_projected_unlearned_mastery_probability(
+        assessment_config: dict[str, Any],
+    ) -> float:
+        raw_value = assessment_config.get(
+            "projected_unlearned_mastery_probability",
+            0.15,
+        )
+        return float(raw_value)
+
+
+    @staticmethod
+    def _get_projection_confidence_stop(
+        assessment_config: dict[str, Any],
+    ) -> float:
+        raw_value = assessment_config.get(
+            "projection_confidence_stop",
+            0.85,
+        )
+        return float(raw_value)
+
+
+    @staticmethod
+    def _get_frontier_confidence_stop(
+        assessment_config: dict[str, Any],
+    ) -> float:
+        raw_value = assessment_config.get(
+            "frontier_confidence_stop",
+            0.80,
+        )
+        return float(raw_value)
+
+
+    def _build_response_model(
+        self,
+        assessment_config: dict[str, Any],
+    ) -> ResponseModel:
+        raw_response_model = assessment_config.get("response_model")
+        if not isinstance(raw_response_model, dict):
+            response_model = ResponseModel(
+                mastered_right=0.93,
+                mastered_wrong=0.05,
+                mastered_i_dont_know=0.02,
+                unmastered_right=0.08,
+                unmastered_wrong=0.57,
+                unmastered_i_dont_know=0.35,
+            )
+            logger.warning(
+                "Entrance assessment config snapshot does not contain a response model, using defaults: session-scoped fallback={}",
+                response_model,
+            )
+            return response_model
+
+        response_model = ResponseModel(
+            mastered_right=self._normalize_probability(
+                raw_response_model.get("mastered_right"),
+                fallback=0.93,
+            ),
+            mastered_wrong=self._normalize_probability(
+                raw_response_model.get("mastered_wrong"),
+                fallback=0.05,
+            ),
+            mastered_i_dont_know=self._normalize_probability(
+                raw_response_model.get("mastered_i_dont_know"),
+                fallback=0.02,
+            ),
+            unmastered_right=self._normalize_probability(
+                raw_response_model.get("unmastered_right"),
+                fallback=0.08,
+            ),
+            unmastered_wrong=self._normalize_probability(
+                raw_response_model.get("unmastered_wrong"),
+                fallback=0.57,
+            ),
+            unmastered_i_dont_know=self._normalize_probability(
+                raw_response_model.get("unmastered_i_dont_know"),
+                fallback=0.35,
+            ),
+        )
+        return self._normalize_response_model(response_model)
+
+
+    @staticmethod
+    def _normalize_response_model(response_model: ResponseModel) -> ResponseModel:
+        mastered_right, mastered_wrong, mastered_i_dont_know = (
+            EntranceTestService._normalize_probability_triplet(
+                response_model.mastered_right,
+                response_model.mastered_wrong,
+                response_model.mastered_i_dont_know,
+            )
+        )
+        unmastered_right, unmastered_wrong, unmastered_i_dont_know = (
+            EntranceTestService._normalize_probability_triplet(
+                response_model.unmastered_right,
+                response_model.unmastered_wrong,
+                response_model.unmastered_i_dont_know,
+            )
+        )
+        return ResponseModel(
+            mastered_right=mastered_right,
+            mastered_wrong=mastered_wrong,
+            mastered_i_dont_know=mastered_i_dont_know,
+            unmastered_right=unmastered_right,
+            unmastered_wrong=unmastered_wrong,
+            unmastered_i_dont_know=unmastered_i_dont_know,
+        )
+
+
+    @staticmethod
+    def _normalize_probability_triplet(
+        first_value: float,
+        second_value: float,
+        third_value: float,
+    ) -> tuple[float, float, float]:
+        total = first_value + second_value + third_value
+        if total <= 0.0:
+            return 1.0 / 3.0, 1.0 / 3.0, 1.0 / 3.0
+
+        return (
+            first_value / total,
+            second_value / total,
+            third_value / total,
+        )
+
+
+    @staticmethod
+    def _normalize_probability(
+        raw_value: Any,
+        fallback: float,
+    ) -> float:
+        try:
+            value = float(raw_value)
+        except (TypeError, ValueError):
+            value = fallback
+
+        return min(max(value, 1e-9), 1.0)

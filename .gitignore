@@ -157,3 +157,7 @@ test_*.json
 # Node
 node_modules/
 
+# OpenClaw ops local artifacts
+ops/openclaw/gmail_monitor/.venv/
+ops/openclaw/gmail_monitor/local/
+ops/openclaw/gmail_monitor/*.local.json

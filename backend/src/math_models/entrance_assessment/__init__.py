@@ -1,44 +1,42 @@
 from __future__ import annotations
 
-from src.math_models.entrance_assessment.engine import (
+from src.math_models.entrance_assessment.builders import (
+    ForestStructureError,
+    build_forest_artifact,
+    build_graph_artifact,
+)
+from src.math_models.entrance_assessment.runtime_engine import (
     apply_answer_step,
     build_final_result,
     initialize_runtime,
+    select_next_problem_type,
+    should_stop,
 )
-from src.math_models.entrance_assessment.forest_artifact import (
-    ForestStructureError,
-    build_forest_artifact,
-)
-from src.math_models.entrance_assessment.graph_artifact import build_graph_artifact
-from src.math_models.entrance_assessment.selection import select_next_problem_type
-from src.math_models.entrance_assessment.state_space import build_state_artifact
-from src.math_models.entrance_assessment.stopping import should_stop
-from src.math_models.entrance_assessment.types import (
-    FinalAssessmentResult,
+from src.models.pydantic import (
+    FinalResult,
     ForestArtifact,
     GraphArtifact,
     Outcome,
+    ResponseModel,
     RuntimeSnapshot,
-    SelectionResult,
-    StateArtifact,
+    Selection,
     StepResult,
 )
 
 __all__ = [
-    "FinalAssessmentResult",
+    "FinalResult",
     "ForestArtifact",
     "ForestStructureError",
     "GraphArtifact",
     "Outcome",
+    "ResponseModel",
     "RuntimeSnapshot",
-    "SelectionResult",
-    "StateArtifact",
+    "Selection",
     "StepResult",
     "apply_answer_step",
     "build_final_result",
     "build_forest_artifact",
     "build_graph_artifact",
-    "build_state_artifact",
     "initialize_runtime",
     "select_next_problem_type",
     "should_stop",

@@ -13,9 +13,7 @@ from src.fast_api.routers.problem_router import get_problem_router
 from src.fast_api.routers.problem_type_router import get_problem_type_router
 from src.fast_api.routers.storage_router import get_storage_router
 from src.fast_api.routers.topic_router import get_topic_router
-from src.services.entrance_test import EntranceTestStructureService
 from src.storage.storage_manager import StorageManager
-from src.storage.db.enums import EntranceTestStructureStatus
 
 
 def create_application(storage_manager: StorageManager) -> FastAPI:
@@ -54,7 +52,6 @@ class Server:
 
     async def run_server(self) -> None:
         await self.storage_manager.connect()
-        await self._warm_up_entrance_test_structure()
         await get_config_manager().start_watcher()
         self.server = uvicorn.Server(self.uvicorn_config)
         logger.info(f"Starting {self.app.title} FastAPI server")
@@ -67,32 +64,3 @@ class Server:
 
         await get_config_manager().stop_watcher()
         await self.storage_manager.close()
-
-
-    async def _warm_up_entrance_test_structure(self) -> None:
-        structure_service = EntranceTestStructureService()
-
-        try:
-            async with self.storage_manager.session_ctx() as session:
-                compile_response = await structure_service.compile_current_structure(session)
-        except ValueError as error:
-            logger.warning("Skipping entrance test structure warmup: {}", error)
-            return
-        except Exception as error:
-            logger.warning("Entrance test structure warmup failed: {}", error)
-            return
-
-        if compile_response.status == EntranceTestStructureStatus.READY:
-            logger.info(
-                "Warmed up entrance test structure: structure_version={}, feasible_state_count={}",
-                compile_response.structure_version,
-                compile_response.feasible_state_count,
-            )
-            return
-
-        logger.warning(
-            "Entrance test structure warmup produced non-ready status: structure_version={}, status={}, error_message={}",
-            compile_response.structure_version,
-            compile_response.status,
-            compile_response.error_message,
-        )
