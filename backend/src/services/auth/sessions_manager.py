@@ -1,23 +1,26 @@
 from __future__ import annotations
 
+from datetime import UTC, datetime
+import hashlib
 import uuid
 from collections.abc import Mapping
 from typing import Any
 
-from loguru import logger
-
 from src.config import get_app_config
-from src.core.utils import StringTools, TimeTools
+from src.core.logging import get_logger
 from src.models.pydantic import ClientContext, SessionData
 from src.storage.storage_manager import StorageManager
+
+
+logger = get_logger(__name__)
 
 
 class SessionsManager:
     def __init__(self, storage_manager: StorageManager) -> None:
         app_config = get_app_config()
         self.storage_manager = storage_manager
-        self.session_max_life_days = int(app_config.infra.require("SESSIONS_MAX_LIFE_DAYS"))
-        self.session_inactive_days = int(app_config.infra.require("SESSIONS_INACTIVE_DAYS"))
+        self.session_max_life_days = app_config.infra.sessions_max_life_days
+        self.session_inactive_days = app_config.infra.sessions_inactive_days
         self.valkey: Any = storage_manager.get_valkey_sync()
 
 
@@ -34,17 +37,10 @@ class SessionsManager:
         session_id = uuid.uuid4()
         session_key = f"Session:{session_id}"
 
-        issued_at = TimeTools.now_time_stamp()
+        issued_at = self._current_timestamp()
         max_life_timestamp = issued_at + self._days_to_seconds(self.session_max_life_days)
-        device_signature = StringTools.hash_string(
-            (
-                f"{client_context.user_agent}"
-                f"{client_context.client_id}"
-                f"{client_context.local_system_time_zone}"
-                f"{client_context.platform}"
-            )
-        )
-        ip_signature = StringTools.hash_string(client_context.ip)
+        device_signature = self._build_device_signature(client_context)
+        ip_signature = self._build_ip_signature(client_context.ip)
 
         session_data = SessionData(
             sub=user_id,
@@ -63,7 +59,7 @@ class SessionsManager:
         else:
             self.valkey.delete(session_key)
 
-        logger.debug(f"Created session {session_id} for user {user_id}")
+        logger.debug("Created session", session_id=str(session_id), user_id=user_id, ttl=ttl)
 
         return {
             "session_id": str(session_id),
@@ -78,7 +74,7 @@ class SessionsManager:
         if session is None:
             return False
 
-        now_timestamp = TimeTools.now_time_stamp()
+        now_timestamp = self._current_timestamp()
         ttl = self._clamped_ttl_seconds(now_timestamp, session.mtl)
         if ttl <= 0:
             self.valkey.delete(f"Session:{session_id}")
@@ -140,7 +136,7 @@ class SessionsManager:
         try:
             return self.validate_session(raw_data)
         except Exception as error:
-            logger.warning(f"Session {session_id} failed validation: {error}")
+            logger.warning("Session validation failed", session_id=session_id, error=str(error))
             return None
 
 
@@ -148,3 +144,30 @@ class SessionsManager:
         if raw_data is None:
             return None
         return SessionData.model_validate(raw_data)
+
+
+    @staticmethod
+    def _current_timestamp() -> int:
+        return int(datetime.now(UTC).timestamp())
+
+
+    @staticmethod
+    def _build_device_signature(client_context: ClientContext) -> str:
+        return SessionsManager._hash_text(
+            (
+                f"{client_context.user_agent}"
+                f"{client_context.client_id}"
+                f"{client_context.local_system_time_zone}"
+                f"{client_context.platform}"
+            )
+        )
+
+
+    @staticmethod
+    def _build_ip_signature(client_ip: str) -> str:
+        return SessionsManager._hash_text(client_ip)
+
+
+    @staticmethod
+    def _hash_text(value: str) -> str:
+        return hashlib.sha256(value.encode("utf-8")).hexdigest()

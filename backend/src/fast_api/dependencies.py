@@ -7,8 +7,8 @@ from typing import TYPE_CHECKING, cast
 from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy import select
-from sqlalchemy.orm import selectinload
 
+from src.core.logging import bind_context
 from src.models.alchemy import User
 from src.models.pydantic import AuthContext, ClientContext, build_user_response
 from src.services.auth.auth_service import AuthService
@@ -66,6 +66,12 @@ def require_role(role: UserRole | None = None) -> Callable[..., Awaitable[AuthCo
                 detail=f"{role.value.capitalize()} role required",
             )
 
+        bind_context(
+            user_id=str(user.id),
+            user_role=user.role.value,
+            session_id=payload.sid,
+        )
+
         return AuthContext(
             user=build_user_response(user),
             payload=payload,
@@ -78,11 +84,7 @@ async def _load_user(
     session: AsyncSession,
     user_id: uuid.UUID,
 ) -> User | None:
-    result = await session.execute(
-        select(User)
-        .options(selectinload(User.entrance_test_session))
-        .where(User.id == user_id)
-    )
+    result = await session.execute(select(User).where(User.id == user_id))
     return result.scalar_one_or_none()
 
 

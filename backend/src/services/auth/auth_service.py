@@ -5,15 +5,17 @@ from typing import Any
 from fastapi import HTTPException, status
 from sqlalchemy import select
 
-from src.core.utils import PasswordTools
+from src.core.logging import get_logger
 from src.models.alchemy import User
 from src.models.pydantic import AccessPayload, ClientContext, RegisterRequest, TokenPairResponse
+from src.services.auth.passwords import hash_password, verify_password
 from src.services.auth.sessions_manager import SessionsManager
-from src.services.entrance_test import EntranceTestService
 from src.services.jwt.jwt_parser import JwtParser
 from src.storage.storage_manager import StorageManager
 from src.storage.db.enums import UserRole
 from src.transaction_manager.transaction_manager import execute_atomic_step, transactional
+
+logger = get_logger(__name__)
 
 
 class AuthService:
@@ -21,7 +23,6 @@ class AuthService:
         self.storage_manager = storage_manager
         self.jwt_parser = JwtParser(storage_manager)
         self.sessions_manager = SessionsManager(storage_manager)
-        self.entrance_test_service = EntranceTestService(storage_manager)
 
 
     async def authenticate_user(self, email: str, password: str) -> User:
@@ -29,7 +30,7 @@ class AuthService:
             result = await session.execute(select(User).where(User.email == email))
             user = result.scalar_one_or_none()
 
-        if user is None or not PasswordTools.verify_password(password, user.hashed_password):
+        if user is None or not verify_password(password, user.hashed_password):
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Invalid credentials",
@@ -41,6 +42,7 @@ class AuthService:
                 detail="Account deactivated",
             )
 
+        logger.info("Authenticated user", user_id=str(user.id), email=user.email)
         return user
 
 
@@ -68,14 +70,14 @@ class AuthService:
                 first_name=data.first_name,
                 last_name=data.last_name,
                 avatar_url=data.avatar_url,
-                hashed_password=PasswordTools.hash_password(data.password.get_secret_value()),
+                hashed_password=hash_password(data.password.get_secret_value()),
                 role=UserRole.STUDENT,
                 is_active=True,
             )
             session.add(user)
             await session.flush()
-            await self.entrance_test_service.create_pending_session_in_session(session, user)
 
+        logger.info("Registered user", user_id=str(user.id), email=user.email)
         return user
 
 
@@ -106,6 +108,13 @@ class AuthService:
             make_old_refresh_token_used=False,
         )
 
+        logger.info(
+            "Issued login tokens",
+            user_id=user_id,
+            session_id=session_id,
+            client_id=client_context.client_id,
+            platform=client_context.platform,
+        )
         return TokenPairResponse(access_token=access_token, refresh_token=refresh_token)
 
 
@@ -139,6 +148,7 @@ class AuthService:
                 detail="Session expired",
             )
 
+        logger.debug("Validated access token", user_id=payload.sub, session_id=payload.sid)
         return payload
 
 
@@ -181,4 +191,5 @@ class AuthService:
             make_old_refresh_token_used=False,
         )
 
+        logger.info("Refreshed tokens", user_id=user_id, session_id=session_id)
         return TokenPairResponse(access_token=access_token, refresh_token=new_refresh_token)

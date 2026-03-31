@@ -8,11 +8,11 @@ from src.models.pydantic import DifficultyResponse
 
 
 def build_difficulty_response(difficulty_level: DifficultyLevel) -> DifficultyResponse:
-    config = get_app_config().get_difficulty(difficulty_level.value)
+    config = get_app_config().difficulty(difficulty_level.value)
     return DifficultyResponse(
         key=difficulty_level,
-        name=str(config["name"]),
-        coefficient=float(config["coefficient"]),
+        name=config.name,
+        coefficient=config.coefficient,
     )
 
 

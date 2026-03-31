@@ -1,5 +1,5 @@
+from src.config.app_config import AppConfig
 from src.config.manager import (
-    AppConfig,
     ConfigManager,
     bootstrap_config,
     get_app_config,

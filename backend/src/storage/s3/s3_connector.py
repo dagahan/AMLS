@@ -1,4 +1,5 @@
 from __future__ import annotations
+import hashlib
 import mimetypes
 import os
 from contextlib import asynccontextmanager
@@ -9,7 +10,6 @@ from aiobotocore.session import get_session as get_s3_session
 from botocore.config import Config
 
 from src.config import get_app_config
-from src.core.utils import StringTools
 
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator
@@ -18,11 +18,11 @@ if TYPE_CHECKING:
 class S3Client:
     def __init__(self) -> None:
         app_config = get_app_config()
-        self.bucket_name = str(app_config.infra.require("S3_BUCKET_NAME"))
-        self.endpoint_url = str(app_config.infra.require("S3_ENDPOINT_URL"))
-        self.region = str(app_config.infra.require("S3_REGION"))
-        self.access_key = str(app_config.infra.require("S3_ACCESS_KEY"))
-        self.secret_key = str(app_config.infra.require("S3_SECRET_KEY"))
+        self.bucket_name = app_config.infra.s3_bucket_name
+        self.endpoint_url = app_config.infra.s3_endpoint_url
+        self.region = app_config.infra.s3_region
+        self.access_key = app_config.infra.s3_access_key
+        self.secret_key = app_config.infra.s3_secret_key
 
         self.s3_session = get_s3_session()
         self.botocore_config = Config(
@@ -31,7 +31,7 @@ class S3Client:
             retries={"max_attempts": 3, "mode": "standard"},
         )
         self.default_acl: str | None = None
-        self.verify = bool(int(app_config.infra.require("S3_TLS_VERIFY")))
+        self.verify = app_config.infra.s3_tls_verify
 
 
     @asynccontextmanager
@@ -61,7 +61,7 @@ class S3Client:
 
     def make_key(self, prefix: str, user_id: str, filename: str, content_type: str | None) -> str:
         ext = self._ext_from(filename, content_type)
-        safe_name = StringTools.hash_string(os.path.splitext(os.path.basename(filename))[0])[:12]
+        safe_name = self._build_file_stem_hash(filename)
         suffix = uuid4().hex[:8]
         return f"{prefix}/{user_id}/{safe_name}-{suffix}{ext}"
 
@@ -94,3 +94,10 @@ class S3Client:
             content = await body.read()
             content_type = response.get("ContentType")
             return content, content_type
+
+
+    @staticmethod
+    def _build_file_stem_hash(filename: str) -> str:
+        file_stem = os.path.splitext(os.path.basename(filename))[0]
+        payload = file_stem.encode("utf-8")
+        return hashlib.sha256(payload).hexdigest()[:12]

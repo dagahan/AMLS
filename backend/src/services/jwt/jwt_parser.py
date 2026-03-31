@@ -6,28 +6,30 @@ from typing import Any, cast
 from fastapi import HTTPException, status
 from jose import JWTError, jwt
 from jose.exceptions import ExpiredSignatureError
-from loguru import logger
 
 from src.config import get_app_config
-from src.core.utils import TimeTools
+from src.core.logging import get_logger
 from src.models.pydantic import AccessPayload, RefreshPayload
 from src.services.auth.sessions_manager import SessionsManager
 from src.storage.storage_manager import StorageManager
+
+
+logger = get_logger(__name__)
 
 
 class JwtParser:
     def __init__(self, storage_manager: StorageManager) -> None:
         self.app_config = get_app_config()
         self.sessions_manager = SessionsManager(storage_manager)
-        self.private_key = self._read_key("JWT_PRIVATE_KEY_PATH")
-        self.public_key = self._read_key("JWT_PUBLIC_KEY_PATH")
-        self.access_token_expire_minutes = int(self.app_config.infra.require("ACCESS_TOKEN_EXPIRE_MINUTES"))
-        self.refresh_token_expire_days = int(self.app_config.infra.require("REFRESH_TOKEN_EXPIRE_DAYS"))
+        self.private_key = self._read_key(self.app_config.infra.jwt_private_key_path)
+        self.public_key = self._read_key(self.app_config.infra.jwt_public_key_path)
+        self.access_token_expire_minutes = self.app_config.infra.access_token_expire_minutes
+        self.refresh_token_expire_days = self.app_config.infra.refresh_token_expire_days
         self.algorithm = "RS256"
 
 
-    def _read_key(self, env_var_name: str) -> str:
-        path = self.app_config.resolve_path(str(self.app_config.infra.require(env_var_name)))
+    def _read_key(self, path_value: str) -> str:
+        path = self.app_config.resolve_path(path_value)
         with open(path, "rb") as key_file:
             return key_file.read().decode("utf-8")
 
@@ -36,7 +38,7 @@ class JwtParser:
         try:
             return cast("dict[str, Any]", jwt.decode(token, self.public_key, algorithms=[self.algorithm]))
         except JWTError as error:
-            logger.error(f"JWT validation error: {error}")
+            logger.error("JWT validation failed", error=str(error))
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
 
 
@@ -46,10 +48,10 @@ class JwtParser:
         except ExpiredSignatureError:
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Token expired")
         except JWTError as error:
-            logger.debug(f"JWT validation error: {error}")
+            logger.debug("JWT decode rejected", error=str(error))
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
         except Exception as error:
-            logger.exception(f"Unexpected token decoding error: {error}")
+            logger.exception("Unexpected token decoding error", error=str(error))
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
 
 
@@ -106,7 +108,7 @@ class JwtParser:
         except Exception:
             expires_at = None
 
-        now_timestamp = TimeTools.now_time_stamp()
+        now_timestamp = int(datetime.now(UTC).timestamp())
         ttl = max(1, expires_at - now_timestamp) if expires_at is not None else 1
         self.sessions_manager.valkey.set(f"Invalid_refresh:{refresh_token}", "1", ex=ttl)
 

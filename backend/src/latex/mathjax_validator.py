@@ -18,7 +18,7 @@ class LatexValidationError(Exception):
 class MathJaxValidator:
     def __init__(self) -> None:
         app_config = get_app_config()
-        self.node_binary = str(app_config.infra.get("NODE_BINARY", "node"))
+        self.node_binary = app_config.infra.node_binary
         self.script_path = app_config.resolve_path(
             "backend/src/latex/validate_latex.mjs"
         )

@@ -1,127 +1,29 @@
 from __future__ import annotations
 
 import asyncio
-import copy
-import hashlib
-import json
-import os
-from collections.abc import Iterator, Mapping
 from pathlib import Path
+from time import perf_counter
 from typing import Any
-import tomllib
+from typing import TYPE_CHECKING
 
-from dynaconf import Dynaconf, Validator
-from dynaconf.validator import ValidationError
-from dotenv import dotenv_values, load_dotenv
-from loguru import logger
+from src.config.app_config import AppConfig
+from src.config.business_config import BusinessConfig
+from src.config.infra_config import InfraConfig
+from src.config.loader import (
+    build_business_hash,
+    load_business_values,
+    load_environment_values,
+    load_infrastructure_values,
+)
+from src.config.validation import load_validators, validate_configuration
+from src.core.logging import configure_logging, get_logger, is_logging_configured
+from src.core.paths import find_project_root
 
-from src.core.paths import find_project_root, resolve_project_path
-
-DEFAULT_INFRA_KEYS = {"RUNNING_INSIDE_DOCKER"}
-
-
-class ConfigSection(Mapping[str, Any]):
-    def __init__(self, data: Mapping[str, Any]) -> None:
-        self._data = copy.deepcopy(dict(data))
-
-
-    def __getitem__(self, key: str) -> Any:
-        return self._data[key]
+if TYPE_CHECKING:
+    from dynaconf import Validator
 
 
-    def __iter__(self) -> Iterator[str]:
-        return iter(self._data)
-
-
-    def __len__(self) -> int:
-        return len(self._data)
-
-
-    def get(self, path: str, default: Any = None) -> Any:
-        if path == "":
-            return self.as_dict()
-
-        current: Any = self._data
-        for part in path.split("."):
-            if not isinstance(current, Mapping) or part not in current:
-                return default
-            current = current[part]
-        return current
-
-
-    def require(self, path: str) -> Any:
-        value = self.get(path)
-        if value is None:
-            raise RuntimeError(f"Missing configuration value: {path}")
-        return value
-
-
-    def as_dict(self) -> dict[str, Any]:
-        return copy.deepcopy(self._data)
-
-
-class AppConfig:
-    def __init__(
-        self,
-        *,
-        project_root: Path,
-        infra: Mapping[str, Any],
-        business: Mapping[str, Any],
-        business_hash: str,
-    ) -> None:
-        self.project_root = project_root
-        self.infra = ConfigSection(infra)
-        self.business = ConfigSection(business)
-        self.business_hash = business_hash
-
-
-    def get(self, path: str, default: Any = None) -> Any:
-        if path.startswith("infra."):
-            return self.infra.get(path.removeprefix("infra."), default)
-        if path.startswith("business."):
-            return self.business.get(path.removeprefix("business."), default)
-        return default
-
-
-    def is_running_inside_docker(self) -> bool:
-        return bool(int(self.infra.get("RUNNING_INSIDE_DOCKER", 0)))
-
-
-    def service_host(self, service_name: str) -> str:
-        if self.is_running_inside_docker():
-            project_name = str(self.infra.require("COMPOSE_PROJECT_NAME"))
-            return f"{service_name}-{project_name}"
-        return str(self.infra.require(f"{service_name.upper()}_HOST"))
-
-
-    def service_port(self, service_name: str) -> int:
-        return int(self.infra.require(f"{service_name.upper()}_PORT"))
-
-
-    def resolve_path(self, path_value: str) -> Path:
-        return resolve_project_path(path_value, self.project_root)
-
-
-    def business_snapshot(self) -> dict[str, Any]:
-        return self.business.as_dict()
-
-
-    def get_difficulty(self, difficulty_key: str) -> dict[str, Any]:
-        difficulty = self.business.get(f"difficulties.{difficulty_key}")
-        if not isinstance(difficulty, dict):
-            raise RuntimeError(f"Unknown configured difficulty: {difficulty_key}")
-        return copy.deepcopy(difficulty)
-
-
-    def list_difficulties(self) -> list[dict[str, Any]]:
-        difficulties = self.business.get("difficulties", {})
-        if not isinstance(difficulties, Mapping):
-            return []
-        return [
-            {"key": key, **copy.deepcopy(value)}
-            for key, value in difficulties.items()
-            if isinstance(value, Mapping)
-        ]
+logger = get_logger(__name__)
 
 
 class ConfigManager:
@@ -131,7 +33,8 @@ class ConfigManager:
         self.business_path = self.project_root / "config/settings.toml"
         self.validators_path = self.project_root / "config/dynaconf_validators.toml"
         self._validators: list[Validator] = []
-        self._infra_keys: set[str] = set(DEFAULT_INFRA_KEYS)
+        self._infra_keys: set[str] = set()
+        self._infra_values: dict[str, Any] | None = None
         self._app_config: AppConfig | None = None
         self._watcher_task: asyncio.Task[None] | None = None
         self._watcher_lock = asyncio.Lock()
@@ -146,46 +49,66 @@ class ConfigManager:
 
 
     def bootstrap(self) -> AppConfig:
-        if self.env_path.exists():
-            load_dotenv(self.env_path, override=True, interpolate=True, encoding="utf-8")
-
-        self._validators, self._infra_keys = self._load_validators(self.validators_path)
-        infra = self._load_infra()
-        business = self._load_business()
-        self._validate(infra=infra, business=business)
-
-        business_hash = self._build_business_hash(business)
-        self._app_config = AppConfig(
-            project_root=self.project_root,
-            infra=infra,
-            business=business,
-            business_hash=business_hash,
+        started_at = perf_counter()
+        logger.info(
+            "Loading application configuration",
+            env_path=str(self.env_path),
+            business_path=str(self.business_path),
+            validators_path=str(self.validators_path),
         )
+
+        env_values = load_environment_values(self.env_path)
+        self._validators, self._infra_keys = load_validators(self.validators_path)
+        infra_values = load_infrastructure_values(env_values, self._infra_keys)
+        infra = InfraConfig(infra_values)
+        self._infra_values = dict(infra_values)
+
+        if not is_logging_configured():
+            configure_logging(
+                project_root=self.project_root,
+                time_zone_name=infra.time_zone_name,
+                level_name=infra.log_level_name,
+                renderer_name=infra.log_renderer_name,
+                access_logs=infra.access_logs_enabled,
+            )
+
+        business_values = load_business_values(self.business_path)
+        validate_configuration(
+            validators=self._validators,
+            infra=infra_values,
+            business=business_values,
+        )
+
+        self._app_config = self._build_app_config(infra=infra, business_values=business_values)
         self._business_mtime_ns = self._read_mtime_ns(self.business_path)
 
         logger.info(
-            "Loaded application configuration: env_path={}, business_path={}, validators_path={}, business_hash={}",
-            self.env_path,
-            self.business_path,
-            self.validators_path,
-            business_hash,
+            "Loaded application configuration",
+            business_hash=self._app_config.business_hash,
+            duration_ms=round((perf_counter() - started_at) * 1000, 2),
         )
         return self._app_config
 
 
     async def start_watcher(self, interval_seconds: float = 1.0) -> None:
         if self._watcher_task is not None:
+            logger.debug("Business config watcher is already running")
             return
 
         self._watcher_task = asyncio.create_task(
             self._watch_business_config(interval_seconds),
             name="config-settings-watcher",
         )
-        logger.info("Started business config watcher for {}", self.business_path)
+        logger.info(
+            "Started business config watcher",
+            business_path=str(self.business_path),
+            interval_seconds=interval_seconds,
+        )
 
 
     async def stop_watcher(self) -> None:
         if self._watcher_task is None:
+            logger.debug("Business config watcher is not running")
             return
 
         self._watcher_task.cancel()
@@ -195,90 +118,35 @@ class ConfigManager:
             pass
         finally:
             self._watcher_task = None
-            logger.info("Stopped business config watcher for {}", self.business_path)
+            logger.info("Stopped business config watcher", business_path=str(self.business_path))
 
 
     async def reload_business_config(self) -> AppConfig:
         async with self._watcher_lock:
+            started_at = perf_counter()
             current_config = self.app_config
-            business = self._load_business()
-            self._validate(infra=current_config.infra.as_dict(), business=business, only=["business"])
-            business_hash = self._build_business_hash(business)
-            self._app_config = AppConfig(
-                project_root=self.project_root,
-                infra=current_config.infra.as_dict(),
-                business=business,
-                business_hash=business_hash,
+            infra_values = self._require_infra_values()
+            business_values = load_business_values(self.business_path)
+            validate_configuration(
+                validators=self._validators,
+                infra=infra_values,
+                business=business_values,
+                only=["business"],
+            )
+            previous_hash = current_config.business_hash
+            self._app_config = self._build_app_config(
+                infra=current_config.infra,
+                business_values=business_values,
             )
             self._business_mtime_ns = self._read_mtime_ns(self.business_path)
             logger.info(
-                "Reloaded business configuration: business_path={}, business_hash={}",
-                self.business_path,
-                business_hash,
+                "Reloaded business configuration",
+                business_path=str(self.business_path),
+                previous_business_hash=previous_hash,
+                current_business_hash=self._app_config.business_hash,
+                duration_ms=round((perf_counter() - started_at) * 1000, 2),
             )
             return self._app_config
-
-
-    def _load_infra(self) -> dict[str, Any]:
-        file_values = {
-            key: value
-            for key, value in dotenv_values(self.env_path).items()
-            if value is not None
-        } if self.env_path.exists() else {}
-
-        data: dict[str, Any] = {}
-        for key in self._infra_keys:
-            raw_value = file_values.get(key)
-            if raw_value is None:
-                raw_value = os.environ.get(key)
-            if raw_value is None:
-                continue
-            data[key] = self._parse_scalar(raw_value)
-
-        if "RUNNING_INSIDE_DOCKER" not in data:
-            raw_running_inside_docker = os.environ.get("RUNNING_INSIDE_DOCKER")
-            data["RUNNING_INSIDE_DOCKER"] = (
-                self._parse_scalar(raw_running_inside_docker)
-                if raw_running_inside_docker is not None
-                else 0
-            )
-
-        return data
-
-
-    def _load_business(self) -> dict[str, Any]:
-        if not self.business_path.exists():
-            raise RuntimeError(f"Missing business config file: {self.business_path}")
-
-        with self.business_path.open("rb") as config_file:
-            raw_business = tomllib.load(config_file)
-
-        if not isinstance(raw_business, dict):
-            raise RuntimeError("Business config must be a TOML object")
-        return raw_business
-
-
-    def _validate(
-        self,
-        *,
-        infra: Mapping[str, Any],
-        business: Mapping[str, Any],
-        only: list[str] | None = None,
-    ) -> None:
-        settings = Dynaconf(environments=False, merge_enabled=False)
-        settings.validators.register(*self._validators)
-        settings.update(dict(infra), validate=False)
-        settings.update({"business": copy.deepcopy(dict(business))}, validate=False)
-
-        try:
-            settings.validators.validate_all(only=only)
-        except ValidationError as error:
-            logger.error(
-                "Configuration validation failed: only={}, details={}",
-                only,
-                error.details or str(error),
-            )
-            raise RuntimeError(f"Configuration validation failed: {error}") from error
 
 
     async def _watch_business_config(self, interval_seconds: float) -> None:
@@ -289,12 +157,18 @@ class ConfigManager:
                 continue
 
             try:
+                logger.info(
+                    "Detected business configuration change",
+                    business_path=str(self.business_path),
+                    previous_mtime_ns=self._business_mtime_ns,
+                    current_mtime_ns=current_mtime_ns,
+                )
                 await self.reload_business_config()
             except Exception as error:
                 logger.error(
-                    "Business configuration reload failed for {}: {}. Previous config kept.",
-                    self.business_path,
-                    error,
+                    "Business configuration reload failed",
+                    business_path=str(self.business_path),
+                    error=str(error),
                 )
 
 
@@ -305,39 +179,25 @@ class ConfigManager:
         return path.stat().st_mtime_ns
 
 
-    @staticmethod
-    def _build_business_hash(business: Mapping[str, Any]) -> str:
-        payload = json.dumps(business, sort_keys=True, separators=(",", ":"))
-        return hashlib.sha256(payload.encode("utf-8")).hexdigest()[:12]
+    def _build_app_config(
+        self,
+        *,
+        infra: InfraConfig,
+        business_values: dict[str, Any],
+    ) -> AppConfig:
+        business = BusinessConfig(business_values)
+        return AppConfig(
+            project_root=self.project_root,
+            infra=infra,
+            business=business,
+            business_hash=build_business_hash(business_values),
+        )
 
 
-    @staticmethod
-    def _parse_scalar(raw_value: str) -> Any:
-        normalized_value = raw_value.strip()
-        try:
-            parsed = tomllib.loads(f"value = {normalized_value}\n")
-        except tomllib.TOMLDecodeError:
-            return raw_value
-        return parsed["value"]
-
-
-    @staticmethod
-    def _load_validators(path: Path) -> tuple[list[Validator], set[str]]:
-        if not path.exists():
-            raise RuntimeError(f"Missing config validator file: {path}")
-
-        with path.open("rb") as validators_file:
-            raw_validators = tomllib.load(validators_file)
-
-        validators: list[Validator] = []
-        infra_keys: set[str] = set(DEFAULT_INFRA_KEYS)
-        for key, rules in raw_validators.items():
-            if not isinstance(rules, dict):
-                raise RuntimeError(f"Validator rules for {key} must be a TOML object")
-            validators.append(Validator(key, **rules))
-            if not key.startswith("business."):
-                infra_keys.add(key)
-        return validators, infra_keys
+    def _require_infra_values(self) -> dict[str, Any]:
+        if self._infra_values is None:
+            raise RuntimeError("Infrastructure configuration is not initialized")
+        return dict(self._infra_values)
 
 
 _CONFIG_MANAGER: ConfigManager | None = None

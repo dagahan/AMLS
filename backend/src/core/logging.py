@@ -1,57 +1,80 @@
-import inspect
-import logging
-import os
-import sys
-import time
+from __future__ import annotations
 
-from loguru import logger
+from typing import Any
 
-from src.core.utils import FileSystemTools
+from structlog.contextvars import bind_contextvars, clear_contextvars, get_contextvars
+from structlog.stdlib import (
+    BoundLogger,
+    get_logger as get_structlog_logger,
+)
 
+from src.core.logging_runtime import configure_logging, is_logging_configured
 
-class InterceptHandler(logging.Handler):
-    def emit(self, record: logging.LogRecord) -> None:
-        try:
-            log_level = logger.level(record.levelname).name
-        except ValueError:
-            log_level = record.levelname
-
-        current_frame = inspect.currentframe()
-        depth = 0
-        while current_frame is not None and current_frame.f_code.co_filename == logging.__file__:
-            current_frame = current_frame.f_back
-            depth += 1
-
-        logger.opt(depth=depth, exception=record.exc_info).log(log_level, record.getMessage())
+__all__ = [
+    "AppLogger",
+    "bind_context",
+    "clear_context",
+    "configure_logging",
+    "get_context",
+    "get_logger",
+    "is_logging_configured",
+]
 
 
-class LogSetup:
-    @staticmethod
-    def configure(time_zone_name: str = "UTC") -> None:
-        FileSystemTools.ensure_directory_exists("debug")
-        os.environ["TZ"] = time_zone_name
-        if hasattr(time, "tzset"):
-            time.tzset()
+class AppLogger:
+    def __init__(self, logger: BoundLogger) -> None:
+        self._logger = logger
 
-        logger.remove()
-        logger.add(
-            sys.stdout,
-            format=(
-                "<green>{time:HH:mm:ss}</green> | "
-                "<level>{level: <8}</level> | "
-                "<cyan>{name}</cyan>:<cyan>{function}</cyan>:<cyan>{line}</cyan> - "
-                "{message}"
-            ),
-            level="DEBUG",
-            catch=True,
-        )
-        logger.add(
-            "debug/debug.json",
-            format="{time} {level} {message}",
-            serialize=True,
-            rotation="1 day",
-            retention="14 days",
-            compression="zip",
-            level="DEBUG",
-            catch=True,
-        )
+
+    def bind(self, **fields: object) -> AppLogger:
+        return AppLogger(self._logger.bind(**fields))
+
+
+    def debug(self, event: str, *args: object, **fields: object) -> None:
+        self._logger.debug(_format_event_message(event, args), **fields)
+
+
+    def info(self, event: str, *args: object, **fields: object) -> None:
+        self._logger.info(_format_event_message(event, args), **fields)
+
+
+    def warning(self, event: str, *args: object, **fields: object) -> None:
+        self._logger.warning(_format_event_message(event, args), **fields)
+
+
+    def error(self, event: str, *args: object, **fields: object) -> None:
+        self._logger.error(_format_event_message(event, args), **fields)
+
+
+    def critical(self, event: str, *args: object, **fields: object) -> None:
+        self._logger.critical(_format_event_message(event, args), **fields)
+
+
+    def exception(self, event: str, *args: object, **fields: object) -> None:
+        self._logger.exception(_format_event_message(event, args), **fields)
+
+
+def bind_context(**fields: object) -> None:
+    bind_contextvars(**fields)
+
+
+def clear_context() -> None:
+    clear_contextvars()
+
+
+def get_context() -> dict[str, Any]:
+    return dict(get_contextvars())
+
+
+def get_logger(name: str | None = None) -> AppLogger:
+    return AppLogger(get_structlog_logger(name))
+
+
+def _format_event_message(event: str, args: tuple[object, ...]) -> str:
+    if not args:
+        return event
+
+    try:
+        return event.format(*args)
+    except Exception as error:
+        return f"{event} | formatting_error={error!r} | args={args!r}"

@@ -3,14 +3,17 @@ from __future__ import annotations
 from contextlib import asynccontextmanager
 from typing import TYPE_CHECKING, cast
 
-from loguru import logger
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker, create_async_engine
 
 from src.config import get_app_config
+from src.core.logging import get_logger
 
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator
+
+
+logger = get_logger(__name__)
 
 
 class DataBase:
@@ -19,11 +22,11 @@ class DataBase:
         self.engine: AsyncEngine | None = None
         self.async_session: async_sessionmaker[AsyncSession] | None = None
 
-        self.db_host = app_config.service_host("postgres")
-        self.db_port = app_config.service_port("postgres")
-        self.db_user = str(app_config.infra.require("POSTGRES_USER"))
-        self.db_password = str(app_config.infra.require("POSTGRES_PASSWORD"))
-        self.db_name = str(app_config.infra.require("POSTGRES_DB"))
+        self.db_host = app_config.postgres_host()
+        self.db_port = app_config.infra.postgres_port
+        self.db_user = app_config.infra.postgres_user
+        self.db_password = app_config.infra.postgres_password
+        self.db_name = app_config.infra.postgres_database_name
 
         self.async_engine_config = (
             f"postgresql+asyncpg://{self.db_user}:{self.db_password}"
@@ -33,9 +36,9 @@ class DataBase:
             f"postgresql+psycopg://{self.db_user}:{self.db_password}"
             f"@{self.db_host}:{self.db_port}/{self.db_name}"
         )
-        self.echo = bool(int(app_config.infra.require("DB_ECHO")))
-        self.pool_size = int(app_config.infra.require("DB_POOL_SIZE"))
-        self.max_overflow = int(app_config.infra.require("DB_MAX_OVERFLOW"))
+        self.echo = app_config.infra.database_echo
+        self.pool_size = app_config.infra.database_pool_size
+        self.max_overflow = app_config.infra.database_max_overflow
 
 
     async def init_alchemy_engine(self) -> None:
@@ -93,7 +96,7 @@ class DataBase:
                 value = cast("int | None", result.scalar())
                 return value == 1
         except Exception as error:
-            logger.error(f"Database connection failed: {error}")
+            logger.error("Database connection failed", error=str(error))
             return False
 
 
