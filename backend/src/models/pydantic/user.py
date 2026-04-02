@@ -3,15 +3,10 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 from uuid import UUID
 
-from src.storage.db.enums import UserRole
 from src.models.pydantic.common import AmlsSchema
-from src.models.pydantic.entrance_test import (
-    EntranceTestSessionResponse,
-    build_entrance_test_session_response,
-)
+from src.storage.db.enums import UserRole
 
 if TYPE_CHECKING:
-    from src.models.alchemy.entrance_test import EntranceTestSession
     from src.models.alchemy.user import User
 
 
@@ -23,7 +18,6 @@ class UserResponse(AmlsSchema):
     avatar_url: str | None
     role: UserRole
     is_active: bool
-    entrance_test: EntranceTestSessionResponse | None = None
 
 
 class AvatarSnapshot(AmlsSchema):
@@ -31,14 +25,7 @@ class AvatarSnapshot(AmlsSchema):
     avatar_url: str | None
 
 
-def build_user_response(
-    user: "User",
-    entrance_test_session: "EntranceTestSession | None" = None,
-) -> UserResponse:
-    loaded_entrance_test_session = entrance_test_session
-    if loaded_entrance_test_session is None:
-        loaded_entrance_test_session = user.__dict__.get("entrance_test_session")
-
+def build_user_response(user: "User") -> UserResponse:
     return UserResponse(
         id=user.id,
         email=user.email,
@@ -47,9 +34,4 @@ def build_user_response(
         avatar_url=user.avatar_url,
         role=user.role,
         is_active=user.is_active,
-        entrance_test=(
-            build_entrance_test_session_response(loaded_entrance_test_session)
-            if loaded_entrance_test_session is not None
-            else None
-        ),
     )

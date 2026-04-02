@@ -8,7 +8,7 @@ from sqlalchemy import Select, select
 from sqlalchemy.orm import selectinload
 
 from src.storage.db.enums import DifficultyLevel
-from src.models.alchemy import Problem, ProblemType, Subtopic
+from src.models.alchemy import CourseNode, Problem, ProblemType, Subtopic
 
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
@@ -18,6 +18,7 @@ def build_problem_statement() -> Select[tuple[Problem]]:
     return select(Problem).options(
         selectinload(Problem.subtopic),
         selectinload(Problem.problem_type).selectinload(ProblemType.prerequisite_links),
+        selectinload(Problem.course_node),
         selectinload(Problem.answer_options),
     )
 
@@ -28,6 +29,7 @@ def apply_problem_filters(
     subtopic_id: uuid.UUID | None,
     difficulty: DifficultyLevel | None,
     problem_type_id: uuid.UUID | None,
+    course_node_id: uuid.UUID | None,
 ) -> Select[tuple[Problem]]:
     if topic_id is not None:
         statement = statement.join(Subtopic, Problem.subtopic_id == Subtopic.id).where(
@@ -42,6 +44,9 @@ def apply_problem_filters(
 
     if problem_type_id is not None:
         statement = statement.where(Problem.problem_type_id == problem_type_id)
+
+    if course_node_id is not None:
+        statement = statement.where(Problem.course_node_id == course_node_id)
 
     return statement
 
@@ -76,4 +81,16 @@ async def ensure_problem_type_exists(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Problem type not found",
+        )
+
+
+async def ensure_course_node_exists(
+    session: "AsyncSession",
+    course_node_id: uuid.UUID,
+) -> None:
+    result = await session.execute(select(CourseNode.id).where(CourseNode.id == course_node_id))
+    if result.scalar_one_or_none() is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Course node not found",
         )

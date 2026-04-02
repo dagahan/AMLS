@@ -8,12 +8,11 @@ dependencies = [
     "asyncpg==0.31.0",
     "bcrypt==5.0.0",
     "botocore==1.35.36",
-    "colorama==0.4.6",
     "dynaconf==3.2.12",
     "email-validator==2.2.0",
     "fastapi==0.116.0",
     "greenlet==3.3.2",
-    "loguru==0.7.3",
+    "structlog>=24.0.0",
     "numpy==2.2.6",
     "psycopg[binary]==3.3.3",
     "pydantic==2.12.5",
@@ -72,12 +71,10 @@ plugins = [
 
 [[tool.mypy.overrides]]
 module = [
-    "colorama",
     "dynaconf",
     "dynaconf.validator",
     "jose",
     "jose.exceptions",
-    "loguru",
     "valkey",
 ]
 ignore_missing_imports = true

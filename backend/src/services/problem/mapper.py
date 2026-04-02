@@ -6,6 +6,7 @@ from src.models.pydantic import (
     ProblemAnswerOptionResponse,
     ProblemResponse,
 )
+from src.models.pydantic.course import CourseNodeResponse
 from src.models.pydantic.problem import AdminProblemAnswerOptionResponse
 from src.models.pydantic.problem_type import ProblemTypeResponse
 from src.models.pydantic.topic import SubtopicResponse
@@ -18,6 +19,7 @@ def build_problem_response(problem: Problem) -> ProblemResponse:
         subtopic=SubtopicResponse.model_validate(problem.subtopic),
         difficulty=build_difficulty_response(problem.difficulty),
         problem_type=_build_problem_type_response(problem),
+        course_node=_build_course_node_response(problem),
         condition=problem.condition,
         condition_images=problem.condition_images,
         answer_options=_build_answer_option_responses(problem),
@@ -30,6 +32,7 @@ def build_admin_problem_response(problem: Problem) -> AdminProblemResponse:
         subtopic=SubtopicResponse.model_validate(problem.subtopic),
         difficulty=build_difficulty_response(problem.difficulty),
         problem_type=_build_problem_type_response(problem),
+        course_node=_build_course_node_response(problem),
         condition=problem.condition,
         condition_images=problem.condition_images,
         solution=problem.solution,
@@ -69,3 +72,10 @@ def _build_problem_type_response(problem: Problem) -> ProblemTypeResponse:
         name=problem.problem_type.name,
         prerequisite_ids=prerequisite_ids,
     )
+
+
+def _build_course_node_response(problem: Problem) -> CourseNodeResponse | None:
+    if problem.course_node is None:
+        return None
+
+    return CourseNodeResponse.model_validate(problem.course_node)

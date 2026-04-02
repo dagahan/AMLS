@@ -1,17 +1,22 @@
 from __future__ import annotations
 
-import time
 from contextlib import asynccontextmanager
 from contextvars import ContextVar
-from typing import Any, Awaitable, Callable, TypeVar
+from functools import wraps
+from time import perf_counter
+from typing import Any, Awaitable, Callable, ParamSpec, TypeVar
 
-from loguru import logger
 from pydantic import BaseModel, ConfigDict, Field
 
+from src.core.logging import get_logger
+
+P = ParamSpec("P")
 T = TypeVar("T")
 UndoAction = Callable[[], Awaitable[None]]
 DoAction = Callable[[], Awaitable[T]]
 UndoWithResult = Callable[[T], Awaitable[None]]
+
+logger = get_logger(__name__)
 
 _current_transaction: ContextVar["TransactionRecorder | None"] = ContextVar(
     "_current_transaction",
@@ -34,14 +39,18 @@ class TransactionRecorder(BaseModel):
 
 
     def start_step_timer(self, step_name: str) -> None:
-        self.step_starts[step_name] = time.time()
+        self.step_starts[step_name] = perf_counter()
 
 
     def end_step_timer(self, step_name: str) -> None:
         if step_name in self.step_starts:
-            duration_ms = (time.time() - self.step_starts[step_name]) * 1000
+            duration_ms = (perf_counter() - self.step_starts[step_name]) * 1000
             self.step_times[step_name] = duration_ms
-            logger.info(f"Step '{step_name}' completed in {duration_ms:.2f} ms")
+            logger.info(
+                "Transaction step completed",
+                step_name=step_name,
+                duration_ms=round(duration_ms, 2),
+            )
             del self.step_starts[step_name]
 
 
@@ -51,9 +60,7 @@ class TransactionRecorder(BaseModel):
             try:
                 await action()
             except Exception as error:
-                logger.error(
-                    f"<red>Rollback action failed:</red> <red><bg red><white>{error}</white></bg red></red>"
-                )
+                logger.exception("Rollback action failed", error=str(error))
 
 
 @asynccontextmanager
@@ -63,15 +70,20 @@ async def transaction_scope() -> Any:
     try:
         yield
     except Exception as error:
-        logger.warning(f"Transaction failed after {recorder.completed_steps} steps: {error}")
+        logger.exception(
+            "Transaction failed",
+            completed_steps=recorder.completed_steps,
+            error=str(error),
+        )
         await recorder.rollback_all()
         raise
     finally:
         _current_transaction.reset(token)
 
 
-def transactional(func: Callable[..., Awaitable[T]]) -> Callable[..., Awaitable[T]]:
-    async def wrapper(*args: Any, **kwargs: Any) -> T:
+def transactional(func: Callable[P, Awaitable[T]]) -> Callable[P, Awaitable[T]]:
+    @wraps(func)
+    async def wrapper(*args: P.args, **kwargs: P.kwargs) -> T:
         async with transaction_scope():
             return await func(*args, **kwargs)
 
@@ -101,9 +113,7 @@ async def execute_atomic_step(
                 try:
                     await rollback(result)
                 except Exception as error:
-                    logger.error(
-                        f"<red>Rollback failed:</red> <red><bg red><white>{error}</white></bg red></red>"
-                    )
+                    logger.exception("Rollback failed", step_name=step_name, error=str(error))
                     raise
 
             recorder.register_rollback(rollback_action)

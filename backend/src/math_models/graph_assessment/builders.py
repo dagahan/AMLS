@@ -5,33 +5,36 @@ import uuid
 from collections import deque
 
 import numpy as np
-from loguru import logger
 
-from src.models.pydantic import ForestArtifact, GraphArtifact
+from src.core.logging import get_logger
+from src.models.pydantic.assessment_runtime import ExactInferenceArtifact, GraphArtifact
 
 
-class ForestStructureError(RuntimeError):
+logger = get_logger(__name__)
+
+
+class ExactInferenceStructureError(RuntimeError):
     pass
 
 
 def build_graph_artifact(
-    problem_type_ids: tuple[uuid.UUID, ...],
+    node_ids: tuple[uuid.UUID, ...],
     prerequisite_edges: tuple[tuple[uuid.UUID, uuid.UUID], ...],
 ) -> GraphArtifact:
-    ordered_problem_type_ids = tuple(problem_type_ids)
+    ordered_node_ids = tuple(node_ids)
     index_by_id = {
-        problem_type_id: index
-        for index, problem_type_id in enumerate(ordered_problem_type_ids)
+        node_id: index
+        for index, node_id in enumerate(ordered_node_ids)
     }
-    node_count = len(ordered_problem_type_ids)
+    node_count = len(ordered_node_ids)
     prerequisites_by_index: list[list[int]] = [[] for _ in range(node_count)]
     dependents_by_index: list[list[int]] = [[] for _ in range(node_count)]
 
-    for problem_type_id, prerequisite_problem_type_id in prerequisite_edges:
-        problem_type_index = index_by_id[problem_type_id]
-        prerequisite_index = index_by_id[prerequisite_problem_type_id]
-        prerequisites_by_index[problem_type_index].append(prerequisite_index)
-        dependents_by_index[prerequisite_index].append(problem_type_index)
+    for node_id, prerequisite_node_id in prerequisite_edges:
+        node_index = index_by_id[node_id]
+        prerequisite_index = index_by_id[prerequisite_node_id]
+        prerequisites_by_index[node_index].append(prerequisite_index)
+        dependents_by_index[prerequisite_index].append(node_index)
 
     normalized_prerequisites = tuple(
         tuple(sorted(indices))
@@ -51,14 +54,14 @@ def build_graph_artifact(
     )
 
     logger.info(
-        "Built entrance assessment graph artifact: node_count={}, edge_count={}, root_count={}",
+        "Built assessment graph artifact: node_count={}, edge_count={}, root_count={}",
         node_count,
         len(prerequisite_edges),
         sum(1 for indegree in indegree_by_index if indegree == 0),
     )
 
     return GraphArtifact(
-        node_ids=ordered_problem_type_ids,
+        node_ids=ordered_node_ids,
         index_by_id=index_by_id,
         prerequisites_by_index=normalized_prerequisites,
         dependents_by_index=normalized_dependents,
@@ -67,15 +70,15 @@ def build_graph_artifact(
     )
 
 
-def build_forest_artifact(graph_artifact: GraphArtifact) -> ForestArtifact:
+def build_exact_inference_artifact(graph_artifact: GraphArtifact) -> ExactInferenceArtifact:
     if np.any(graph_artifact.indegree_by_index > 1):
         invalid_indices = [
             index
             for index, indegree in enumerate(graph_artifact.indegree_by_index.tolist())
             if indegree > 1
         ]
-        raise ForestStructureError(
-            "Entrance assessment exact Bayesian engine requires a forest, "
+        raise ExactInferenceStructureError(
+            "Exact assessment inference requires a forest-like prerequisite shape, "
             f"but found nodes with multiple prerequisites: {invalid_indices}"
         )
 
@@ -108,14 +111,14 @@ def build_forest_artifact(graph_artifact: GraphArtifact) -> ForestArtifact:
     initial_entropy = math.log(feasible_state_count)
 
     logger.info(
-        "Built entrance assessment forest artifact: node_count={}, root_count={}, max_depth={}, feasible_state_count={}",
+        "Built exact assessment inference artifact: node_count={}, root_count={}, max_depth={}, feasible_state_count={}",
         node_count,
         len(root_indices),
         max_depth,
         feasible_state_count,
     )
 
-    return ForestArtifact(
+    return ExactInferenceArtifact(
         parent_by_index=parent_by_index,
         children_by_index=children_by_index,
         root_indices=root_indices,
@@ -151,9 +154,7 @@ def _build_topological_order(
                 queue.append(dependent_index)
 
     if len(ordered_indices) != len(prerequisites_by_index):
-        raise ForestStructureError(
-            "Entrance assessment prerequisite graph contains a cycle"
-        )
+        raise ExactInferenceStructureError("Assessment prerequisite graph contains a cycle")
 
     return tuple(ordered_indices)
 

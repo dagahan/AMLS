@@ -4,15 +4,14 @@ import asyncio
 import uuid
 from typing import TYPE_CHECKING, TypedDict
 
-from loguru import logger
 from sqlalchemy import delete, func, select
 
 from src.config import bootstrap_config
+from src.core.logging import get_logger
 from src.storage.db.database import DataBase
-from src.storage.db.enums import DifficultyLevel, EntranceTestStatus, ProblemAnswerOptionType
+from src.storage.db.enums import DifficultyLevel, ProblemAnswerOptionType
 from src.storage.db.reference_dataset import PROBLEM_TYPE_DATA
 from src.models.alchemy import (
-    EntranceTestSession,
     Problem,
     ProblemAnswerOption,
     ProblemType,
@@ -23,6 +22,9 @@ from src.models.alchemy import (
 
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
+
+
+logger = get_logger(__name__)
 
 
 class GeneratedAnswerOption(TypedDict):
@@ -113,7 +115,6 @@ async def load_reference_problem_bank(db: DataBase) -> None:
         deleted_response_count = await _count_rows(session, ResponseEvent)
 
         await session.execute(delete(Problem))
-        await _reset_entrance_test_sessions(session)
 
         problem_types_by_name = await _load_problem_types_by_name(session)
         subtopic_ids_by_key = await _load_subtopic_ids_by_key(session)
@@ -2167,19 +2168,6 @@ async def _count_rows(session: "AsyncSession", model: type[object]) -> int:
     return int(result.scalar_one())
 
 
-async def _reset_entrance_test_sessions(session: "AsyncSession") -> None:
-    result = await session.execute(select(EntranceTestSession))
-    for entrance_test_session in result.scalars().all():
-        entrance_test_session.status = EntranceTestStatus.PENDING
-        entrance_test_session.current_problem_id = None
-        entrance_test_session.started_at = None
-        entrance_test_session.completed_at = None
-        entrance_test_session.skipped_at = None
-        entrance_test_session.final_state_index = None
-        entrance_test_session.final_state_probability = None
-        entrance_test_session.learned_problem_type_ids = []
-        entrance_test_session.inner_fringe_problem_type_ids = []
-        entrance_test_session.outer_fringe_problem_type_ids = []
 
 
 async def _load_problem_types_by_name(

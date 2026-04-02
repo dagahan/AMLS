@@ -20,10 +20,10 @@ if str(BACKEND_DIR) not in sys.path:
     sys.path.insert(0, str(BACKEND_DIR))
 
 from src.config import bootstrap_config
-from src.core.utils import PasswordTools
 from src.fast_api.fastapi_server import create_application
-from src.models.alchemy import Base, EntranceTestStructure, User
+from src.models.alchemy import Base, Course, User
 from src.models.pydantic import TokenPairResponse
+from src.services.auth.passwords import hash_password
 from src.storage.storage_manager import StorageManager
 from src.storage.db.database import DataBase
 from src.storage.db.enums import UserRole
@@ -40,7 +40,7 @@ def bootstrap_environment() -> Iterator[None]:
 @pytest.fixture(scope="session", autouse=True)
 def reset_database(bootstrap_environment: None) -> Iterator[None]:
     database = DataBase()
-    storage_manager = StorageManager(database)
+    storage_manager = StorageManager()
     sync_dsn = database.sync_engine_config.replace("+psycopg", "")
     admin_dsn = sync_dsn.rsplit("/", maxsplit=1)[0] + "/postgres"
 
@@ -82,8 +82,11 @@ async def storage_manager(reset_database: None) -> AsyncIterator[StorageManager]
 
 
 @pytest_asyncio.fixture
-async def database(storage_manager: StorageManager) -> AsyncIterator[DataBase]:
-    yield storage_manager.get_database()
+async def database(reset_database: None) -> AsyncIterator[DataBase]:
+    database = DataBase()
+    await database.init_alchemy_engine()
+    yield database
+    await database.dispose()
 
 
 @pytest_asyncio.fixture(autouse=True)
@@ -94,8 +97,8 @@ async def prepare_test_state(storage_manager: StorageManager, database: DataBase
     await load_reference_problem_bank(database)
 
     async with database.session_ctx() as session:
+        await session.execute(delete(Course))
         await session.execute(delete(User).where(User.email != "admin@example.org"))
-        await session.execute(delete(EntranceTestStructure))
 
     yield
 
@@ -187,7 +190,7 @@ async def _seed_reference_database() -> None:
                         first_name="Admin",
                         last_name="User",
                         avatar_url=None,
-                        hashed_password=PasswordTools.hash_password("Admin123!"),
+                        hashed_password=hash_password("Admin123!"),
                         role=UserRole.ADMIN,
                         is_active=True,
                     )

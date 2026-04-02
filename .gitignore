@@ -161,3 +161,4 @@ node_modules/
 ops/openclaw/gmail_monitor/.venv/
 ops/openclaw/gmail_monitor/local/
 ops/openclaw/gmail_monitor/*.local.json
+.opencode.json

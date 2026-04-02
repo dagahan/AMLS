@@ -9,7 +9,8 @@ from src.storage.db.enums import UserRole
 from src.models.alchemy.common import Base, IdMixin, TimestampMixin
 
 if TYPE_CHECKING:
-    from src.models.alchemy.entrance_test import EntranceTestSession
+    from src.models.alchemy.course import Course, CourseEnrollment
+    from src.models.alchemy.test import GraphAssessment, TestAttempt
 
 
 class User(Base, IdMixin, TimestampMixin):
@@ -30,8 +31,19 @@ class User(Base, IdMixin, TimestampMixin):
         nullable=False,
     )
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
-    entrance_test_session: Mapped["EntranceTestSession | None"] = relationship(
+    courses_authored: Mapped[list["Course"]] = relationship(
+        back_populates="author",
+        foreign_keys="Course.author_id",
+    )
+    course_enrollments: Mapped[list["CourseEnrollment"]] = relationship(
         back_populates="user",
         cascade="all, delete-orphan",
-        uselist=False,
+    )
+    test_attempts: Mapped[list["TestAttempt"]] = relationship(
+        back_populates="user",
+        cascade="all, delete-orphan",
+    )
+    graph_assessments: Mapped[list["GraphAssessment"]] = relationship(
+        back_populates="user",
+        cascade="all, delete-orphan",
     )

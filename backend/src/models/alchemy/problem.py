@@ -11,6 +11,7 @@ from src.storage.db.enums import DifficultyLevel, ProblemAnswerOptionType
 from src.models.alchemy.common import Base, IdMixin, TimestampMixin
 
 if TYPE_CHECKING:
+    from src.models.alchemy.course_graph import CourseNode
     from src.models.alchemy.problem_type import ProblemType
     from src.models.alchemy.topic import Subtopic
 
@@ -36,6 +37,11 @@ class Problem(Base, IdMixin, TimestampMixin):
         ForeignKey("problem_types.id", ondelete="RESTRICT"),
         nullable=False,
     )
+    course_node_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("course_nodes.id", ondelete="SET NULL"),
+        nullable=True,
+    )
     condition: Mapped[str] = mapped_column(Text, nullable=False)
     solution: Mapped[str] = mapped_column(Text, nullable=False)
     condition_images: Mapped[list[str]] = mapped_column(JSONB, default=list, nullable=False)
@@ -43,6 +49,7 @@ class Problem(Base, IdMixin, TimestampMixin):
 
     subtopic: Mapped["Subtopic"] = relationship(back_populates="problems")
     problem_type: Mapped["ProblemType"] = relationship(back_populates="problems")
+    course_node: Mapped["CourseNode | None"] = relationship(back_populates="problems")
     answer_options: Mapped[list["ProblemAnswerOption"]] = relationship(
         back_populates="problem",
         cascade="all, delete-orphan",

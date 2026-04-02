@@ -1,17 +1,32 @@
 from src.models.alchemy.common import Base, IdMixin, TimestampMixin
-from src.models.alchemy.entrance_test import EntranceTestSession
-from src.models.alchemy.entrance_test_structure import EntranceTestStructure
+from src.models.alchemy.course import Course, CourseEnrollment
+from src.models.alchemy.course_graph import (
+    CourseGraphVersion,
+    CourseGraphVersionEdge,
+    CourseGraphVersionNode,
+    CourseNode,
+    Lecture,
+    LecturePage,
+)
 from src.models.alchemy.problem import Problem, ProblemAnswerOption
 from src.models.alchemy.problem_type import ProblemType, ProblemTypePrerequisite
 from src.models.alchemy.response import ResponseEvent
+from src.models.alchemy.test import GraphAssessment, TestAttempt
 from src.models.alchemy.topic import Subtopic, SubtopicPrerequisite, Topic, TopicSubtopic
 from src.models.alchemy.user import User
 
 __all__ = [
     "Base",
-    "EntranceTestSession",
-    "EntranceTestStructure",
+    "Course",
+    "CourseEnrollment",
+    "CourseGraphVersion",
+    "CourseGraphVersionEdge",
+    "CourseGraphVersionNode",
+    "CourseNode",
+    "GraphAssessment",
     "IdMixin",
+    "Lecture",
+    "LecturePage",
     "Problem",
     "ProblemAnswerOption",
     "ProblemType",
@@ -19,6 +34,7 @@ __all__ = [
     "ResponseEvent",
     "Subtopic",
     "SubtopicPrerequisite",
+    "TestAttempt",
     "TimestampMixin",
     "Topic",
     "TopicSubtopic",

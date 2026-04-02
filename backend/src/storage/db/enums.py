@@ -20,19 +20,20 @@ class DifficultyLevel(StrEnum):
     PROFICIENT = "proficient"
 
 
-class EntranceTestStatus(StrEnum):
-    PENDING = "pending"
-    ACTIVE = "active"
-    COMPLETED = "completed"
-    SKIPPED = "skipped"
-
-
-class EntranceTestStructureStatus(StrEnum):
+class CourseGraphVersionStatus(StrEnum):
+    DRAFT = "draft"
     READY = "ready"
     FAILED = "failed"
+    ARCHIVED = "archived"
 
 
-class EntranceTestResultNodeStatus(StrEnum):
-    LEARNED = "learned"
-    READY = "ready"
-    LOCKED = "locked"
+class TestAttemptKind(StrEnum):
+    ENTRANCE = "entrance"
+    GENERAL = "general"
+
+
+class TestAttemptStatus(StrEnum):
+    ACTIVE = "active"
+    PAUSED = "paused"
+    COMPLETED = "completed"
+    CANCELLED = "cancelled"

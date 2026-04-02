@@ -31,6 +31,7 @@ def get_problem_router(storage_manager: StorageManager) -> APIRouter:
         subtopic_id: str | None = Query(default=None),
         difficulty: DifficultyLevel | None = Query(default=None),
         problem_type_id: str | None = Query(default=None),
+        course_node_id: str | None = Query(default=None),
         limit: int = Query(default=20, ge=1, le=100),
         offset: int = Query(default=0, ge=0),
         auth: AuthContext = Depends(require_role()),
@@ -40,6 +41,7 @@ def get_problem_router(storage_manager: StorageManager) -> APIRouter:
             subtopic_id=parse_optional_uuid(subtopic_id, "subtopic_id"),
             difficulty=difficulty,
             problem_type_id=parse_optional_uuid(problem_type_id, "problem_type_id"),
+            course_node_id=parse_optional_uuid(course_node_id, "course_node_id"),
             limit=limit,
             offset=offset,
         )
@@ -67,6 +69,7 @@ def get_problem_router(storage_manager: StorageManager) -> APIRouter:
         subtopic_id: str | None = Query(default=None),
         difficulty: DifficultyLevel | None = Query(default=None),
         problem_type_id: str | None = Query(default=None),
+        course_node_id: str | None = Query(default=None),
         limit: int = Query(default=20, ge=1, le=100),
         offset: int = Query(default=0, ge=0),
         auth: AuthContext = Depends(require_role(role=UserRole.ADMIN)),
@@ -76,6 +79,7 @@ def get_problem_router(storage_manager: StorageManager) -> APIRouter:
             subtopic_id=parse_optional_uuid(subtopic_id, "subtopic_id"),
             difficulty=difficulty,
             problem_type_id=parse_optional_uuid(problem_type_id, "problem_type_id"),
+            course_node_id=parse_optional_uuid(course_node_id, "course_node_id"),
             limit=limit,
             offset=offset,
         )

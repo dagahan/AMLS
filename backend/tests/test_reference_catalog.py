@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from collections import Counter
-from datetime import UTC, datetime
 import uuid
 from typing import TYPE_CHECKING
 
@@ -9,15 +8,7 @@ import pytest
 from sqlalchemy import func, select
 
 from src.config import get_app_config
-from src.core.utils import PasswordTools
-from src.storage.db.database import DataBase
-from src.storage.db.enums import EntranceTestStatus, ProblemAnswerOptionType, UserRole
-from src.storage.db.problem_type_tree import build_problem_type_tree_lines, build_problem_type_tree_text
-from src.storage.db.reference_dataset import PROBLEM_TYPE_DATA, TOPIC_DATA
-from src.storage.db.reference_problem_bank import build_reference_problem_bank, load_reference_problem_bank
-from src.storage.db.reference_sync import sync_reference_data
 from src.models.alchemy import (
-    EntranceTestSession,
     Problem,
     ProblemAnswerOption,
     ProblemType,
@@ -27,6 +18,19 @@ from src.models.alchemy import (
     Topic,
     User,
 )
+from src.storage.db.database import DataBase
+from src.storage.db.enums import ProblemAnswerOptionType, UserRole
+from src.services.auth.passwords import hash_password
+from src.storage.db.problem_type_tree import (
+    build_problem_type_tree_lines,
+    build_problem_type_tree_text,
+)
+from src.storage.db.reference_dataset import PROBLEM_TYPE_DATA, TOPIC_DATA
+from src.storage.db.reference_problem_bank import (
+    build_reference_problem_bank,
+    load_reference_problem_bank,
+)
+from src.storage.db.reference_sync import sync_reference_data
 
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
@@ -112,7 +116,7 @@ async def test_load_reference_problem_bank_restores_reference_catalog(
 
 
 @pytest.mark.asyncio
-async def test_load_reference_problem_bank_resets_sessions_and_deletes_old_responses(
+async def test_load_reference_problem_bank_deletes_old_responses(
     database: DataBase,
 ) -> None:
     async with database.session_ctx() as session:
@@ -135,57 +139,27 @@ async def test_load_reference_problem_bank_resets_sessions_and_deletes_old_respo
             first_name="Restore",
             last_name="Student",
             avatar_url=None,
-            hashed_password=PasswordTools.hash_password("Student123!"),
+            hashed_password=hash_password("Student123!"),
             role=UserRole.STUDENT,
             is_active=True,
         )
         session.add(student)
         await session.flush()
 
-        entrance_test_session = EntranceTestSession(
-            user_id=student.id,
-            status=EntranceTestStatus.ACTIVE,
-            structure_version=1,
-            current_problem_id=seeded_problem.id,
-            final_state_index=3,
-            final_state_probability=0.82,
-            learned_problem_type_ids=[seeded_problem.problem_type_id],
-            inner_fringe_problem_type_ids=[seeded_problem.problem_type_id],
-            outer_fringe_problem_type_ids=[seeded_problem.problem_type_id],
-            started_at=datetime.now(UTC),
-        )
-        session.add(entrance_test_session)
-        await session.flush()
-
         response_event = ResponseEvent(
             user_id=student.id,
             problem_id=seeded_problem.id,
             answer_option_id=answer_option.id,
-            entrance_test_session_id=entrance_test_session.id,
         )
         session.add(response_event)
         await session.flush()
-
-        entrance_test_session_id = entrance_test_session.id
 
     await sync_reference_data(database)
     await load_reference_problem_bank(database)
 
     async with database.session_ctx() as session:
-        reloaded_session = await session.get(EntranceTestSession, entrance_test_session_id)
         response_count = await _count_rows(session, ResponseEvent)
 
-    assert reloaded_session is not None
-    assert reloaded_session.status == EntranceTestStatus.PENDING
-    assert reloaded_session.current_problem_id is None
-    assert reloaded_session.started_at is None
-    assert reloaded_session.completed_at is None
-    assert reloaded_session.skipped_at is None
-    assert reloaded_session.final_state_index is None
-    assert reloaded_session.final_state_probability is None
-    assert reloaded_session.learned_problem_type_ids == []
-    assert reloaded_session.inner_fringe_problem_type_ids == []
-    assert reloaded_session.outer_fringe_problem_type_ids == []
     assert response_count == 0
 
 

@@ -3,6 +3,7 @@ from uuid import UUID
 from pydantic import Field, model_validator
 
 from src.storage.db.enums import DifficultyLevel, ProblemAnswerOptionType
+from src.models.pydantic.course import CourseNodeResponse
 from src.models.pydantic.common import AmlsSchema
 from src.models.pydantic.difficulty import DifficultyResponse
 from src.models.pydantic.problem_type import ProblemTypeResponse
@@ -18,6 +19,7 @@ class ProblemCreate(AmlsSchema):
     subtopic_id: UUID
     difficulty: DifficultyLevel
     problem_type_id: UUID
+    course_node_id: UUID | None = None
     condition: str = Field(min_length=1)
     solution: str = Field(min_length=1)
     condition_images: list[str] = Field(default_factory=list)
@@ -35,6 +37,7 @@ class ProblemUpdate(AmlsSchema):
     subtopic_id: UUID | None = None
     difficulty: DifficultyLevel | None = None
     problem_type_id: UUID | None = None
+    course_node_id: UUID | None = None
     condition: str | None = Field(default=None, min_length=1)
     solution: str | None = Field(default=None, min_length=1)
     condition_images: list[str] | None = None
@@ -63,6 +66,7 @@ class ProblemResponse(AmlsSchema):
     subtopic: SubtopicResponse
     difficulty: DifficultyResponse
     problem_type: ProblemTypeResponse
+    course_node: CourseNodeResponse | None
     condition: str
     condition_images: list[str]
     answer_options: list[ProblemAnswerOptionResponse]
@@ -73,6 +77,7 @@ class AdminProblemResponse(AmlsSchema):
     subtopic: SubtopicResponse
     difficulty: DifficultyResponse
     problem_type: ProblemTypeResponse
+    course_node: CourseNodeResponse | None
     condition: str
     condition_images: list[str]
     solution: str
@@ -85,6 +90,7 @@ class ProblemSnapshot(AmlsSchema):
     subtopic_id: UUID
     difficulty: DifficultyLevel
     problem_type_id: UUID
+    course_node_id: UUID | None
     condition: str
     solution: str
     condition_images: list[str]

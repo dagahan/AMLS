@@ -12,7 +12,9 @@ from src.models.pydantic.problem import (
     ProblemSnapshot,
     validate_answer_options,
 )
+from src.core.logging import get_logger
 from src.services.problem.loader import (
+    ensure_course_node_exists,
     ensure_difficulty_exists,
     ensure_problem_type_exists,
     ensure_subtopic_exists,
@@ -21,6 +23,8 @@ from src.services.problem.loader import (
 from src.services.problem.problem_query_service import ProblemQueryService
 from src.storage.storage_manager import StorageManager
 from src.transaction_manager.transaction_manager import execute_atomic_step, transactional
+
+logger = get_logger(__name__)
 
 
 class AdminProblemService:
@@ -37,6 +41,13 @@ class AdminProblemService:
             rollback=lambda created_problem_id: self._delete_problem_record(created_problem_id),
             step_name="create_problem_record",
         )
+        logger.info(
+            "Created problem",
+            problem_id=str(problem_id),
+            subtopic_id=str(data.subtopic_id),
+            problem_type_id=str(data.problem_type_id),
+            course_node_id=str(data.course_node_id) if data.course_node_id is not None else None,
+        )
         return await self.problem_query_service.get_admin_problem(problem_id)
 
 
@@ -48,6 +59,7 @@ class AdminProblemService:
             rollback=lambda _: self._restore_problem_snapshot(snapshot),
             step_name="update_problem_record",
         )
+        logger.info("Updated problem", problem_id=str(updated_problem_id))
         return await self.problem_query_service.get_admin_problem(updated_problem_id)
 
 
@@ -59,6 +71,7 @@ class AdminProblemService:
             rollback=lambda _: self._restore_problem_snapshot(snapshot),
             step_name="delete_problem_record",
         )
+        logger.info("Deleted problem", problem_id=str(problem_id))
 
 
     async def _create_problem_record(self, data: ProblemCreate) -> uuid.UUID:
@@ -72,11 +85,14 @@ class AdminProblemService:
             await ensure_subtopic_exists(session, data.subtopic_id)
             ensure_difficulty_exists(data.difficulty)
             await ensure_problem_type_exists(session, data.problem_type_id)
+            if data.course_node_id is not None:
+                await ensure_course_node_exists(session, data.course_node_id)
 
             problem = Problem(
                 subtopic_id=data.subtopic_id,
                 difficulty=data.difficulty,
                 problem_type_id=data.problem_type_id,
+                course_node_id=data.course_node_id,
                 condition=data.condition,
                 solution=data.solution,
                 condition_images=data.condition_images,
@@ -110,6 +126,10 @@ class AdminProblemService:
                 await ensure_problem_type_exists(session, data.problem_type_id)
                 problem.problem_type_id = data.problem_type_id
 
+            if data.course_node_id is not None:
+                await ensure_course_node_exists(session, data.course_node_id)
+                problem.course_node_id = data.course_node_id
+
             self._validate_updated_answers(data)
             self._apply_problem_update(problem, data)
 
@@ -132,6 +152,7 @@ class AdminProblemService:
             subtopic_id=problem.subtopic_id,
             difficulty=problem.difficulty,
             problem_type_id=problem.problem_type_id,
+            course_node_id=problem.course_node_id,
             condition=problem.condition,
             solution=problem.solution,
             condition_images=list(problem.condition_images),
@@ -152,6 +173,7 @@ class AdminProblemService:
                     subtopic_id=snapshot.subtopic_id,
                     difficulty=snapshot.difficulty,
                     problem_type_id=snapshot.problem_type_id,
+                    course_node_id=snapshot.course_node_id,
                     condition=snapshot.condition,
                     solution=snapshot.solution,
                     condition_images=snapshot.condition_images,
@@ -162,6 +184,7 @@ class AdminProblemService:
                 problem.subtopic_id = snapshot.subtopic_id
                 problem.difficulty = snapshot.difficulty
                 problem.problem_type_id = snapshot.problem_type_id
+                problem.course_node_id = snapshot.course_node_id
                 problem.condition = snapshot.condition
                 problem.solution = snapshot.solution
                 problem.condition_images = snapshot.condition_images

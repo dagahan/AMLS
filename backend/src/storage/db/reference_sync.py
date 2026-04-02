@@ -4,10 +4,10 @@ import asyncio
 import uuid
 from typing import TYPE_CHECKING
 
-from loguru import logger
 from sqlalchemy import delete, or_, select
 
 from src.config import bootstrap_config
+from src.core.logging import get_logger
 from src.storage.db.database import DataBase
 from src.storage.db.reference_dataset import PROBLEM_TYPE_DATA, TOPIC_DATA
 from src.models.alchemy import (
@@ -21,6 +21,9 @@ from src.models.alchemy import (
 
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
+
+
+logger = get_logger(__name__)
 
 
 async def sync_reference_data(db: DataBase) -> None:

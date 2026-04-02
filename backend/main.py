@@ -2,18 +2,15 @@ import asyncio
 import signal
 import sys
 
-import colorama
-from loguru import logger
-
 from src.config import bootstrap_config, get_app_config
-from src.core.logging import InterceptHandler, LogSetup
+from src.core.logging import get_logger
 from src.fast_api.fastapi_server import Server
+
+logger = get_logger(__name__)
 
 
 class Service:
     def __init__(self) -> None:
-        self.intercept_handler = InterceptHandler()
-        self.logger_setup = LogSetup()
         self.fastapi_server = Server()
 
 
@@ -49,17 +46,15 @@ class Service:
 
             for task in finished_tasks:
                 if task is stop_future:
-                    logger.info(
-                        f"{colorama.Fore.YELLOW}Shutdown signal received{colorama.Style.RESET_ALL}"
-                    )
+                    logger.info("Shutdown signal received")
                 elif isinstance(task, asyncio.Task) and task.exception():
                     logger.error(
-                        f"{colorama.Fore.RED}{task.get_name()} crashed: {task.exception()}{colorama.Style.RESET_ALL}"
+                        "Background task crashed",
+                        task_name=task.get_name(),
+                        error=str(task.exception()),
                     )
         except asyncio.CancelledError:
-            logger.info(
-                f"{colorama.Fore.YELLOW}Service stop requested{colorama.Style.RESET_ALL}"
-            )
+            logger.info("Service stop requested")
         finally:
             await self.fastapi_server.stop()
 
@@ -77,18 +72,23 @@ class Service:
                 except asyncio.CancelledError:
                     continue
 
-            logger.info(
-                f"{colorama.Fore.GREEN}FastAPI server stopped gracefully{colorama.Style.RESET_ALL}"
-            )
+            logger.info("FastAPI server stopped gracefully")
 
 
 if __name__ == "__main__":
     try:
         bootstrap_config()
-        LogSetup.configure(time_zone_name=str(get_app_config().infra.get("TZ", "UTC")))
         asyncio.run(Service().run_service())
     except KeyboardInterrupt:
-        logger.info(f"{colorama.Fore.CYAN}Service stopped by user{colorama.Style.RESET_ALL}")
+        logger.info("Service stopped by user")
     except Exception as error:
-        logger.critical(f"{colorama.Fore.RED}Service crashed: {error}{colorama.Style.RESET_ALL}")
+        try:
+            time_zone = get_app_config().infra.time_zone_name
+        except RuntimeError:
+            time_zone = "UTC"
+        logger.exception(
+            "Service crashed",
+            error=str(error),
+            time_zone=time_zone,
+        )
         sys.exit(1)

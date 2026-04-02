@@ -9,8 +9,9 @@ from src.models.pydantic.common import AmlsSchema
 class ResponseCreate(AmlsSchema):
     problem_id: UUID
     answer_option_id: UUID
-    entrance_test_session_id: UUID | None = None
-    problem_type_id: UUID
+    test_attempt_id: UUID | None = None
+    problem_type_id: UUID | None = None
+    course_node_id: UUID | None = None
     answer_option_type: ProblemAnswerOptionType
     difficulty: DifficultyLevel
     difficulty_weight: float

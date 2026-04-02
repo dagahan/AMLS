@@ -1,7 +1,7 @@
 """phase0 initial schema
 
 Revision ID: phase0_initial_schema
-Revises: 
+Revises:
 Create Date: 2026-03-22 00:00:00.000000
 """
 
@@ -25,14 +25,6 @@ def upgrade() -> None:
         name="user_role_enum",
         create_type=False,
     )
-    entrance_test_status_enum = postgresql.ENUM(
-        "pending",
-        "active",
-        "completed",
-        "skipped",
-        name="entrance_test_status_enum",
-        create_type=False,
-    )
     problem_answer_option_type_enum = postgresql.ENUM(
         "right",
         "wrong",
@@ -40,11 +32,20 @@ def upgrade() -> None:
         name="problem_answer_option_type_enum",
         create_type=False,
     )
+    difficulty_level_enum = postgresql.ENUM(
+        "elementary",
+        "intermediate",
+        "upper_intermediate",
+        "advanced",
+        "proficient",
+        name="difficulty_level_enum",
+        create_type=False,
+    )
 
     bind = op.get_bind()
     user_role_enum.create(bind, checkfirst=True)
-    entrance_test_status_enum.create(bind, checkfirst=True)
     problem_answer_option_type_enum.create(bind, checkfirst=True)
+    difficulty_level_enum.create(bind, checkfirst=True)
 
     op.create_table(
         "users",
@@ -56,8 +57,18 @@ def upgrade() -> None:
         sa.Column("role", user_role_enum, nullable=False),
         sa.Column("is_active", sa.Boolean(), nullable=False),
         sa.Column("id", postgresql.UUID(as_uuid=True), nullable=False),
-        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.text("now()"), nullable=False),
-        sa.Column("updated_at", sa.DateTime(timezone=True), server_default=sa.text("now()"), nullable=False),
+        sa.Column(
+            "created_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.text("now()"),
+            nullable=False,
+        ),
+        sa.Column(
+            "updated_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.text("now()"),
+            nullable=False,
+        ),
         sa.PrimaryKeyConstraint("id"),
         sa.UniqueConstraint("email"),
     )
@@ -66,19 +77,18 @@ def upgrade() -> None:
         "topics",
         sa.Column("name", sa.String(length=255), nullable=False),
         sa.Column("id", postgresql.UUID(as_uuid=True), nullable=False),
-        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.text("now()"), nullable=False),
-        sa.Column("updated_at", sa.DateTime(timezone=True), server_default=sa.text("now()"), nullable=False),
-        sa.PrimaryKeyConstraint("id"),
-        sa.UniqueConstraint("name"),
-    )
-
-    op.create_table(
-        "difficulties",
-        sa.Column("name", sa.String(length=255), nullable=False),
-        sa.Column("coefficient", sa.Float(), nullable=False),
-        sa.Column("id", postgresql.UUID(as_uuid=True), nullable=False),
-        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.text("now()"), nullable=False),
-        sa.Column("updated_at", sa.DateTime(timezone=True), server_default=sa.text("now()"), nullable=False),
+        sa.Column(
+            "created_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.text("now()"),
+            nullable=False,
+        ),
+        sa.Column(
+            "updated_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.text("now()"),
+            nullable=False,
+        ),
         sa.PrimaryKeyConstraint("id"),
         sa.UniqueConstraint("name"),
     )
@@ -87,8 +97,18 @@ def upgrade() -> None:
         "problem_types",
         sa.Column("name", sa.String(length=255), nullable=False),
         sa.Column("id", postgresql.UUID(as_uuid=True), nullable=False),
-        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.text("now()"), nullable=False),
-        sa.Column("updated_at", sa.DateTime(timezone=True), server_default=sa.text("now()"), nullable=False),
+        sa.Column(
+            "created_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.text("now()"),
+            nullable=False,
+        ),
+        sa.Column(
+            "updated_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.text("now()"),
+            nullable=False,
+        ),
         sa.PrimaryKeyConstraint("id"),
         sa.UniqueConstraint("name"),
     )
@@ -98,28 +118,21 @@ def upgrade() -> None:
         sa.Column("topic_id", postgresql.UUID(as_uuid=True), nullable=False),
         sa.Column("name", sa.String(length=255), nullable=False),
         sa.Column("id", postgresql.UUID(as_uuid=True), nullable=False),
-        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.text("now()"), nullable=False),
-        sa.Column("updated_at", sa.DateTime(timezone=True), server_default=sa.text("now()"), nullable=False),
+        sa.Column(
+            "created_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.text("now()"),
+            nullable=False,
+        ),
+        sa.Column(
+            "updated_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.text("now()"),
+            nullable=False,
+        ),
         sa.ForeignKeyConstraint(["topic_id"], ["topics.id"], ondelete="CASCADE"),
         sa.PrimaryKeyConstraint("id"),
         sa.UniqueConstraint("topic_id", "name", name="uq_subtopic_topic_name"),
-    )
-
-    op.create_table(
-        "entrance_test_sessions",
-        sa.Column("user_id", postgresql.UUID(as_uuid=True), nullable=False),
-        sa.Column("status", entrance_test_status_enum, nullable=False),
-        sa.Column("problem_ids", postgresql.ARRAY(postgresql.UUID(as_uuid=True)), nullable=False),
-        sa.Column("response_ids", postgresql.ARRAY(postgresql.UUID(as_uuid=True)), nullable=False),
-        sa.Column("started_at", sa.DateTime(timezone=True), nullable=True),
-        sa.Column("completed_at", sa.DateTime(timezone=True), nullable=True),
-        sa.Column("skipped_at", sa.DateTime(timezone=True), nullable=True),
-        sa.Column("id", postgresql.UUID(as_uuid=True), nullable=False),
-        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.text("now()"), nullable=False),
-        sa.Column("updated_at", sa.DateTime(timezone=True), server_default=sa.text("now()"), nullable=False),
-        sa.ForeignKeyConstraint(["user_id"], ["users.id"], ondelete="CASCADE"),
-        sa.PrimaryKeyConstraint("id"),
-        sa.UniqueConstraint("user_id"),
     )
 
     op.create_table(
@@ -140,10 +153,18 @@ def upgrade() -> None:
         sa.Column("mastery_weight", sa.Float(), nullable=False),
         sa.Column("id", postgresql.UUID(as_uuid=True), nullable=False),
         sa.CheckConstraint("mastery_weight >= 0 AND mastery_weight <= 1", name="ck_subtopic_weight"),
-        sa.ForeignKeyConstraint(["prerequisite_subtopic_id"], ["subtopics.id"], ondelete="CASCADE"),
+        sa.ForeignKeyConstraint(
+            ["prerequisite_subtopic_id"],
+            ["subtopics.id"],
+            ondelete="CASCADE",
+        ),
         sa.ForeignKeyConstraint(["subtopic_id"], ["subtopics.id"], ondelete="CASCADE"),
         sa.PrimaryKeyConstraint("id"),
-        sa.UniqueConstraint("subtopic_id", "prerequisite_subtopic_id", name="uq_subtopic_prerequisite_pair"),
+        sa.UniqueConstraint(
+            "subtopic_id",
+            "prerequisite_subtopic_id",
+            name="uq_subtopic_prerequisite_pair",
+        ),
     )
 
     op.create_table(
@@ -154,7 +175,11 @@ def upgrade() -> None:
             "problem_type_id <> prerequisite_problem_type_id",
             name="ck_problem_type_prerequisite_not_self",
         ),
-        sa.ForeignKeyConstraint(["prerequisite_problem_type_id"], ["problem_types.id"], ondelete="CASCADE"),
+        sa.ForeignKeyConstraint(
+            ["prerequisite_problem_type_id"],
+            ["problem_types.id"],
+            ondelete="CASCADE",
+        ),
         sa.ForeignKeyConstraint(["problem_type_id"], ["problem_types.id"], ondelete="CASCADE"),
         sa.PrimaryKeyConstraint(
             "problem_type_id",
@@ -166,16 +191,25 @@ def upgrade() -> None:
     op.create_table(
         "problems",
         sa.Column("subtopic_id", postgresql.UUID(as_uuid=True), nullable=False),
-        sa.Column("difficulty_id", postgresql.UUID(as_uuid=True), nullable=False),
+        sa.Column("difficulty", difficulty_level_enum, nullable=False),
         sa.Column("problem_type_id", postgresql.UUID(as_uuid=True), nullable=False),
         sa.Column("condition", sa.Text(), nullable=False),
         sa.Column("solution", sa.Text(), nullable=False),
         sa.Column("condition_images", postgresql.JSONB(), nullable=False),
         sa.Column("solution_images", postgresql.JSONB(), nullable=False),
         sa.Column("id", postgresql.UUID(as_uuid=True), nullable=False),
-        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.text("now()"), nullable=False),
-        sa.Column("updated_at", sa.DateTime(timezone=True), server_default=sa.text("now()"), nullable=False),
-        sa.ForeignKeyConstraint(["difficulty_id"], ["difficulties.id"], ondelete="RESTRICT"),
+        sa.Column(
+            "created_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.text("now()"),
+            nullable=False,
+        ),
+        sa.Column(
+            "updated_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.text("now()"),
+            nullable=False,
+        ),
         sa.ForeignKeyConstraint(["problem_type_id"], ["problem_types.id"], ondelete="RESTRICT"),
         sa.ForeignKeyConstraint(["subtopic_id"], ["subtopics.id"], ondelete="RESTRICT"),
         sa.PrimaryKeyConstraint("id"),
@@ -196,11 +230,22 @@ def upgrade() -> None:
         sa.Column("user_id", postgresql.UUID(as_uuid=True), nullable=False),
         sa.Column("problem_id", postgresql.UUID(as_uuid=True), nullable=False),
         sa.Column("answer_option_id", postgresql.UUID(as_uuid=True), nullable=True),
-        sa.Column("entrance_test_session_id", postgresql.UUID(as_uuid=True), nullable=True),
+        sa.Column("problem_type_id", postgresql.UUID(as_uuid=True), nullable=True),
+        sa.Column("answer_option_type", problem_answer_option_type_enum, nullable=True),
+        sa.Column("difficulty", difficulty_level_enum, nullable=True),
+        sa.Column("difficulty_weight", sa.Float(), nullable=True),
         sa.Column("id", postgresql.UUID(as_uuid=True), nullable=False),
-        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.text("now()"), nullable=False),
-        sa.ForeignKeyConstraint(["answer_option_id"], ["problem_answer_options.id"], ondelete="SET NULL"),
-        sa.ForeignKeyConstraint(["entrance_test_session_id"], ["entrance_test_sessions.id"], ondelete="SET NULL"),
+        sa.Column(
+            "created_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.text("now()"),
+            nullable=False,
+        ),
+        sa.ForeignKeyConstraint(
+            ["answer_option_id"],
+            ["problem_answer_options.id"],
+            ondelete="SET NULL",
+        ),
         sa.ForeignKeyConstraint(["problem_id"], ["problems.id"], ondelete="CASCADE"),
         sa.ForeignKeyConstraint(["user_id"], ["users.id"], ondelete="CASCADE"),
         sa.PrimaryKeyConstraint("id"),
@@ -215,19 +260,20 @@ def downgrade() -> None:
         name="user_role_enum",
         create_type=False,
     )
-    entrance_test_status_enum = postgresql.ENUM(
-        "pending",
-        "active",
-        "completed",
-        "skipped",
-        name="entrance_test_status_enum",
-        create_type=False,
-    )
     problem_answer_option_type_enum = postgresql.ENUM(
         "right",
         "wrong",
         "i_dont_know",
         name="problem_answer_option_type_enum",
+        create_type=False,
+    )
+    difficulty_level_enum = postgresql.ENUM(
+        "elementary",
+        "intermediate",
+        "upper_intermediate",
+        "advanced",
+        "proficient",
+        name="difficulty_level_enum",
         create_type=False,
     )
 
@@ -237,13 +283,11 @@ def downgrade() -> None:
     op.drop_table("problem_type_prerequisites")
     op.drop_table("subtopic_prerequisites")
     op.drop_table("topic_subtopics")
-    op.drop_table("entrance_test_sessions")
     op.drop_table("subtopics")
     op.drop_table("problem_types")
-    op.drop_table("difficulties")
     op.drop_table("topics")
     op.drop_table("users")
 
+    difficulty_level_enum.drop(bind, checkfirst=True)
     problem_answer_option_type_enum.drop(bind, checkfirst=True)
-    entrance_test_status_enum.drop(bind, checkfirst=True)
     user_role_enum.drop(bind, checkfirst=True)

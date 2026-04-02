@@ -1,20 +1,21 @@
 from __future__ import annotations
 
-from src.math_models.entrance_assessment.builders import (
-    ForestStructureError,
-    build_forest_artifact,
+from src.math_models.graph_assessment.builders import (
+    ExactInferenceStructureError,
+    build_exact_inference_artifact,
     build_graph_artifact,
 )
-from src.math_models.entrance_assessment.runtime_engine import (
+from src.math_models.graph_assessment.runtime_engine import (
     apply_answer_step,
     build_final_result,
     initialize_runtime,
-    select_next_problem_type,
+    restore_runtime,
+    select_next_node,
     should_stop,
 )
-from src.models.pydantic import (
+from src.models.pydantic.assessment_runtime import (
+    ExactInferenceArtifact,
     FinalResult,
-    ForestArtifact,
     GraphArtifact,
     Outcome,
     ResponseModel,
@@ -24,9 +25,9 @@ from src.models.pydantic import (
 )
 
 __all__ = [
+    "ExactInferenceArtifact",
+    "ExactInferenceStructureError",
     "FinalResult",
-    "ForestArtifact",
-    "ForestStructureError",
     "GraphArtifact",
     "Outcome",
     "ResponseModel",
@@ -34,10 +35,11 @@ __all__ = [
     "Selection",
     "StepResult",
     "apply_answer_step",
+    "build_exact_inference_artifact",
     "build_final_result",
-    "build_forest_artifact",
     "build_graph_artifact",
     "initialize_runtime",
-    "select_next_problem_type",
+    "restore_runtime",
+    "select_next_node",
     "should_stop",
 ]
