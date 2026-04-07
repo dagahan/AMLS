@@ -37,6 +37,21 @@ def load_infrastructure_values(
             continue
         infrastructure_values[infra_key] = parse_scalar_value(raw_value)
 
+    infrastructure_values.setdefault("LOG_LEVEL", "INFO")
+    infrastructure_values.setdefault("LOG_RENDERER", "console")
+    infrastructure_values.setdefault("LOG_ACCESS_LOGS", 1)
+    infrastructure_values.setdefault("NODE_BINARY", "node")
+    infrastructure_values.setdefault(
+        "LMS_BASE_URL",
+        "http://nikiausovs-macbook-pro.tail89767d.ts.net:1234/v1",
+    )
+    infrastructure_values.setdefault("LMS_API_KEY", "lm-studio")
+    infrastructure_values.setdefault("LMS_MODEL", "qwen2.5-coder-3b-instruct-mlx")
+    infrastructure_values.setdefault("LMS_TIMEOUT_SECONDS", 30)
+    infrastructure_values.setdefault("LMS_AUTO_WAKE_ENABLED", 1)
+    infrastructure_values.setdefault("LMS_AUTO_WAKE_TIMEOUT_SECONDS", 15)
+    infrastructure_values.setdefault("LMS_AUTO_WAKE_RETRY_COUNT", 2)
+
     infrastructure_values["RUNNING_INSIDE_DOCKER"] = _load_running_inside_docker(env_values)
     return infrastructure_values
 

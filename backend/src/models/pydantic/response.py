@@ -15,6 +15,7 @@ class ResponseCreate(AmlsSchema):
     answer_option_type: ProblemAnswerOptionType
     difficulty: DifficultyLevel
     difficulty_weight: float
+    revealed_solution: bool = False
 
 
 class RecordedResponseResponse(AmlsSchema):
@@ -22,6 +23,7 @@ class RecordedResponseResponse(AmlsSchema):
     problem_id: UUID
     answer_option_id: UUID
     answer_option_type: ProblemAnswerOptionType
+    revealed_solution: bool
 
 
 class RecordedResponseState(RecordedResponseResponse):

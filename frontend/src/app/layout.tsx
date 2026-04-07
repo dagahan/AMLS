@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Script from "next/script";
 import { IBM_Plex_Sans, Manrope } from "next/font/google";
+import { buildThemeInitScript } from "@/lib/theme-mode";
 import "./globals.css";
 
 const ibmPlexSans = IBM_Plex_Sans({
@@ -30,9 +31,12 @@ export default function RootLayout({
     <html
       lang="en"
       suppressHydrationWarning
-      className={`${ibmPlexSans.variable} ${manrope.variable} h-full antialiased light`}
+      className={`${ibmPlexSans.variable} ${manrope.variable} h-full antialiased dark`}
     >
       <body className="min-h-full flex flex-col">
+        <Script id="theme-init" strategy="beforeInteractive">
+          {buildThemeInitScript()}
+        </Script>
         {children}
         <Script id="mathjax-config" strategy="beforeInteractive">
           {`window.MathJax = {tex: {inlineMath: [['$', '$'], ['\\\\(', '\\\\)']], displayMath: [['$$', '$$'], ['\\\\[', '\\\\]']], processEscapes: true}, svg: {fontCache: 'global'}};`}

@@ -16,22 +16,30 @@ from src.models.pydantic.common import AmlsSchema, HealthResponse, MessageRespon
 from src.models.pydantic.course import (
     CourseCreate,
     CourseEnrollmentResponse,
+    CourseGraphVersionEdgeResponse,
+    CourseGraphVersionNodeResponse,
+    CourseGraphVersionResponse,
     CourseGraphVersionCreate,
     CourseGraphVersionDetailResponse,
     CourseGraphVersionEdgeCreate,
-    CourseGraphVersionEdgeResponse,
     CourseGraphVersionNodeCreate,
-    CourseGraphVersionNodeResponse,
-    CourseGraphVersionResponse,
+    CourseWorkspaceActionFlagsResponse,
+    CourseWorkspaceAttemptResponse,
+    CourseWorkspaceEdgeResponse,
+    CourseWorkspaceNodeResponse,
+    CourseWorkspaceResponse,
     CourseNodeCreate,
     CourseNodeResponse,
     CourseNodeUpdate,
     CourseResponse,
+    GraphAssessmentReviewSnapshotResponse,
 )
 from src.models.pydantic.difficulty import DifficultyResponse
 from src.models.pydantic.graph_assessment import (
+    CourseMasteryHistoryResponse,
     GraphAssessmentResponse,
     GraphAssessmentStateResponse,
+    MasteryHistoryItemResponse,
 )
 from src.models.pydantic.lecture import (
     LectureCreate,
@@ -39,6 +47,14 @@ from src.models.pydantic.lecture import (
     LecturePageCreate,
     LecturePageResponse,
     LectureResponse,
+)
+from src.models.pydantic.llm import (
+    LlmChatCompletionRequest,
+    LlmChatMessage,
+    LlmCompletionResult,
+    LlmModelDefinition,
+    LlmRegistryConfig,
+    LlmRuntimeName,
 )
 from src.models.pydantic.problem import (
     AdminProblemAnswerOptionResponse,
@@ -62,12 +78,22 @@ from src.models.pydantic.response import (
     RecordedResponseState,
     ResponseCreate,
 )
+from src.models.pydantic.review_generation import (
+    GeneratedAssessmentReview,
+    ReviewCourseNodeContext,
+)
 from src.models.pydantic.storage import StoredFile, UploadedImageResponse
 from src.models.pydantic.test import (
+    CourseTestAttemptHistoryItemResponse,
+    CourseTestHistoryResponse,
+    ProblemSolutionResponse,
     TestAnswerRequest,
     TestAnswerResponse,
+    TestAttemptReviewResponse,
     TestAttemptResponse,
     TestCurrentProblemResponse,
+    TestRevealSolutionResponse,
+    TestReviewResponseItem,
     TestStartRequest,
 )
 from src.models.pydantic.topic import (
@@ -78,7 +104,12 @@ from src.models.pydantic.topic import (
     TopicResponse,
     TopicUpdate,
 )
-from src.models.pydantic.user import AvatarSnapshot, UserResponse, build_user_response
+from src.models.pydantic.user import (
+    AvatarSnapshot,
+    UserProfileUpdateRequest,
+    UserResponse,
+    build_user_response,
+)
 
 __all__ = [
     "AccessPayload",
@@ -103,21 +134,39 @@ __all__ = [
     "CourseNodeResponse",
     "CourseNodeUpdate",
     "CourseResponse",
+    "CourseTestAttemptHistoryItemResponse",
+    "CourseTestHistoryResponse",
+    "CourseMasteryHistoryResponse",
+    "CourseWorkspaceActionFlagsResponse",
+    "CourseWorkspaceAttemptResponse",
+    "CourseWorkspaceEdgeResponse",
+    "CourseWorkspaceNodeResponse",
+    "CourseWorkspaceResponse",
     "DifficultyResponse",
+    "GraphAssessmentReviewSnapshotResponse",
     "GraphAssessmentResponse",
     "GraphAssessmentStateResponse",
+    "GeneratedAssessmentReview",
     "HealthResponse",
     "LectureCreate",
     "LectureDetailResponse",
     "LecturePageCreate",
     "LecturePageResponse",
     "LectureResponse",
+    "LlmChatCompletionRequest",
+    "LlmChatMessage",
+    "LlmCompletionResult",
+    "LlmModelDefinition",
+    "LlmRegistryConfig",
+    "LlmRuntimeName",
     "LoginRequest",
     "MessageResponse",
+    "MasteryHistoryItemResponse",
     "ProblemAnswerOptionPayload",
     "ProblemAnswerOptionResponse",
     "ProblemCreate",
     "ProblemResponse",
+    "ProblemSolutionResponse",
     "ProblemSnapshot",
     "ProblemTypeCreate",
     "ProblemTypeGraphNodeResponse",
@@ -136,16 +185,21 @@ __all__ = [
     "SubtopicCreate",
     "SubtopicResponse",
     "SubtopicUpdate",
+    "ReviewCourseNodeContext",
     "TestAnswerRequest",
     "TestAnswerResponse",
+    "TestAttemptReviewResponse",
     "TestAttemptResponse",
     "TestCurrentProblemResponse",
+    "TestRevealSolutionResponse",
+    "TestReviewResponseItem",
     "TestStartRequest",
     "TokenPairResponse",
     "TopicCreate",
     "TopicResponse",
     "TopicUpdate",
     "UploadedImageResponse",
+    "UserProfileUpdateRequest",
     "UserResponse",
     "ValidateAccessRequest",
     "build_user_response",

@@ -4,6 +4,13 @@ LOG_LEVEL = {must_exist=true, is_in=["DEBUG", "INFO", "WARNING", "ERROR", "CRITI
 LOG_RENDERER = {must_exist=true, is_in=["console", "json"]}
 LOG_ACCESS_LOGS = {must_exist=true, is_in=[0, 1]}
 NODE_BINARY = {must_exist=true, len_min=1}
+LMS_BASE_URL = {must_exist=true, len_min=1}
+LMS_API_KEY = {must_exist=true, len_min=1}
+LMS_MODEL = {must_exist=true, len_min=1}
+LMS_TIMEOUT_SECONDS = {must_exist=true, gte=1}
+LMS_AUTO_WAKE_ENABLED = {must_exist=true, is_in=[0, 1]}
+LMS_AUTO_WAKE_TIMEOUT_SECONDS = {must_exist=true, gte=1}
+LMS_AUTO_WAKE_RETRY_COUNT = {must_exist=true, gte=0}
 BACKEND_HOST = {must_exist=true, len_min=1}
 BACKEND_PORT = {must_exist=true, gte=1, lte=65535}
 POSTGRES_HOST = {must_exist=true, len_min=1}
@@ -43,6 +50,8 @@ S3_TLS_VERIFY = {must_exist=true, is_in=[0, 1]}
 'business.entrance_assessment.response_model.unmastered_right' = {must_exist=true, gt=0, lte=1}
 'business.entrance_assessment.response_model.unmastered_wrong' = {must_exist=true, gt=0, lte=1}
 'business.entrance_assessment.response_model.unmastered_i_dont_know' = {must_exist=true, gt=0, lte=1}
+'business.llm.default_model_key' = {must_exist=true, len_min=1}
+'business.llm.models' = {must_exist=true}
 'business.difficulties.elementary.name' = {must_exist=true, len_min=1}
 'business.difficulties.elementary.coefficient' = {must_exist=true, gt=0}
 'business.difficulties.intermediate.name' = {must_exist=true, len_min=1}

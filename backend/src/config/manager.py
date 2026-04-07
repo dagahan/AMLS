@@ -35,6 +35,7 @@ class ConfigManager:
         self._validators: list[Validator] = []
         self._infra_keys: set[str] = set()
         self._infra_values: dict[str, Any] | None = None
+        self._environment_values: dict[str, str] | None = None
         self._app_config: AppConfig | None = None
         self._watcher_task: asyncio.Task[None] | None = None
         self._watcher_lock = asyncio.Lock()
@@ -58,6 +59,7 @@ class ConfigManager:
         )
 
         env_values = load_environment_values(self.env_path)
+        self._environment_values = dict(env_values)
         self._validators, self._infra_keys = load_validators(self.validators_path)
         infra_values = load_infrastructure_values(env_values, self._infra_keys)
         infra = InfraConfig(infra_values)
@@ -79,7 +81,11 @@ class ConfigManager:
             business=business_values,
         )
 
-        self._app_config = self._build_app_config(infra=infra, business_values=business_values)
+        self._app_config = self._build_app_config(
+            infra=infra,
+            business_values=business_values,
+            environment_values=env_values,
+        )
         self._business_mtime_ns = self._read_mtime_ns(self.business_path)
 
         logger.info(
@@ -137,6 +143,7 @@ class ConfigManager:
             self._app_config = self._build_app_config(
                 infra=current_config.infra,
                 business_values=business_values,
+                environment_values=self._require_environment_values(),
             )
             self._business_mtime_ns = self._read_mtime_ns(self.business_path)
             logger.info(
@@ -184,6 +191,7 @@ class ConfigManager:
         *,
         infra: InfraConfig,
         business_values: dict[str, Any],
+        environment_values: dict[str, str],
     ) -> AppConfig:
         business = BusinessConfig(business_values)
         return AppConfig(
@@ -191,6 +199,7 @@ class ConfigManager:
             infra=infra,
             business=business,
             business_hash=build_business_hash(business_values),
+            environment_values=environment_values,
         )
 
 
@@ -198,6 +207,12 @@ class ConfigManager:
         if self._infra_values is None:
             raise RuntimeError("Infrastructure configuration is not initialized")
         return dict(self._infra_values)
+
+
+    def _require_environment_values(self) -> dict[str, str]:
+        if self._environment_values is None:
+            raise RuntimeError("Environment configuration is not initialized")
+        return dict(self._environment_values)
 
 
 _CONFIG_MANAGER: ConfigManager | None = None

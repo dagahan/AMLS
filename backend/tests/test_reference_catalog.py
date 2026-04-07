@@ -50,7 +50,7 @@ def test_problem_type_tree_contains_every_reference_problem_type_once() -> None:
     assert "    convert fractions, decimals, and percentages" in tree_text
 
 
-def test_reference_problem_bank_builds_two_problems_per_problem_type() -> None:
+def test_reference_problem_bank_builds_three_problems_per_problem_type() -> None:
     generated_problems = build_reference_problem_bank()
     problem_count_by_type = Counter(
         generated_problem["problem_type_name"]
@@ -62,8 +62,8 @@ def test_reference_problem_bank_builds_two_problems_per_problem_type() -> None:
         for subtopic_name in subtopic_names
     }
 
-    assert len(generated_problems) == len(PROBLEM_TYPE_DATA) * 2
-    assert set(problem_count_by_type.values()) == {2}
+    assert len(generated_problems) == len(PROBLEM_TYPE_DATA) * 3
+    assert set(problem_count_by_type.values()) == {3}
 
     for generated_problem in generated_problems:
         answer_option_types = Counter(
@@ -110,9 +110,9 @@ async def test_load_reference_problem_bank_restores_reference_catalog(
     assert len(get_app_config().list_difficulties()) == 5
     assert problem_type_count == len(PROBLEM_TYPE_DATA)
     assert prerequisite_edge_count == len(PROBLEM_TYPE_DATA) - 8
-    assert problem_count == len(PROBLEM_TYPE_DATA) * 2
-    assert answer_option_count == len(PROBLEM_TYPE_DATA) * 6
-    assert set(problem_count_by_type.values()) == {2}
+    assert problem_count == len(PROBLEM_TYPE_DATA) * 3
+    assert answer_option_count == len(PROBLEM_TYPE_DATA) * 9
+    assert set(problem_count_by_type.values()) == {3}
 
 
 @pytest.mark.asyncio

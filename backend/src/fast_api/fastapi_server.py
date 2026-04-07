@@ -7,6 +7,7 @@ import uuid
 import uvicorn
 from fastapi import FastAPI, Request, Response
 
+from src.bootstrap import bootstrap_demo_course
 from src.config import get_app_config, get_config_manager
 from src.core.logging import bind_context, clear_context, get_logger
 from src.fast_api.routers.auth_router import get_auth_router
@@ -20,6 +21,7 @@ from src.fast_api.routers.problem_type_router import get_problem_type_router
 from src.fast_api.routers.storage_router import get_storage_router
 from src.fast_api.routers.test_router import get_test_router
 from src.fast_api.routers.topic_router import get_topic_router
+from src.fast_api.routers.user_router import get_user_router
 from src.storage.storage_manager import StorageManager
 
 logger = get_logger(__name__)
@@ -46,6 +48,7 @@ def create_application(storage_manager: StorageManager) -> FastAPI:
     app.include_router(get_problem_type_router(storage_manager))
     app.include_router(get_problem_router(storage_manager))
     app.include_router(get_storage_router(storage_manager))
+    app.include_router(get_user_router(storage_manager))
     return app
 
 
@@ -99,6 +102,7 @@ class Server:
 
     async def run_server(self) -> None:
         await self.storage_manager.connect()
+        await bootstrap_demo_course(self.storage_manager)
         await get_config_manager().start_watcher()
         self.server = uvicorn.Server(self.uvicorn_config)
         logger.info(

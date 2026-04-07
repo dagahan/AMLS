@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import AsyncIterator, Iterator
+import os
 from pathlib import Path
 import sys
 import uuid
@@ -20,6 +21,7 @@ if str(BACKEND_DIR) not in sys.path:
     sys.path.insert(0, str(BACKEND_DIR))
 
 from src.config import bootstrap_config
+from src.bootstrap import bootstrap_demo_course
 from src.fast_api.fastapi_server import create_application
 from src.models.alchemy import Base, Course, User
 from src.models.pydantic import TokenPairResponse
@@ -33,6 +35,10 @@ from src.storage.db.reference_sync import sync_reference_data
 
 @pytest.fixture(scope="session", autouse=True)
 def bootstrap_environment() -> Iterator[None]:
+    os.environ.setdefault("LMS_BASE_URL", "http://127.0.0.1:1234/v1")
+    os.environ.setdefault("LMS_API_KEY", "lm-studio")
+    os.environ.setdefault("LMS_MODEL", "qwen2.5-coder-3b-instruct-mlx")
+    os.environ.setdefault("LMS_TIMEOUT_SECONDS", "1")
     bootstrap_config()
     yield
 
@@ -99,6 +105,8 @@ async def prepare_test_state(storage_manager: StorageManager, database: DataBase
     async with database.session_ctx() as session:
         await session.execute(delete(Course))
         await session.execute(delete(User).where(User.email != "admin@example.org"))
+
+    await bootstrap_demo_course(storage_manager)
 
     yield
 

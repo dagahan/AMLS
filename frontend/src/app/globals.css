@@ -93,7 +93,7 @@
   --surface-shadow: 0 24px 60px rgba(78, 102, 158, 0.12);
   --surface-shadow-strong: 0 32px 80px rgba(55, 78, 135, 0.16);
   --surface-grid: oklch(0.82 0.03 245 / 18%);
-  --graph-edge: oklch(0.56 0.15 238 / 82%);
+  --graph-edge: oklch(0.49 0.2 242 / 92%);
   --graph-node-shadow: 0 20px 40px rgba(95, 118, 170, 0.18);
   --graph-status-default-bg: oklch(1 0 0 / 96%);
   --graph-status-default-border: oklch(0.79 0.04 245 / 78%);
@@ -107,55 +107,58 @@
   --graph-status-locked-bg: linear-gradient(180deg, oklch(0.94 0.015 250 / 98%), oklch(0.9 0.02 248 / 98%));
   --graph-status-locked-border: oklch(0.46 0.05 248 / 88%);
   --graph-status-locked-text: oklch(0.25 0.04 248);
+  --graph-status-failed-bg: linear-gradient(180deg, oklch(0.94 0.06 25 / 98%), oklch(0.88 0.09 25 / 98%));
+  --graph-status-failed-border: oklch(0.6 0.17 28 / 92%);
+  --graph-status-failed-text: oklch(0.35 0.12 28);
   --graph-status-frontier-ring: oklch(0.78 0.16 88 / 48%);
   --graph-status-frontier-glow: oklch(0.84 0.18 88 / 26%);
 }
 
 .dark {
   color-scheme: dark;
-  --background: oklch(0.2 0.025 255);
+  --background: oklch(0.14 0.018 255);
   --foreground: oklch(0.95 0.012 250);
-  --card: oklch(0.24 0.026 255 / 92%);
+  --card: oklch(0.18 0.022 255 / 94%);
   --card-foreground: oklch(0.95 0.012 250);
-  --popover: oklch(0.23 0.026 255 / 96%);
+  --popover: oklch(0.17 0.022 255 / 96%);
   --popover-foreground: oklch(0.95 0.012 250);
-  --primary: oklch(0.73 0.12 248);
-  --primary-foreground: oklch(0.2 0.025 255);
-  --secondary: oklch(0.72 0.08 215);
-  --secondary-foreground: oklch(0.2 0.025 255);
-  --muted: oklch(0.3 0.026 252);
+  --primary: oklch(0.75 0.13 248);
+  --primary-foreground: oklch(0.16 0.02 255);
+  --secondary: oklch(0.74 0.09 215);
+  --secondary-foreground: oklch(0.16 0.02 255);
+  --muted: oklch(0.24 0.022 252);
   --muted-foreground: oklch(0.78 0.02 245);
-  --accent: oklch(0.34 0.03 252);
+  --accent: oklch(0.29 0.026 252);
   --accent-foreground: oklch(0.95 0.012 250);
   --destructive: oklch(0.7 0.16 28);
-  --border: oklch(0.43 0.03 248 / 72%);
-  --input: oklch(0.22 0.026 255);
-  --ring: oklch(0.73 0.12 248 / 30%);
-  --chart-1: oklch(0.73 0.12 248);
+  --border: oklch(0.36 0.026 248 / 74%);
+  --input: oklch(0.17 0.022 255);
+  --ring: oklch(0.75 0.13 248 / 34%);
+  --chart-1: oklch(0.75 0.13 248);
   --chart-2: oklch(0.74 0.09 210);
   --chart-3: oklch(0.72 0.11 160);
   --chart-4: oklch(0.76 0.13 80);
   --chart-5: oklch(0.7 0.12 305);
-  --sidebar: oklch(0.24 0.026 255 / 95%);
+  --sidebar: oklch(0.18 0.022 255 / 95%);
   --sidebar-foreground: oklch(0.95 0.012 250);
-  --sidebar-primary: oklch(0.73 0.12 248);
-  --sidebar-primary-foreground: oklch(0.2 0.025 255);
-  --sidebar-accent: oklch(0.34 0.03 252);
+  --sidebar-primary: oklch(0.75 0.13 248);
+  --sidebar-primary-foreground: oklch(0.16 0.02 255);
+  --sidebar-accent: oklch(0.29 0.026 252);
   --sidebar-accent-foreground: oklch(0.95 0.012 250);
-  --sidebar-border: oklch(0.43 0.03 248 / 72%);
-  --sidebar-ring: oklch(0.73 0.12 248 / 30%);
+  --sidebar-border: oklch(0.36 0.026 248 / 74%);
+  --sidebar-ring: oklch(0.75 0.13 248 / 34%);
   --page-gradient:
-    radial-gradient(circle at top left, oklch(0.42 0.08 220 / 24%), transparent 24%),
-    radial-gradient(circle at 88% 12%, oklch(0.42 0.08 255 / 18%), transparent 22%),
-    linear-gradient(180deg, oklch(0.18 0.024 255), oklch(0.22 0.026 255));
+    radial-gradient(circle at top left, oklch(0.4 0.09 220 / 21%), transparent 24%),
+    radial-gradient(circle at 88% 12%, oklch(0.38 0.09 255 / 17%), transparent 22%),
+    linear-gradient(180deg, oklch(0.11 0.016 255), oklch(0.15 0.02 255));
   --page-glow:
-    radial-gradient(circle at 10% 16%, oklch(0.72 0.1 220 / 18%), transparent 18%),
-    radial-gradient(circle at 84% 10%, oklch(0.74 0.1 255 / 16%), transparent 18%);
-  --surface-highlight: oklch(0.99 0.003 255 / 6%);
-  --surface-shadow: 0 24px 60px rgba(8, 14, 34, 0.34);
-  --surface-shadow-strong: 0 32px 80px rgba(6, 10, 28, 0.42);
-  --surface-grid: oklch(0.72 0.08 245 / 14%);
-  --graph-edge: oklch(0.79 0.14 232 / 94%);
+    radial-gradient(circle at 10% 16%, oklch(0.74 0.12 220 / 16%), transparent 18%),
+    radial-gradient(circle at 84% 10%, oklch(0.75 0.12 255 / 14%), transparent 18%);
+  --surface-highlight: oklch(0.99 0.003 255 / 5%);
+  --surface-shadow: 0 24px 60px rgba(4, 8, 20, 0.46);
+  --surface-shadow-strong: 0 32px 80px rgba(2, 5, 16, 0.58);
+  --surface-grid: oklch(0.74 0.1 245 / 12%);
+  --graph-edge: oklch(0.86 0.17 232 / 98%);
   --graph-node-shadow: 0 22px 42px rgba(4, 9, 26, 0.34);
   --graph-status-default-bg: oklch(0.3 0.026 255 / 98%);
   --graph-status-default-border: oklch(0.5 0.04 248 / 84%);
@@ -169,6 +172,9 @@
   --graph-status-locked-bg: linear-gradient(180deg, oklch(0.25 0.03 250 / 98%), oklch(0.21 0.026 250 / 98%));
   --graph-status-locked-border: oklch(0.7 0.04 248 / 90%);
   --graph-status-locked-text: oklch(0.95 0.015 250);
+  --graph-status-failed-bg: linear-gradient(180deg, oklch(0.36 0.11 25 / 98%), oklch(0.28 0.12 25 / 98%));
+  --graph-status-failed-border: oklch(0.78 0.18 28 / 96%);
+  --graph-status-failed-text: oklch(0.97 0.05 28);
   --graph-status-frontier-ring: oklch(0.82 0.18 88 / 50%);
   --graph-status-frontier-glow: oklch(0.84 0.18 88 / 32%);
 }
@@ -394,8 +400,19 @@
     color: var(--graph-status-locked-text);
   }
 
+  .flow-node[data-tone="failed"] {
+    border-color: var(--graph-status-failed-border);
+    background: var(--graph-status-failed-bg);
+    color: var(--graph-status-failed-text);
+  }
+
   .flow-node[data-frontier="true"] .flow-node-badge {
     box-shadow: 0 0 0 1px var(--graph-status-frontier-ring);
+  }
+
+  .flow-node[data-selected="true"] {
+    animation: flowNodeSelectionPulse 1.6s ease-in-out infinite;
+    box-shadow: var(--graph-node-shadow), 0 0 0 3px color-mix(in oklab, var(--primary) 62%, transparent), 0 0 30px color-mix(in oklab, var(--primary) 42%, transparent);
   }
 
   .flow-node-badge {
@@ -430,6 +447,31 @@
     border-width: 2px;
     border-color: var(--card);
     background: var(--primary);
+  }
+
+  .selection-sticky-panel {
+    position: sticky;
+    top: 0.85rem;
+    z-index: 20;
+    border: 1px solid color-mix(in oklab, var(--border) 90%, transparent);
+    border-radius: 1rem;
+    background: color-mix(in oklab, var(--card) 90%, transparent);
+    box-shadow: var(--surface-shadow);
+    backdrop-filter: blur(16px);
+  }
+
+  @keyframes flowNodeSelectionPulse {
+    0% {
+      transform: translateY(0);
+    }
+
+    50% {
+      transform: translateY(-1px);
+    }
+
+    100% {
+      transform: translateY(0);
+    }
   }
 
   .math-content {

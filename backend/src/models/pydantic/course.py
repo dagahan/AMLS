@@ -6,7 +6,13 @@ from uuid import UUID
 from pydantic import Field
 
 from src.models.pydantic.common import AmlsSchema
-from src.storage.db.enums import CourseGraphVersionStatus
+from src.models.pydantic.graph_assessment import GraphAssessmentResponse
+from src.storage.db.enums import (
+    CourseGraphVersionStatus,
+    GraphAssessmentReviewStatus,
+    TestAttemptKind,
+    TestAttemptStatus,
+)
 
 
 class CourseCreate(AmlsSchema):
@@ -105,3 +111,65 @@ class CourseGraphVersionDetailResponse(AmlsSchema):
     version: CourseGraphVersionResponse
     nodes: list[CourseGraphVersionNodeResponse]
     edges: list[CourseGraphVersionEdgeResponse]
+
+
+class CourseWorkspaceNodeResponse(AmlsSchema):
+    course_node_id: UUID
+    problem_type_id: UUID | None
+    name: str
+    lecture_id: UUID | None
+    has_lecture: bool
+    topological_rank: int | None
+    mastery_state: str
+    is_frontier: bool
+
+
+class CourseWorkspaceEdgeResponse(AmlsSchema):
+    prerequisite_course_node_id: UUID
+    dependent_course_node_id: UUID
+
+
+class GraphAssessmentReviewSnapshotResponse(AmlsSchema):
+    graph_assessment_id: UUID
+    review_status: GraphAssessmentReviewStatus
+    review_text: str | None
+    review_recommendations: list[str]
+    review_model: str | None
+    review_error: str | None
+    review_generated_at: datetime | None
+
+
+class CourseWorkspaceActionFlagsResponse(AmlsSchema):
+    can_start_entrance: bool
+    can_start_practice: bool
+    can_start_exam: bool
+    can_start_mistakes: bool
+    has_active_attempt: bool
+    has_active_assessment: bool
+
+
+class CourseWorkspaceAttemptResponse(AmlsSchema):
+    id: UUID
+    graph_version_id: UUID
+    kind: TestAttemptKind
+    status: TestAttemptStatus
+    current_problem_id: UUID | None
+    started_at: datetime | None
+    paused_at: datetime | None
+    total_paused_seconds: int
+    elapsed_solve_seconds: int
+    ended_at: datetime | None
+    created_at: datetime
+    updated_at: datetime
+
+
+class CourseWorkspaceResponse(AmlsSchema):
+    course: CourseResponse
+    graph_version: CourseGraphVersionResponse
+    nodes: list[CourseWorkspaceNodeResponse]
+    edges: list[CourseWorkspaceEdgeResponse]
+    active_test_attempt: CourseWorkspaceAttemptResponse | None
+    active_graph_assessment: GraphAssessmentResponse | None
+    latest_graph_assessment: GraphAssessmentResponse | None
+    latest_review: GraphAssessmentReviewSnapshotResponse | None
+    action_flags: CourseWorkspaceActionFlagsResponse

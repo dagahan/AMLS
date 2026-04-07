@@ -4,7 +4,7 @@ import uuid
 from datetime import datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import DateTime, Enum, Float, ForeignKey, func
+from sqlalchemy import Boolean, DateTime, Enum, Float, ForeignKey, func
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -67,6 +67,7 @@ class ResponseEvent(Base, IdMixin):
         nullable=True,
     )
     difficulty_weight: Mapped[float | None] = mapped_column(Float, nullable=True)
+    revealed_solution: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         server_default=func.now(),

@@ -165,3 +165,61 @@ class InfraConfig(ConfigSection):
     @property
     def node_binary(self) -> str:
         return self._require_string("NODE_BINARY")
+
+
+    @property
+    def lms_base_url(self) -> str:
+        raw_value = self._values.get("LMS_BASE_URL")
+        if not isinstance(raw_value, str) or raw_value.strip() == "":
+            return "http://nikiausovs-macbook-pro.tail89767d.ts.net:1234/v1"
+        return raw_value
+
+
+    @property
+    def lms_api_key(self) -> str:
+        raw_value = self._values.get("LMS_API_KEY")
+        if not isinstance(raw_value, str) or raw_value.strip() == "":
+            return "lm-studio"
+        return raw_value
+
+
+    @property
+    def lms_model(self) -> str:
+        raw_value = self._values.get("LMS_MODEL")
+        if not isinstance(raw_value, str) or raw_value.strip() == "":
+            return "qwen2.5-coder-3b-instruct-mlx"
+        return raw_value
+
+
+    @property
+    def lms_timeout_seconds(self) -> int:
+        raw_value = self._values.get("LMS_TIMEOUT_SECONDS")
+        if isinstance(raw_value, int) and not isinstance(raw_value, bool):
+            return raw_value
+        return 30
+
+
+    @property
+    def lms_auto_wake_enabled(self) -> bool:
+        raw_value = self._values.get("LMS_AUTO_WAKE_ENABLED")
+        if isinstance(raw_value, bool):
+            return raw_value
+        if isinstance(raw_value, int):
+            return raw_value == 1
+        return True
+
+
+    @property
+    def lms_auto_wake_timeout_seconds(self) -> int:
+        raw_value = self._values.get("LMS_AUTO_WAKE_TIMEOUT_SECONDS")
+        if isinstance(raw_value, int) and not isinstance(raw_value, bool):
+            return max(1, raw_value)
+        return 15
+
+
+    @property
+    def lms_auto_wake_retry_count(self) -> int:
+        raw_value = self._values.get("LMS_AUTO_WAKE_RETRY_COUNT")
+        if isinstance(raw_value, int) and not isinstance(raw_value, bool):
+            return max(0, raw_value)
+        return 2

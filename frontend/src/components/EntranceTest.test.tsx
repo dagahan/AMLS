@@ -79,6 +79,7 @@ const activeProblemPayload: ProblemResponse = {
     name: "Solve systems",
     prerequisite_ids: [],
   },
+  course_node: null,
   condition: "Choose the correct next step.",
   condition_images: [],
   answer_options: [

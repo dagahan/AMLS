@@ -3,6 +3,8 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 from uuid import UUID
 
+from pydantic import Field
+
 from src.models.pydantic.common import AmlsSchema
 from src.storage.db.enums import UserRole
 
@@ -23,6 +25,11 @@ class UserResponse(AmlsSchema):
 class AvatarSnapshot(AmlsSchema):
     user_id: UUID
     avatar_url: str | None
+
+
+class UserProfileUpdateRequest(AmlsSchema):
+    first_name: str = Field(min_length=1, max_length=100)
+    last_name: str = Field(min_length=1, max_length=100)
 
 
 def build_user_response(user: "User") -> UserResponse:

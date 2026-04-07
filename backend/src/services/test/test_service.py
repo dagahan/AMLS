@@ -5,7 +5,7 @@ import uuid
 from typing import TYPE_CHECKING, Any, Literal, TypedDict, cast
 
 from fastapi import HTTPException, status
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.orm import selectinload
 
 from src.config import get_app_config
@@ -37,11 +37,21 @@ from src.models.alchemy import (
 from src.models.pydantic.graph_assessment import GraphAssessmentResponse
 from src.models.pydantic.response import ResponseCreate
 from src.models.pydantic.test import (
+    CourseTestAttemptHistoryItemResponse,
+    CourseTestHistoryResponse,
+    ProblemSolutionResponse,
     TestAnswerRequest,
     TestAnswerResponse,
+    TestAttemptReviewResponse,
     TestAttemptResponse,
     TestCurrentProblemResponse,
+    TestRevealSolutionResponse,
+    TestReviewResponseItem,
     TestStartRequest,
+)
+from src.services.graph_assessment import (
+    GraphAssessmentReviewService,
+    ReviewCourseNodeContext,
 )
 from src.services.graph_assessment.graph_assessment_service import build_graph_assessment_response
 from src.services.problem.loader import load_problem_or_404
@@ -50,6 +60,7 @@ from src.services.response import ResponseRecorderService
 from src.services.catalog.difficulty_service import build_difficulty_response
 from src.storage.db.enums import (
     CourseGraphVersionStatus,
+    GraphAssessmentReviewStatus,
     ProblemAnswerOptionType,
     TestAttemptKind,
     TestAttemptStatus,
@@ -83,6 +94,7 @@ class TestRuntimeState(TypedDict):
     asked_course_node_ids: list[str]
     learned_course_node_ids: list[str]
     failed_course_node_ids: list[str]
+    target_course_node_ids: list[str]
     current_course_node_id: str | None
     assessment_node_score_by_course_node_id: dict[str, float]
 
@@ -107,6 +119,7 @@ class TestService:
     def __init__(self, storage_manager: StorageManager) -> None:
         self.storage_manager = storage_manager
         self.response_recorder_service = ResponseRecorderService()
+        self.review_service = GraphAssessmentReviewService()
 
 
     async def start_test(
@@ -121,6 +134,14 @@ class TestService:
             await self._ensure_no_active_test_attempt(session, user_id)
             await self._ensure_no_open_course_test_attempt(session, user_id, course_id)
             graph_version = await self._load_published_graph_version_or_409(session, course)
+            target_course_node_ids = await self._resolve_target_course_node_ids(
+                session=session,
+                user_id=user_id,
+                course_id=course_id,
+                graph_version=graph_version,
+                kind=data.kind,
+                requested_target_course_node_ids=data.target_course_node_ids,
+            )
 
             if data.kind == TestAttemptKind.ENTRANCE:
                 has_active_assessment = await self._has_active_course_assessment(
@@ -140,12 +161,20 @@ class TestService:
                 kind=data.kind,
                 status=TestAttemptStatus.ACTIVE,
                 current_problem_id=None,
-                config_snapshot=self._build_test_config_snapshot(graph_version),
+                config_snapshot=self._build_test_config_snapshot(
+                    graph_version=graph_version,
+                    target_course_node_ids=target_course_node_ids,
+                    requested_target_course_node_ids=data.target_course_node_ids,
+                ),
                 metadata_json=self._build_runtime_state_payload(
-                    self._build_empty_runtime_state(graph_version)
+                    self._build_empty_runtime_state(
+                        graph_version=graph_version,
+                        target_course_node_ids=target_course_node_ids,
+                    )
                 ),
                 started_at=datetime.now(UTC),
                 paused_at=None,
+                total_paused_seconds=0,
                 ended_at=None,
             )
             session.add(test_attempt)
@@ -160,12 +189,13 @@ class TestService:
             await session.refresh(test_attempt)
 
             logger.info(
-                "Started test attempt: test_attempt_id={}, user_id={}, course_id={}, graph_version_id={}, kind={}, current_problem_id={}",
+                "Started test attempt: test_attempt_id={}, user_id={}, course_id={}, graph_version_id={}, kind={}, target_node_count={}, current_problem_id={}",
                 test_attempt.id,
                 user_id,
                 course_id,
                 graph_version.id,
                 data.kind,
+                len(target_course_node_ids),
                 test_attempt.current_problem_id,
             )
             return TestCurrentProblemResponse(
@@ -201,14 +231,16 @@ class TestService:
                     detail="Only active test attempts can be paused",
                 )
 
+            paused_at = datetime.now(UTC)
             test_attempt.status = TestAttemptStatus.PAUSED
-            test_attempt.paused_at = datetime.now(UTC)
+            test_attempt.paused_at = paused_at
             await session.flush()
             await session.refresh(test_attempt)
             logger.info(
-                "Paused test attempt: test_attempt_id={}, user_id={}",
+                "Paused test attempt: test_attempt_id={}, user_id={}, paused_at={}",
                 test_attempt_id,
                 user_id,
+                paused_at.isoformat(),
             )
             return TestAttemptResponse.model_validate(test_attempt)
 
@@ -228,6 +260,13 @@ class TestService:
 
             await self._ensure_no_active_test_attempt(session, user_id)
             test_attempt.status = TestAttemptStatus.ACTIVE
+            resumed_at = datetime.now(UTC)
+            if test_attempt.paused_at is not None:
+                paused_seconds = int((resumed_at - test_attempt.paused_at).total_seconds())
+                test_attempt.total_paused_seconds = max(
+                    0,
+                    test_attempt.total_paused_seconds + max(0, paused_seconds),
+                )
             test_attempt.paused_at = None
             graph_version = await self._load_graph_version_or_404(session, test_attempt.graph_version_id)
             current_problem = await self._load_optional_current_problem(session, test_attempt)
@@ -237,10 +276,11 @@ class TestService:
             await session.refresh(test_attempt)
 
             logger.info(
-                "Resumed test attempt: test_attempt_id={}, user_id={}, current_problem_id={}",
+                "Resumed test attempt: test_attempt_id={}, user_id={}, current_problem_id={}, total_paused_seconds={}",
                 test_attempt_id,
                 user_id,
                 test_attempt.current_problem_id,
+                test_attempt.total_paused_seconds,
             )
             return TestCurrentProblemResponse(
                 test_attempt=TestAttemptResponse.model_validate(test_attempt),
@@ -318,7 +358,11 @@ class TestService:
                     graph_version,
                     runtime_state,
                 )
-                graph_assessment_response = build_graph_assessment_response(graph_assessment)
+                graph_assessment_response = (
+                    build_graph_assessment_response(graph_assessment)
+                    if graph_assessment is not None
+                    else None
+                )
             else:
                 next_problem = await self._assign_next_problem(session, test_attempt, graph_version)
                 if next_problem is None:
@@ -328,8 +372,10 @@ class TestService:
                         graph_version,
                         runtime_state,
                     )
-                    graph_assessment_response = build_graph_assessment_response(
-                        graph_assessment
+                    graph_assessment_response = (
+                        build_graph_assessment_response(graph_assessment)
+                        if graph_assessment is not None
+                        else None
                     )
 
             await session.flush()
@@ -350,6 +396,198 @@ class TestService:
                 response=recorded_response,
                 next_problem=build_problem_response(next_problem) if next_problem is not None else None,
                 graph_assessment=graph_assessment_response,
+            )
+
+
+    async def reveal_solution(
+        self,
+        user_id: uuid.UUID,
+        test_attempt_id: uuid.UUID,
+    ) -> TestRevealSolutionResponse:
+        async with self.storage_manager.session_ctx() as session:
+            test_attempt = await self._load_test_attempt_or_404(session, user_id, test_attempt_id)
+            if test_attempt.status != TestAttemptStatus.ACTIVE:
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail="Test attempt is not active",
+                )
+            if test_attempt.current_problem_id is None:
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail="Test attempt does not have a current problem",
+                )
+
+            graph_version = await self._load_graph_version_or_404(session, test_attempt.graph_version_id)
+            problem = await load_problem_or_404(session, test_attempt.current_problem_id)
+            answer_option = self._pick_reveal_answer_option(problem)
+            runtime_state = self._read_runtime_state(test_attempt.metadata_json)
+            current_course_node_id = runtime_state["current_course_node_id"]
+            if current_course_node_id is None:
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail="Current course node is not stored for this test attempt",
+                )
+
+            current_course_node_uuid = uuid.UUID(current_course_node_id)
+            difficulty_response = build_difficulty_response(problem.difficulty)
+            recorded_response = await self.response_recorder_service.record_response(
+                session=session,
+                user_id=user_id,
+                data=ResponseCreate(
+                    problem_id=problem.id,
+                    answer_option_id=answer_option.id,
+                    test_attempt_id=test_attempt.id,
+                    problem_type_id=problem.problem_type_id,
+                    course_node_id=current_course_node_uuid,
+                    answer_option_type=answer_option.type,
+                    difficulty=problem.difficulty,
+                    difficulty_weight=difficulty_response.coefficient,
+                    revealed_solution=True,
+                ),
+            )
+            should_complete = self._apply_answer_to_runtime_state(
+                test_attempt=test_attempt,
+                graph_version=graph_version,
+                runtime_state=runtime_state,
+                course_node_id=current_course_node_uuid,
+                answer_option_type=answer_option.type,
+                difficulty_weight=difficulty_response.coefficient,
+            )
+            test_attempt.metadata_json = self._build_runtime_state_payload(runtime_state)
+
+            next_problem: Problem | None = None
+            graph_assessment_response: GraphAssessmentResponse | None = None
+            if should_complete:
+                graph_assessment = await self._complete_test_attempt(
+                    session,
+                    test_attempt,
+                    graph_version,
+                    runtime_state,
+                )
+                graph_assessment_response = (
+                    build_graph_assessment_response(graph_assessment)
+                    if graph_assessment is not None
+                    else None
+                )
+            else:
+                next_problem = await self._assign_next_problem(session, test_attempt, graph_version)
+                if next_problem is None:
+                    graph_assessment = await self._complete_test_attempt(
+                        session,
+                        test_attempt,
+                        graph_version,
+                        runtime_state,
+                    )
+                    graph_assessment_response = (
+                        build_graph_assessment_response(graph_assessment)
+                        if graph_assessment is not None
+                        else None
+                    )
+
+            await session.flush()
+            await session.refresh(test_attempt)
+            logger.info(
+                "Revealed solution in test attempt",
+                test_attempt_id=str(test_attempt_id),
+                user_id=str(user_id),
+                problem_id=str(problem.id),
+                course_node_id=str(current_course_node_uuid),
+                next_problem_id=(
+                    str(test_attempt.current_problem_id)
+                    if test_attempt.current_problem_id is not None
+                    else None
+                ),
+            )
+            return TestRevealSolutionResponse(
+                test_attempt=TestAttemptResponse.model_validate(test_attempt),
+                response=recorded_response,
+                revealed_solution=ProblemSolutionResponse(
+                    problem_id=problem.id,
+                    solution=problem.solution,
+                    solution_images=problem.solution_images,
+                ),
+                next_problem=build_problem_response(next_problem) if next_problem is not None else None,
+                graph_assessment=graph_assessment_response,
+            )
+
+
+    async def get_attempt_review(
+        self,
+        user_id: uuid.UUID,
+        test_attempt_id: uuid.UUID,
+    ) -> TestAttemptReviewResponse:
+        async with self.storage_manager.session_ctx() as session:
+            test_attempt = await self._load_test_attempt_or_404(session, user_id, test_attempt_id)
+            result = await session.execute(
+                select(ResponseEvent)
+                .options(
+                    selectinload(ResponseEvent.problem).selectinload(Problem.subtopic),
+                    selectinload(ResponseEvent.problem)
+                    .selectinload(Problem.problem_type)
+                    .selectinload(ProblemType.prerequisite_links),
+                    selectinload(ResponseEvent.problem).selectinload(Problem.course_node),
+                    selectinload(ResponseEvent.problem).selectinload(Problem.answer_options),
+                )
+                .where(ResponseEvent.test_attempt_id == test_attempt.id)
+                .order_by(ResponseEvent.created_at.asc(), ResponseEvent.id.asc())
+            )
+            response_events = list(result.scalars().unique().all())
+            review_items = [
+                TestReviewResponseItem(
+                    response_id=response_event.id,
+                    problem=build_problem_response(response_event.problem),
+                    chosen_answer_option_id=response_event.answer_option_id,
+                    chosen_answer_option_type=(
+                        response_event.answer_option_type
+                        if response_event.answer_option_type is not None
+                        else ProblemAnswerOptionType.WRONG
+                    ),
+                    revealed_solution=response_event.revealed_solution,
+                    solution=response_event.problem.solution,
+                    solution_images=response_event.problem.solution_images,
+                    created_at=response_event.created_at,
+                )
+                for response_event in response_events
+            ]
+            return TestAttemptReviewResponse(
+                test_attempt=TestAttemptResponse.model_validate(test_attempt),
+                items=review_items,
+            )
+
+
+    async def list_course_attempt_history(
+        self,
+        user_id: uuid.UUID,
+        course_id: uuid.UUID,
+    ) -> CourseTestHistoryResponse:
+        async with self.storage_manager.session_ctx() as session:
+            result = await session.execute(
+                select(TestAttempt)
+                .join(
+                    CourseGraphVersion,
+                    CourseGraphVersion.id == TestAttempt.graph_version_id,
+                )
+                .where(
+                    TestAttempt.user_id == user_id,
+                    CourseGraphVersion.course_id == course_id,
+                )
+                .order_by(TestAttempt.created_at.desc(), TestAttempt.id.desc())
+            )
+            attempts = list(result.scalars().all())
+            return CourseTestHistoryResponse(
+                attempts=[
+                    CourseTestAttemptHistoryItemResponse(
+                        id=attempt.id,
+                        graph_version_id=attempt.graph_version_id,
+                        kind=attempt.kind,
+                        status=attempt.status,
+                        started_at=attempt.started_at,
+                        ended_at=attempt.ended_at,
+                        created_at=attempt.created_at,
+                        updated_at=attempt.updated_at,
+                    )
+                    for attempt in attempts
+                ]
             )
 
 
@@ -403,18 +641,25 @@ class TestService:
         graph_version: CourseGraphVersion,
         runtime_state: TestRuntimeState,
     ) -> NextProblemSelection:
+        target_course_node_ids = self._read_target_course_node_ids(
+            test_attempt=test_attempt,
+            graph_version=graph_version,
+        )
         if runtime_state["runtime_kind"] == EXACT_FOREST_RUNTIME_KIND:
             return await self._select_next_problem_with_exact_runtime(
                 session=session,
                 test_attempt=test_attempt,
                 graph_version=graph_version,
                 runtime_state=runtime_state,
+                target_course_node_ids=target_course_node_ids,
             )
 
         state = self._build_graph_state(graph_version, runtime_state)
         ready_without_problem_ids: list[uuid.UUID] = []
         for ready_course_node_id_str in state["ready_course_node_ids"]:
             ready_course_node_id = uuid.UUID(ready_course_node_id_str)
+            if ready_course_node_id not in target_course_node_ids:
+                continue
             ready_course_node = self._find_course_node(graph_version, ready_course_node_id)
             selected_problem = await self._pick_problem_for_course_node(
                 session,
@@ -442,6 +687,7 @@ class TestService:
         test_attempt: TestAttempt,
         graph_version: CourseGraphVersion,
         runtime_state: TestRuntimeState,
+        target_course_node_ids: set[uuid.UUID],
     ) -> NextProblemSelection:
         graph_artifact, _, runtime_snapshot = (
             self._build_exact_runtime_context(
@@ -450,14 +696,11 @@ class TestService:
                 runtime_state=runtime_state,
             )
         )
-        available_node_ids = {
-            version_node.course_node_id
-            for version_node in graph_version.version_nodes
-        }
+        available_node_ids = set(target_course_node_ids)
         blocked_node_ids: list[uuid.UUID] = []
         assessment_config = self._get_assessment_config(test_attempt.config_snapshot)
 
-        while True:
+        while available_node_ids:
             selection = select_next_node(
                 graph_artifact=graph_artifact,
                 runtime=runtime_snapshot,
@@ -514,6 +757,12 @@ class TestService:
                     "course_node_id": None,
                     "ready_without_problem_ids": blocked_node_ids,
                 }
+            if selection.node_id not in available_node_ids:
+                return {
+                    "problem": None,
+                    "course_node_id": None,
+                    "ready_without_problem_ids": blocked_node_ids,
+                }
 
             course_node = self._find_course_node(graph_version, selection.node_id)
             selected_problem = await self._pick_problem_for_course_node(
@@ -530,6 +779,12 @@ class TestService:
 
             available_node_ids.discard(selection.node_id)
             blocked_node_ids.append(selection.node_id)
+
+        return {
+            "problem": None,
+            "course_node_id": None,
+            "ready_without_problem_ids": blocked_node_ids,
+        }
 
 
     async def _pick_problem_for_course_node(
@@ -566,10 +821,7 @@ class TestService:
                 selectinload(Problem.course_node),
                 selectinload(Problem.answer_options),
             )
-            .where(
-                Problem.course_node_id.is_(None),
-                Problem.problem_type_id == course_node.problem_type_id,
-            )
+            .where(Problem.problem_type_id == course_node.problem_type_id)
             .order_by(Problem.condition, Problem.id)
         )
         fallback_problems = list(result.scalars().unique().all())
@@ -594,8 +846,14 @@ class TestService:
     ) -> Problem | None:
         if not problems:
             return None
-        unused_problem = next((problem for problem in problems if problem.id not in used_problem_ids), None)
-        return unused_problem or problems[0]
+        return next(
+            (
+                problem
+                for problem in problems
+                if problem.id not in used_problem_ids
+            ),
+            None,
+        )
 
 
     async def _complete_test_attempt(
@@ -604,21 +862,39 @@ class TestService:
         test_attempt: TestAttempt,
         graph_version: CourseGraphVersion,
         runtime_state: TestRuntimeState,
-    ) -> GraphAssessment:
+    ) -> GraphAssessment | None:
+        ended_at = datetime.now(UTC)
+        if test_attempt.paused_at is not None:
+            paused_seconds = int((ended_at - test_attempt.paused_at).total_seconds())
+            test_attempt.total_paused_seconds = max(
+                0,
+                test_attempt.total_paused_seconds + max(0, paused_seconds),
+            )
+
+        test_attempt.status = TestAttemptStatus.COMPLETED
+        test_attempt.current_problem_id = None
+        test_attempt.ended_at = ended_at
+        test_attempt.paused_at = None
+        runtime_state["current_course_node_id"] = None
+        test_attempt.metadata_json = self._build_runtime_state_payload(runtime_state)
+
+        if not self._is_mastery_changing_kind(test_attempt.kind):
+            return None
+
         state, state_confidence, metadata_json = self._build_assessment_result_payload(
             test_attempt=test_attempt,
             graph_version=graph_version,
             runtime_state=runtime_state,
         )
+        if await self._is_perfect_attempt(session=session, test_attempt_id=test_attempt.id):
+            state_confidence = 1.0
+            logger.info(
+                "Applied perfect-attempt confidence override",
+                test_attempt_id=str(test_attempt.id),
+                confidence=state_confidence,
+            )
         course_id = graph_version.course_id
         await self._deactivate_course_assessments(session, test_attempt.user_id, course_id)
-
-        test_attempt.status = TestAttemptStatus.COMPLETED
-        test_attempt.current_problem_id = None
-        test_attempt.ended_at = datetime.now(UTC)
-        test_attempt.paused_at = None
-        runtime_state["current_course_node_id"] = None
-        test_attempt.metadata_json = self._build_runtime_state_payload(runtime_state)
 
         graph_assessment = GraphAssessment(
             user_id=test_attempt.user_id,
@@ -633,7 +909,52 @@ class TestService:
         )
         session.add(graph_assessment)
         await session.flush()
+        await self._populate_assessment_review(
+            graph_assessment=graph_assessment,
+            graph_version=graph_version,
+        )
+        await session.flush()
+        await session.refresh(graph_assessment)
         return graph_assessment
+
+
+    async def _populate_assessment_review(
+        self,
+        graph_assessment: GraphAssessment,
+        graph_version: CourseGraphVersion,
+    ) -> None:
+        state_counts = self._build_state_counts(graph_assessment.state)
+        course_title = graph_version.course.title if graph_version.course is not None else "Course"
+        course_description = graph_version.course.description if graph_version.course is not None else None
+        node_contexts = self._build_review_node_contexts(
+            graph_version=graph_version,
+            graph_state=graph_assessment.state,
+            metadata_json=graph_assessment.metadata_json,
+        )
+        generated_review = await self.review_service.generate_review(
+            course_title=course_title,
+            course_description=course_description,
+            node_contexts=node_contexts,
+            assessment_kind=graph_assessment.assessment_kind,
+            state_confidence=graph_assessment.state_confidence,
+            learned_count=state_counts["learned"],
+            ready_count=state_counts["ready"],
+            locked_count=state_counts["locked"],
+            failed_count=state_counts["failed"],
+        )
+        graph_assessment.review_model = generated_review.review_model
+        graph_assessment.review_status = generated_review.status
+        if generated_review.status == GraphAssessmentReviewStatus.SUCCEEDED:
+            graph_assessment.review_text = generated_review.review_text
+            graph_assessment.review_recommendations = generated_review.review_recommendations
+            graph_assessment.review_error = None
+            graph_assessment.review_generated_at = generated_review.generated_at
+            return
+
+        graph_assessment.review_text = None
+        graph_assessment.review_recommendations = self._build_deterministic_recommendations(state_counts)
+        graph_assessment.review_error = generated_review.review_error
+        graph_assessment.review_generated_at = None
 
 
     async def _deactivate_course_assessments(
@@ -682,12 +1003,134 @@ class TestService:
             )
         )
         for test_attempt in result.scalars().all():
+            ended_at = datetime.now(UTC)
+            if test_attempt.paused_at is not None:
+                paused_seconds = int((ended_at - test_attempt.paused_at).total_seconds())
+                test_attempt.total_paused_seconds = max(
+                    0,
+                    test_attempt.total_paused_seconds + max(0, paused_seconds),
+                )
             test_attempt.status = TestAttemptStatus.CANCELLED
             test_attempt.current_problem_id = None
-            test_attempt.ended_at = datetime.now(UTC)
+            test_attempt.ended_at = ended_at
+            test_attempt.paused_at = None
             runtime_state = self._read_runtime_state(test_attempt.metadata_json)
             runtime_state["current_course_node_id"] = None
             test_attempt.metadata_json = self._build_runtime_state_payload(runtime_state)
+
+
+    async def _resolve_target_course_node_ids(
+        self,
+        session: AsyncSession,
+        user_id: uuid.UUID,
+        course_id: uuid.UUID,
+        graph_version: CourseGraphVersion,
+        kind: TestAttemptKind,
+        requested_target_course_node_ids: list[uuid.UUID] | None,
+    ) -> list[uuid.UUID]:
+        allowed_course_node_ids = {
+            version_node.course_node_id
+            for version_node in graph_version.version_nodes
+        }
+        if requested_target_course_node_ids is not None and requested_target_course_node_ids:
+            normalized_requested_ids = list(dict.fromkeys(requested_target_course_node_ids))
+            unsupported_ids = [
+                str(course_node_id)
+                for course_node_id in normalized_requested_ids
+                if course_node_id not in allowed_course_node_ids
+            ]
+            if unsupported_ids:
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail=f"Target nodes are not part of the graph version: {', '.join(unsupported_ids)}",
+                )
+            return normalized_requested_ids
+
+        if kind != TestAttemptKind.MISTAKES:
+            return sorted(allowed_course_node_ids, key=str)
+
+        recent_mistake_node_ids = await self._load_recent_mistake_course_node_ids(
+            session=session,
+            user_id=user_id,
+            course_id=course_id,
+            allowed_course_node_ids=allowed_course_node_ids,
+        )
+        if recent_mistake_node_ids:
+            return recent_mistake_node_ids
+        return sorted(allowed_course_node_ids, key=str)
+
+
+    async def _load_recent_mistake_course_node_ids(
+        self,
+        session: AsyncSession,
+        user_id: uuid.UUID,
+        course_id: uuid.UUID,
+        allowed_course_node_ids: set[uuid.UUID],
+    ) -> list[uuid.UUID]:
+        result = await session.execute(
+            select(ResponseEvent.course_node_id)
+            .join(
+                TestAttempt,
+                TestAttempt.id == ResponseEvent.test_attempt_id,
+            )
+            .join(
+                CourseGraphVersion,
+                CourseGraphVersion.id == TestAttempt.graph_version_id,
+            )
+            .where(
+                ResponseEvent.user_id == user_id,
+                CourseGraphVersion.course_id == course_id,
+                ResponseEvent.course_node_id.is_not(None),
+                or_(
+                    ResponseEvent.answer_option_type != ProblemAnswerOptionType.RIGHT,
+                    ResponseEvent.revealed_solution.is_(True),
+                ),
+            )
+            .order_by(ResponseEvent.created_at.desc(), ResponseEvent.id.desc())
+            .limit(64)
+        )
+        recent_ids: list[uuid.UUID] = []
+        for raw_node_id in result.scalars().all():
+            if raw_node_id is None:
+                continue
+            if raw_node_id not in allowed_course_node_ids:
+                continue
+            if raw_node_id in recent_ids:
+                continue
+            recent_ids.append(raw_node_id)
+        return recent_ids
+
+
+    def _read_target_course_node_ids(
+        self,
+        test_attempt: TestAttempt,
+        graph_version: CourseGraphVersion,
+    ) -> set[uuid.UUID]:
+        allowed_course_node_ids = {
+            version_node.course_node_id
+            for version_node in graph_version.version_nodes
+        }
+        raw_target_ids = test_attempt.config_snapshot.get("target_course_node_ids")
+        if not isinstance(raw_target_ids, list):
+            return allowed_course_node_ids
+
+        parsed_target_ids: set[uuid.UUID] = set()
+        for raw_target_id in raw_target_ids:
+            try:
+                parsed_target_id = uuid.UUID(str(raw_target_id))
+            except ValueError:
+                continue
+            if parsed_target_id in allowed_course_node_ids:
+                parsed_target_ids.add(parsed_target_id)
+
+        if parsed_target_ids:
+            return parsed_target_ids
+        return allowed_course_node_ids
+
+
+    @staticmethod
+    def _is_mastery_changing_kind(kind: TestAttemptKind) -> bool:
+        return kind in {TestAttemptKind.ENTRANCE, TestAttemptKind.GENERAL}
 
 
     async def _load_course_or_404(
@@ -728,6 +1171,7 @@ class TestService:
         result = await session.execute(
             select(CourseGraphVersion)
             .options(
+                selectinload(CourseGraphVersion.course),
                 selectinload(CourseGraphVersion.version_nodes).selectinload(
                     CourseGraphVersionNode.course_node
                 ),
@@ -918,6 +1362,37 @@ class TestService:
         return answer_option
 
 
+    def _pick_reveal_answer_option(self, problem: Problem) -> ProblemAnswerOption:
+        i_dont_know_option = next(
+            (
+                answer_option
+                for answer_option in problem.answer_options
+                if answer_option.type == ProblemAnswerOptionType.I_DONT_KNOW
+            ),
+            None,
+        )
+        if i_dont_know_option is not None:
+            return i_dont_know_option
+
+        wrong_option = next(
+            (
+                answer_option
+                for answer_option in problem.answer_options
+                if answer_option.type == ProblemAnswerOptionType.WRONG
+            ),
+            None,
+        )
+        if wrong_option is not None:
+            return wrong_option
+
+        if not problem.answer_options:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Problem does not have answer options",
+            )
+        return problem.answer_options[0]
+
+
     def _apply_answer_to_runtime_state(
         self,
         test_attempt: TestAttempt,
@@ -961,13 +1436,18 @@ class TestService:
         return False
 
 
-    def _build_empty_runtime_state(self, graph_version: CourseGraphVersion) -> TestRuntimeState:
+    def _build_empty_runtime_state(
+        self,
+        graph_version: CourseGraphVersion,
+        target_course_node_ids: list[uuid.UUID],
+    ) -> TestRuntimeState:
         runtime_kind = self._select_runtime_kind(graph_version)
         return {
             "runtime_kind": runtime_kind,
             "asked_course_node_ids": [],
             "learned_course_node_ids": [],
             "failed_course_node_ids": [],
+            "target_course_node_ids": [str(course_node_id) for course_node_id in target_course_node_ids],
             "current_course_node_id": None,
             "assessment_node_score_by_course_node_id": {},
         }
@@ -978,6 +1458,7 @@ class TestService:
         asked_course_node_ids = self._read_string_list(metadata_json, "asked_course_node_ids")
         learned_course_node_ids = self._read_string_list(metadata_json, "learned_course_node_ids")
         failed_course_node_ids = self._read_string_list(metadata_json, "failed_course_node_ids")
+        target_course_node_ids = self._read_string_list(metadata_json, "target_course_node_ids")
         current_course_node_id = metadata_json.get("current_course_node_id")
         assessment_node_score_by_course_node_id = self._read_float_mapping(
             metadata_json,
@@ -992,6 +1473,7 @@ class TestService:
             "asked_course_node_ids": asked_course_node_ids,
             "learned_course_node_ids": learned_course_node_ids,
             "failed_course_node_ids": failed_course_node_ids,
+            "target_course_node_ids": target_course_node_ids,
             "current_course_node_id": (
                 str(current_course_node_id)
                 if isinstance(current_course_node_id, str)
@@ -1007,6 +1489,7 @@ class TestService:
             "asked_course_node_ids": list(runtime_state["asked_course_node_ids"]),
             "learned_course_node_ids": list(runtime_state["learned_course_node_ids"]),
             "failed_course_node_ids": list(runtime_state["failed_course_node_ids"]),
+            "target_course_node_ids": list(runtime_state["target_course_node_ids"]),
             "current_course_node_id": runtime_state["current_course_node_id"],
             "assessment_node_score_by_course_node_id": dict(
                 runtime_state["assessment_node_score_by_course_node_id"]
@@ -1108,11 +1591,22 @@ class TestService:
         return step_result.should_stop
 
 
-    def _build_test_config_snapshot(self, graph_version: CourseGraphVersion) -> dict[str, object]:
+    def _build_test_config_snapshot(
+        self,
+        graph_version: CourseGraphVersion,
+        target_course_node_ids: list[uuid.UUID],
+        requested_target_course_node_ids: list[uuid.UUID] | None,
+    ) -> dict[str, object]:
         runtime_kind = self._select_runtime_kind(graph_version)
         return {
             "selection_strategy": runtime_kind,
             "assessment": get_app_config().entrance_assessment_snapshot(),
+            "target_course_node_ids": [str(course_node_id) for course_node_id in target_course_node_ids],
+            "requested_target_course_node_ids": (
+                [str(course_node_id) for course_node_id in requested_target_course_node_ids]
+                if requested_target_course_node_ids is not None
+                else []
+            ),
         }
 
 
@@ -1420,6 +1914,89 @@ class TestService:
         if node_count == 0:
             return 1.0
         return answered_count / node_count
+
+
+    async def _is_perfect_attempt(
+        self,
+        *,
+        session: AsyncSession,
+        test_attempt_id: uuid.UUID,
+    ) -> bool:
+        result = await session.execute(
+            select(ResponseEvent.answer_option_type, ResponseEvent.revealed_solution).where(
+                ResponseEvent.test_attempt_id == test_attempt_id
+            )
+        )
+        response_rows = result.all()
+        if not response_rows:
+            return False
+
+        return all(
+            answer_option_type == ProblemAnswerOptionType.RIGHT and not revealed_solution
+            for answer_option_type, revealed_solution in response_rows
+        )
+
+
+    def _build_review_node_contexts(
+        self,
+        *,
+        graph_version: CourseGraphVersion,
+        graph_state: dict[str, object],
+        metadata_json: dict[str, object] | None,
+    ) -> list[ReviewCourseNodeContext]:
+        frontier_node_ids = set(self._read_string_list(metadata_json or {}, "inner_fringe_course_node_ids"))
+        if not frontier_node_ids:
+            frontier_node_ids = set(
+                self._read_string_list(metadata_json or {}, "legacy_frontier_course_node_ids")
+            )
+
+        mastery_by_course_node_id: dict[str, str] = {}
+        for course_node_id in self._read_string_list(graph_state, "learned_course_node_ids"):
+            mastery_by_course_node_id[course_node_id] = "learned"
+        for course_node_id in self._read_string_list(graph_state, "ready_course_node_ids"):
+            mastery_by_course_node_id.setdefault(course_node_id, "ready")
+        for course_node_id in self._read_string_list(graph_state, "failed_course_node_ids"):
+            mastery_by_course_node_id.setdefault(course_node_id, "failed")
+        for course_node_id in self._read_string_list(graph_state, "locked_course_node_ids"):
+            mastery_by_course_node_id.setdefault(course_node_id, "locked")
+
+        return [
+            ReviewCourseNodeContext(
+                name=version_node.course_node.name,
+                description=version_node.course_node.description,
+                mastery_state=mastery_by_course_node_id.get(str(version_node.course_node_id), "unknown"),
+                is_frontier=str(version_node.course_node_id) in frontier_node_ids,
+            )
+            for version_node in sorted(
+                graph_version.version_nodes,
+                key=lambda node: (
+                    node.topological_rank if node.topological_rank is not None else 10**9,
+                    str(node.course_node_id),
+                ),
+            )
+        ]
+
+
+    def _build_state_counts(self, state: dict[str, object]) -> dict[str, int]:
+        return {
+            "learned": len(self._read_string_list(state, "learned_course_node_ids")),
+            "ready": len(self._read_string_list(state, "ready_course_node_ids")),
+            "locked": len(self._read_string_list(state, "locked_course_node_ids")),
+            "failed": len(self._read_string_list(state, "failed_course_node_ids")),
+        }
+
+
+    def _build_deterministic_recommendations(self, state_counts: dict[str, int]) -> list[str]:
+        recommendations: list[str] = []
+        if state_counts["failed"] > 0:
+            recommendations.append("Repeat recently failed problem types in a focused practice run.")
+        if state_counts["ready"] > 0:
+            recommendations.append("Prioritize ready problem types to unlock additional course sections.")
+        if state_counts["locked"] > 0:
+            recommendations.append("Strengthen prerequisites before attempting locked problem types.")
+        if not recommendations:
+            recommendations.append("Continue regular practice to maintain the current mastery state.")
+        return recommendations
 
 
     def _get_assessment_config(self, config_snapshot: dict[str, object]) -> dict[str, Any]:

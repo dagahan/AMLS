@@ -1,8 +1,11 @@
 from __future__ import annotations
 
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from src.config.config_section import ConfigSection
+
+if TYPE_CHECKING:
+    from src.models.pydantic.llm import LlmRegistryConfig
 
 
 class DifficultyConfig:
@@ -26,19 +29,29 @@ class EntranceAssessmentConfig(ConfigSection):
 
 
 class BusinessConfig(ConfigSection):
-    __slots__ = ("_difficulties", "_entrance_assessment")
+    __slots__ = ("_difficulties", "_entrance_assessment", "_llm_registry")
 
     def __init__(self, values: dict[str, Any]) -> None:
         super().__init__(values)
+        from src.models.pydantic.llm import LlmRegistryConfig
+
         self._entrance_assessment = EntranceAssessmentConfig(
             self._require_mapping("entrance_assessment"),
         )
         self._difficulties = self._require_mapping("difficulties")
+        self._llm_registry = LlmRegistryConfig.model_validate(
+            self._require_mapping("llm"),
+        )
 
 
     @property
     def entrance_assessment(self) -> EntranceAssessmentConfig:
         return self._entrance_assessment
+
+
+    @property
+    def llm_registry(self) -> LlmRegistryConfig:
+        return self._llm_registry
 
 
     def difficulty(self, difficulty_key: str) -> DifficultyConfig:

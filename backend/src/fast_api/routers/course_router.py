@@ -6,7 +6,12 @@ from fastapi import APIRouter, Depends
 
 from src.fast_api.dependencies import require_role
 from src.models.pydantic import AuthContext, MessageResponse
-from src.models.pydantic.course import CourseCreate, CourseEnrollmentResponse, CourseResponse
+from src.models.pydantic.course import (
+    CourseCreate,
+    CourseEnrollmentResponse,
+    CourseResponse,
+    CourseWorkspaceResponse,
+)
 from src.services.course import CourseService
 from src.services.test import TestService
 from src.storage.db.enums import UserRole
@@ -51,6 +56,30 @@ def get_course_router(storage_manager: StorageManager) -> APIRouter:
         auth: AuthContext = Depends(require_role(role=UserRole.STUDENT)),
     ) -> CourseEnrollmentResponse:
         return await course_service.enroll_user(auth.user.id, course_id)
+
+
+    @router.post(
+        "/courses/{course_id}/unenroll",
+        response_model=CourseEnrollmentResponse,
+        status_code=200,
+    )
+    async def unenroll_from_course(
+        course_id: uuid.UUID,
+        auth: AuthContext = Depends(require_role(role=UserRole.STUDENT)),
+    ) -> CourseEnrollmentResponse:
+        return await course_service.unenroll_user(auth.user.id, course_id)
+
+
+    @router.get(
+        "/courses/{course_id}/workspace",
+        response_model=CourseWorkspaceResponse,
+        status_code=200,
+    )
+    async def get_course_workspace(
+        course_id: uuid.UUID,
+        auth: AuthContext = Depends(require_role(role=UserRole.STUDENT)),
+    ) -> CourseWorkspaceResponse:
+        return await course_service.get_workspace(auth.user.id, course_id)
 
 
     @router.post("/courses/{course_id}/reset", response_model=MessageResponse, status_code=200)

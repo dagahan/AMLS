@@ -31,6 +31,7 @@ class ResponseRecorderService:
             answer_option_type=data.answer_option_type,
             difficulty=data.difficulty,
             difficulty_weight=data.difficulty_weight,
+            revealed_solution=data.revealed_solution,
         )
         session.add(response_event)
         await session.flush()
@@ -48,4 +49,5 @@ class ResponseRecorderService:
             problem_id=data.problem_id,
             answer_option_id=data.answer_option_id,
             answer_option_type=data.answer_option_type,
+            revealed_solution=data.revealed_solution,
         )

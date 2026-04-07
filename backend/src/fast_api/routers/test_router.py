@@ -7,10 +7,14 @@ from fastapi import APIRouter, Depends
 from src.fast_api.dependencies import require_role
 from src.models.pydantic import AuthContext
 from src.models.pydantic.graph_assessment import GraphAssessmentResponse
+from src.models.pydantic.graph_assessment import CourseMasteryHistoryResponse
 from src.models.pydantic.test import (
+    CourseTestHistoryResponse,
     TestAnswerRequest,
     TestAnswerResponse,
+    TestAttemptReviewResponse,
     TestCurrentProblemResponse,
+    TestRevealSolutionResponse,
     TestAttemptResponse,
     TestStartRequest,
 )
@@ -84,6 +88,42 @@ def get_test_router(storage_manager: StorageManager) -> APIRouter:
         return await test_service.submit_answer(auth.user.id, test_attempt_id, data)
 
 
+    @router.post(
+        "/tests/{test_attempt_id}/reveal-solution",
+        response_model=TestRevealSolutionResponse,
+        status_code=200,
+    )
+    async def reveal_test_solution(
+        test_attempt_id: uuid.UUID,
+        auth: AuthContext = Depends(require_role(role=UserRole.STUDENT)),
+    ) -> TestRevealSolutionResponse:
+        return await test_service.reveal_solution(auth.user.id, test_attempt_id)
+
+
+    @router.get(
+        "/tests/{test_attempt_id}/review",
+        response_model=TestAttemptReviewResponse,
+        status_code=200,
+    )
+    async def get_test_attempt_review(
+        test_attempt_id: uuid.UUID,
+        auth: AuthContext = Depends(require_role(role=UserRole.STUDENT)),
+    ) -> TestAttemptReviewResponse:
+        return await test_service.get_attempt_review(auth.user.id, test_attempt_id)
+
+
+    @router.get(
+        "/courses/{course_id}/tests/history",
+        response_model=CourseTestHistoryResponse,
+        status_code=200,
+    )
+    async def get_course_test_history(
+        course_id: uuid.UUID,
+        auth: AuthContext = Depends(require_role(role=UserRole.STUDENT)),
+    ) -> CourseTestHistoryResponse:
+        return await test_service.list_course_attempt_history(auth.user.id, course_id)
+
+
     @router.get(
         "/courses/{course_id}/graph-assessments",
         response_model=list[GraphAssessmentResponse],
@@ -106,6 +146,30 @@ def get_test_router(storage_manager: StorageManager) -> APIRouter:
         auth: AuthContext = Depends(require_role(role=UserRole.STUDENT)),
     ) -> GraphAssessmentResponse:
         return await graph_assessment_service.get_active_course_assessment(auth.user.id, course_id)
+
+
+    @router.get(
+        "/courses/{course_id}/mastery-history",
+        response_model=CourseMasteryHistoryResponse,
+        status_code=200,
+    )
+    async def get_course_mastery_history(
+        course_id: uuid.UUID,
+        auth: AuthContext = Depends(require_role(role=UserRole.STUDENT)),
+    ) -> CourseMasteryHistoryResponse:
+        return await graph_assessment_service.list_course_mastery_history(auth.user.id, course_id)
+
+
+    @router.post(
+        "/graph-assessments/{graph_assessment_id}/review/retry",
+        response_model=GraphAssessmentResponse,
+        status_code=200,
+    )
+    async def retry_graph_assessment_review(
+        graph_assessment_id: uuid.UUID,
+        auth: AuthContext = Depends(require_role(role=UserRole.STUDENT)),
+    ) -> GraphAssessmentResponse:
+        return await graph_assessment_service.retry_review(auth.user.id, graph_assessment_id)
 
 
     return router

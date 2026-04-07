@@ -168,18 +168,61 @@ def _build_problem_type_depth(
     )
 
 
-def _build_difficulty_levels(depth: int) -> tuple[DifficultyLevel, DifficultyLevel]:
+def _build_difficulty_levels(depth: int) -> tuple[DifficultyLevel, DifficultyLevel, DifficultyLevel]:
     if depth <= 1:
-        return (DifficultyLevel.INTERMEDIATE, DifficultyLevel.UPPER_INTERMEDIATE)
+        return (
+            DifficultyLevel.INTERMEDIATE,
+            DifficultyLevel.UPPER_INTERMEDIATE,
+            DifficultyLevel.ADVANCED,
+        )
     if depth == 2:
-        return (DifficultyLevel.UPPER_INTERMEDIATE, DifficultyLevel.ADVANCED)
-    return (DifficultyLevel.ADVANCED, DifficultyLevel.PROFICIENT)
+        return (
+            DifficultyLevel.UPPER_INTERMEDIATE,
+            DifficultyLevel.ADVANCED,
+            DifficultyLevel.PROFICIENT,
+        )
+    return (
+        DifficultyLevel.ADVANCED,
+        DifficultyLevel.PROFICIENT,
+        DifficultyLevel.PROFICIENT,
+    )
+
+
+def _build_additional_variant_blueprint(
+    *,
+    problem_type_name: str,
+    base_blueprint: ProblemBlueprint,
+) -> ProblemBlueprint:
+    return ProblemBlueprint(
+        topic_name=base_blueprint["topic_name"],
+        subtopic_name=base_blueprint["subtopic_name"],
+        condition=(
+            f"{base_blueprint['condition']} "
+            f"Then verify the same result using a second method that is valid for {problem_type_name}."
+        ),
+        solution=(
+            f"{base_blueprint['solution']} "
+            "The verification step confirms the same final answer and strengthens method reliability."
+        ),
+        right_answer_text=base_blueprint["right_answer_text"],
+        wrong_answer_text=base_blueprint["wrong_answer_text"],
+    )
 
 
 def _build_problem_blueprint(
     problem_type_name: str,
     variant_index: int,
 ) -> ProblemBlueprint:
+    if variant_index >= 2:
+        second_variant_blueprint = _build_problem_blueprint(
+            problem_type_name=problem_type_name,
+            variant_index=1,
+        )
+        return _build_additional_variant_blueprint(
+            problem_type_name=problem_type_name,
+            base_blueprint=second_variant_blueprint,
+        )
+
     if problem_type_name == "compare and estimate real numbers":
         if variant_index == 0:
             return _build_blueprint(

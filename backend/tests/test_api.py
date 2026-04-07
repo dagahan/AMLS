@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import uuid
 from typing import TYPE_CHECKING, Any
 
@@ -300,6 +301,9 @@ async def test_pause_and_resume_test_reuses_same_attempt(
     )
     assert start_response.status_code == 200
     start_payload = start_response.json()
+    assert start_payload["test_attempt"]["total_paused_seconds"] == 0
+
+    await asyncio.sleep(1.1)
 
     pause_response = await client.post(
         f"/tests/{start_payload['test_attempt']['id']}/pause",
@@ -307,6 +311,10 @@ async def test_pause_and_resume_test_reuses_same_attempt(
     )
     assert pause_response.status_code == 200
     assert pause_response.json()["status"] == "paused"
+    paused_elapsed_seconds = pause_response.json()["elapsed_solve_seconds"]
+    assert paused_elapsed_seconds >= 1
+
+    await asyncio.sleep(1.1)
 
     resume_response = await client.post(
         f"/tests/{start_payload['test_attempt']['id']}/resume",
@@ -317,4 +325,48 @@ async def test_pause_and_resume_test_reuses_same_attempt(
     resume_payload = resume_response.json()
     assert resume_payload["test_attempt"]["id"] == start_payload["test_attempt"]["id"]
     assert resume_payload["test_attempt"]["status"] == "active"
+    assert resume_payload["test_attempt"]["total_paused_seconds"] >= 1
+    assert resume_payload["test_attempt"]["elapsed_solve_seconds"] <= paused_elapsed_seconds + 1
     assert resume_payload["problem"] is not None
+
+
+@pytest.mark.asyncio
+async def test_pause_resume_accumulates_total_paused_seconds_across_cycles(
+    client: AsyncClient,
+    admin_tokens: dict[str, str],
+    student_tokens: dict[str, str],
+) -> None:
+    course = await create_published_course(
+        client,
+        admin_tokens["access_token"],
+        "Pause resume cycles",
+    )
+    await enroll_student(client, student_tokens["access_token"], course["id"])
+
+    start_response = await client.post(
+        f"/courses/{course['id']}/tests/start",
+        headers=build_auth_headers(student_tokens["access_token"]),
+        json={"kind": "general"},
+    )
+    assert start_response.status_code == 200
+    test_attempt_id = start_response.json()["test_attempt"]["id"]
+
+    for _ in range(2):
+        pause_response = await client.post(
+            f"/tests/{test_attempt_id}/pause",
+            headers=build_auth_headers(student_tokens["access_token"]),
+        )
+        assert pause_response.status_code == 200
+        await asyncio.sleep(1.1)
+        resume_response = await client.post(
+            f"/tests/{test_attempt_id}/resume",
+            headers=build_auth_headers(student_tokens["access_token"]),
+        )
+        assert resume_response.status_code == 200
+
+    current_response = await client.get(
+        f"/courses/{course['id']}/tests/current",
+        headers=build_auth_headers(student_tokens["access_token"]),
+    )
+    assert current_response.status_code == 200
+    assert current_response.json()["test_attempt"]["total_paused_seconds"] >= 2

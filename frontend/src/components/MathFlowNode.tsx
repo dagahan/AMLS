@@ -4,7 +4,7 @@ import { Handle, Position } from "@xyflow/react";
 import type { Node, NodeProps } from "@xyflow/react";
 import MathText from "@/components/MathText";
 
-export type MathFlowNodeTone = "default" | "learned" | "ready" | "locked";
+export type MathFlowNodeTone = "default" | "learned" | "ready" | "locked" | "failed";
 
 export interface MathFlowNodeData extends Record<string, unknown> {
   label: string;
@@ -19,6 +19,7 @@ export type MathFlowGraphNode = Node<MathFlowNodeData, "mathNode">;
 
 export default function MathFlowNode({
   data,
+  selected,
   sourcePosition = Position.Bottom,
   targetPosition = Position.Top,
 }: NodeProps<MathFlowGraphNode>) {
@@ -26,6 +27,7 @@ export default function MathFlowNode({
     <div
       data-tone={data.tone ?? "default"}
       data-frontier={data.isFrontier ? "true" : "false"}
+      data-selected={selected ? "true" : "false"}
       className="flow-node"
       style={{
         boxShadow: data.isFrontier

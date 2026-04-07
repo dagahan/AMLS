@@ -7,7 +7,7 @@ from src.config.infra_config import InfraConfig
 
 
 class AppConfig:
-    __slots__ = ("business", "business_hash", "infra", "project_root")
+    __slots__ = ("business", "business_hash", "environment_values", "infra", "project_root")
 
     def __init__(
         self,
@@ -16,11 +16,13 @@ class AppConfig:
         infra: InfraConfig,
         business: BusinessConfig,
         business_hash: str,
+        environment_values: dict[str, str],
     ) -> None:
         self.project_root = project_root
         self.infra = infra
         self.business = business
         self.business_hash = business_hash
+        self.environment_values = dict(environment_values)
 
 
     def backend_bind_host(self) -> str:

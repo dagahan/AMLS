@@ -30,6 +30,8 @@ class CourseGraphVersionStatus(StrEnum):
 class TestAttemptKind(StrEnum):
     ENTRANCE = "entrance"
     GENERAL = "general"
+    EXAM = "exam"
+    MISTAKES = "mistakes"
 
 
 class TestAttemptStatus(StrEnum):
@@ -37,3 +39,9 @@ class TestAttemptStatus(StrEnum):
     PAUSED = "paused"
     COMPLETED = "completed"
     CANCELLED = "cancelled"
+
+
+class GraphAssessmentReviewStatus(StrEnum):
+    PENDING = "pending"
+    SUCCEEDED = "succeeded"
+    FAILED = "failed"

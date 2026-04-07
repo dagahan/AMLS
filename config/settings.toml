@@ -17,6 +17,15 @@ unmastered_right = 0.08
 unmastered_wrong = 0.57
 unmastered_i_dont_know = 0.35
 
+[llm]
+default_model_key = "local_qwen"
+
+[llm.models.local_qwen]
+model_name = "qwen2.5-coder-3b-instruct-mlx"
+model_base_url = "http://127.0.0.1:1234/v1"
+model_api_key_env = "LMS_API_KEY"
+model_runtime_name = "lms_studio"
+
 [difficulties.elementary]
 name = "Elementary"
 coefficient = 0.5
